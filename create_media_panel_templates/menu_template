@@ -1,0 +1,52 @@
+'''
+Script Name: Menu Created by Create Media Panel Templates script
+Script Version: 3.0
+Flame Version: 2021
+Written by: Michael Vaglienty - michael@slaytan.net
+Creation Date: 05.01.19
+Update Date: 05.23.21
+
+Custom Action Type: Media Panel
+'''
+
+from __future__ import print_function
+
+def create_template(selection):
+    import flame
+
+    print ('\n', '>' * 20, '<TemplateName> created', '<' * 20, '\n')
+
+    folder_dict = <FolderDict>
+
+    def folder_loop(value, new_folder):
+        for k, v in iter(value.items()):
+            folder = new_folder.create_folder(k)
+            folder_loop(v, folder)
+
+    for item in selection:
+        for key1, value1 in iter(folder_dict.items()):
+            new_folder = <TopItem>(key1)
+            folder_loop(value1, new_folder)
+
+def scope(selection):
+    import flame
+    for item in selection:
+        if isinstance(item, (flame.PyFolder, flame.PyLibrary)):
+            return True
+    return False
+
+def get_media_panel_custom_ui_actions():
+
+    return [
+        {
+            'name': '<TemplateMenuName>',
+            'actions': [
+                {
+                    'name': '<TemplateName>',
+                    'isVisible': scope,
+                    'execute': create_template,
+                    'minimumVersion': '2021'
+                }
+            ]
+        }
+    ]

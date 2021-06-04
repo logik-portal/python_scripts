@@ -1,0 +1,6 @@
+    <title>
+        <start><TitleStartTimecode></start>
+        <end><TitleEndTimecode></end>
+        <text><TitleText></text>
+        <setup><TextNodeTemplatePath></setup>
+    </title>
