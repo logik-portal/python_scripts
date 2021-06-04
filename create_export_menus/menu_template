@@ -1,0 +1,178 @@
+'''
+Script Name: <PresetName> Export Preset Menu Script
+Script Version: 3.4
+Flame Version: 2020.1
+Written by: Michael Vaglienty - michael@slaytan.net
+Creation Date: 04.27.20
+Update Date: 05.21.21
+
+Custom Action Type: Media Panel
+
+Description:
+
+    Right click on clip in media panel for custom export preset menu
+'''
+
+from __future__ import print_function
+
+SCRIPT_PROJECT = '<ScriptProject>'
+
+def export_clips(selection):
+    import flame
+    import os
+
+    def translate_token_path(clip, export_path):
+        import flame
+        import datetime
+        import re
+
+        def get_shot_name(name):
+
+            shot_name_split = filter(None, re.split(r'(\d+)', name))
+
+            if shot_name_split[1].isalnum():
+                shot_name = shot_name_split[0] + shot_name_split[1]
+            else:
+                shot_name = shot_name_split[0] + shot_name_split[1] + shot_name_split[2]
+
+            print ('shot_name:', shot_name)
+
+            return shot_name
+
+        def get_seq_name(name):
+
+            # Get sequence name abreviation from shot name
+
+            seq_name = re.split('[^a-zA-Z]', name)[0]
+            print ('seq_name:', seq_name)
+
+            return seq_name
+
+        print ('export_path:', export_path)
+
+        date = datetime.datetime.now()
+
+        clip_name = str(clip.name)[1:-1]
+
+        try:
+            shot_name = get_shot_name(clip_name)
+        except:
+            shot_name = ''
+
+        try:
+            # Get batch group name
+
+            clip_parent = clip.parent
+            reel_parent = clip_parent.parent
+            batch_iteration_parent = reel_parent.parent
+
+            batch_group_name = str(batch_iteration_parent.name)[1:-1]
+
+            batch_group_shot_name = get_shot_name(batch_group_name)
+
+            seq_name = get_seq_name(batch_group_shot_name)
+
+        except:
+            print ('batch group not found')
+            seq_name = False
+
+            # Give error if <BatchGroupName> or <BatchGroupShotName> tokens are in preset
+
+            if '<BatchGroupName>' in export_path:
+                return message_box('Clip should be in batch group reel to use this preset')
+            if '<BatchGroupShotName>' in export_path:
+                return message_box('Clip should be in batch group reel to use this preset')
+
+        # If sequence name not gotten from batch group name get seq name from clip shot name
+
+        if not seq_name:
+            seq_name = get_seq_name(shot_name)
+            batch_group_name = ''
+            batch_group_shot_name = ''
+
+        # Replace tokens in path
+
+        new_export_path = re.sub('<ProjectName>', flame.project.current_project.name, export_path)
+        new_export_path = re.sub('<ShotName>',shot_name, new_export_path)
+        new_export_path = re.sub('<BatchGroupName>', batch_group_name, new_export_path)
+        new_export_path = re.sub('<BatchGroupShotName>', batch_group_shot_name, new_export_path)
+        new_export_path = re.sub('<SeqName>', seq_name, new_export_path)
+        new_export_path = re.sub('<UserName>', flame.users.current_user.name, new_export_path)
+        new_export_path = re.sub('<ClipName>', str(clip.name)[1:-1], new_export_path)
+        new_export_path = re.sub('<Resolution>', str(clip.width) + 'x' + str(clip.height), new_export_path)
+        new_export_path = re.sub('<ClipHeight>', str(clip.height), new_export_path)
+        new_export_path = re.sub('<ClipWidth>', str(clip.width), new_export_path)
+        new_export_path = re.sub('<YYYY>', date.strftime('%Y'), new_export_path)
+        new_export_path = re.sub('<YY>', date.strftime('%y'), new_export_path)
+        new_export_path = re.sub('<MM>', date.strftime('%m'), new_export_path)
+        new_export_path = re.sub('<DD>', date.strftime('%d'), new_export_path)
+        new_export_path = re.sub('<Hour>', date.strftime('%I'), new_export_path)
+        new_export_path = re.sub('<Minute>', date.strftime('%M'), new_export_path)
+        new_export_path = re.sub('<AMPM>', date.strftime('%p'), new_export_path)
+
+        print ('new_export_path:', new_export_path)
+
+        return new_export_path
+
+    print ('\n', '>' * 20, ' Exporting with: %s preset' % '<PresetName>', '<' * 20, '\n')
+
+    # Initialize Exporter
+
+    clip_output = flame.PyExporter()
+
+    # Export selected clips
+
+    for clip in selection:
+        print ('\n>>> Exported: %s <<<\n' % str(clip.name)[1:-1])
+
+    print ('\n>>> Done exporting clips <<<\n\n')
+
+def message_box(message):
+    from PySide2 import QtWidgets, QtCore
+
+    msg_box = QtWidgets.QMessageBox()
+    msg_box.setText('<center>%s' % message)
+    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
+    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
+    msg_box_button.setMinimumSize(QtCore.QSize(80, 24))
+    msg_box.setStyleSheet('QMessageBox {background-color: #313131; color: #9a9a9a}'
+                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
+                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font:italic}')
+    msg_box.exec_()
+
+    message = message.replace('<br>', '-')
+
+    print ('\n>>> %s <<<\n' % message)
+
+#-------------------------------------#
+
+def scope_clip(selection):
+    import flame
+
+    if SCRIPT_PROJECT == flame.project.current_project.name:
+        for item in selection:
+            if isinstance(item, flame.PyClip):
+                return True
+    if SCRIPT_PROJECT == 'None':
+        for item in selection:
+            if isinstance(item, flame.PyClip):
+                return True
+    return False
+
+#-------------------------------------#
+
+def get_media_panel_custom_ui_actions():
+
+    return [
+        {
+            'name': '<PresetType> Export Presets...',
+            'actions': [
+                {
+                    'name': '<PresetName>',
+                    'isVisible': scope_clip,
+                    'execute': export_clips,
+                    'minimumVersion': '2020'
+                }
+            ]
+        }
+    ]
