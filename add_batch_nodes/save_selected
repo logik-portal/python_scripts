@@ -1,0 +1,99 @@
+'''
+Batch Nodes - Node Script
+Flame 2021 and higher
+Created by Michael Vaglienty
+email: michael@slaytan.net - www.pyflame.com
+Creation Date: 01.27.21
+Update Date: 05.20.21
+
+Custom Action Type: Batch
+
+Description:
+
+    This script was created by Batch Nodes script
+
+    Right-click in batch -> Add Batch Nodes... -> <NodeName>
+'''
+
+from __future__ import print_function
+import flame
+
+def create_node():
+
+    # Create node
+
+    new_node = flame.batch.create_node('<NodeType>')
+    new_node.load_node_setup('<NodeSetupPathName>')
+    new_node_name = '<NodeName>'
+
+    # Check for duplicate node name
+    # If duplicate found and number until not duplicate
+
+    node_list = []
+
+    for item in flame.batch.nodes:
+        item_name = str(item.name)[1:-1]
+        node_list.append(item_name)
+
+    x = 1
+
+    orig_node_name = new_node_name
+
+    while new_node_name in node_list:
+        new_node_name = orig_node_name
+        new_node_name = new_node_name + str(x)
+        x += 1
+
+    new_node.name = new_node_name
+
+    return new_node
+
+def create_connected_node(selected_node):
+
+    new_node = create_node()
+
+    #  Attach new node to selected node
+
+    new_node.pos_x = selected_node.pos_x + 300
+    new_node.pos_y = selected_node.pos_y
+    flame.batch.connect_nodes(selected_node, 'Default', new_node, 'Default')
+
+    print ('\n>>> created <NodeName> node <<<\n')
+
+def create_free_node():
+
+    new_node = create_node()
+
+    # Position new node under cursor
+
+    cursor_pos = flame.batch.cursor_position
+    new_node.pos_x = cursor_pos[0]
+    new_node.pos_y = cursor_pos[1]
+
+    print ('\n>>> created <NodeName> node <<<\n')
+
+def scope_node(selection):
+
+    print ('\n', '>' * 20, 'batch node menu <Version> - added <NodeName>', '<' * 20, '\n')
+
+    if selection == ():
+        create_free_node()
+    else:
+        for n in selection:
+            if isinstance(n, flame.PyNode):
+                create_connected_node(n)
+
+def get_batch_custom_ui_actions():
+
+    return [
+        {
+            'name': 'Add Batch Nodes...',
+            'actions': [
+                {
+                    'name': '<NodeName>',
+                    'execute': scope_node,
+                    'minimumVersion': '2021'
+                }
+            ]
+        }
+    ]
