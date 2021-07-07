@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 '''
 Script Name: Logik Portal
-Script Version: 2.2
+Script Version: 2.3
 Flame Version: 2021
 Written by: Michael Vaglienty - michael@slaytan.net
 Crying Croc Design by: Enid Dalkoff
 Creation Date: 10.31.20
-Update Date: 06.03.21
+Update Date: 07.06.21
 
 Custom Action Type: Flame Main Menu
 
@@ -21,6 +21,10 @@ To install:
     Copy script into /opt/Autodesk/shared/python/logik_portal
 
 Updates:
+
+v2.3 07.06.21
+
+    Added Logik Matchbox archive to Portal FTP. Matchbox archive now stored on FTP instead of pulling directly from logik-matchbook.org
 
 v2.2 06.03.21
 
@@ -82,7 +86,7 @@ from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 
-VERSION = 'v2.2'
+VERSION = 'v2.3'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/logik_portal'
 
@@ -1201,7 +1205,6 @@ class LogikPortal(object):
 
     def download_logik_matchboxes(self):
         from subprocess import Popen, PIPE
-        import urllib
         import time
 
         print ('\ndownloading Logik Matchboxes...\n')
@@ -1210,12 +1213,17 @@ class LogikPortal(object):
 
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.BusyCursor)
 
-        # Download Logik Matchboxes
+        # Set download path
 
         tar_path = '/opt/Autodesk/shared/python/logik_portal/MatchboxShaderCollection.tgz'
-        print ('tar_path', tar_path)
 
-        urllib.request.urlretrieve('https://logik-matchbook.org/MatchboxShaderCollection.tgz', tar_path)
+        # Download matchbox archive
+
+        self.ftp_download_connect()
+
+        self.ftp.retrbinary('RETR ' + '/Logik_Matchbox/MatchboxShaderCollection.tgz', open(tar_path, 'wb').write)
+
+        # Untar matchbox archive
 
         command = 'tar -xvpzf /opt/Autodesk/shared/python/logik_portal/MatchboxShaderCollection.tgz --strip-components 1 -C %s' % self.matchbox_install_path
         command = command.split(' ', 6)
