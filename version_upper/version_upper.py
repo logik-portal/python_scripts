@@ -1,17 +1,21 @@
-'''
-Script Name: Version Upper
-Script Version: 1.0
+"""
+Script Name: version_upper
+Script Version: 2.0
 Flame Version: 2020
 Written by: John Geehreng
 Creation Date: 06.06.20
-Update Date: 06.06.20
+Update Date: 07.12.21
 
-Custom Action Type: MediaPanel
+Description: This will version up all of your selected items as long as the names contains "_v##". Case sensitive.
+If you like to use another letter, change "v" on lines 31, 33, and 37.
 
-Description:
+Update: 07.12.21 - Items do not need to end in "v##" anymore. "v##" can be anywhere in the item name. If it cannot find "v##" that item will be skipped, but you will see an
+error message in the Flame UI and the script continues.
 
-    This will version up all of your selected clips/sequences as long as they end in "_v##"
-'''
+Menus:
+    With a selection of clips, sequences, reels, or folders, right click and look for Renamers -> Version Upper.
+
+"""
 
 from __future__ import print_function
 
@@ -23,26 +27,41 @@ def version_upper(selection):
     import re
 
     for item in selection:
-        oldName = str(item.name)[(1):-(1)]
-        baseName = re.split("_v"'(\d+)', oldName)[0]
-        oldVersion = re.split("_v"'(\d+)', oldName)[1]
-        newVersion = int(oldVersion)+int(1)
-        print ("*" * 100)
-        print ("oldName: ", oldName)
-        print ("baseName: ", baseName)
-        print ("oldVersion: ", oldVersion)
-        print ("NewName: " + baseName + "_v" + '%02d' % newVersion)
-        item.name = baseName + "_v" + '%02d' % newVersion
+        clip_name = str(item.name)[(1):-(1)]
+        if re.search(r'v\d+', clip_name):
+            print ("*" * 100)
+            print ("Original Name: " + clip_name)
+            version = str(re.findall(r'v\d+', clip_name))[(2):-(2)]
+            print ("Version: ", version)
+            version_number = re.split('v', version)[1]
+            print ("Version Number: " + version_number)
+            version_number = '%02d' % (int(version_number)+1)
+            print ("New Version Number: " + str(version_number))
+            new_version_name = re.sub('v\d+',"v" + str(version_number),clip_name)
+            print ("New Version Name: ", new_version_name)
+            item.name = new_version_name
+        else:
+            print ("Needs a version number like v01.")
+            message = clip_name + str(" needs a version number like 'v01.'")
+            show_confirm_dialog(message, "Needs Version")
+            continue
+
     print ("*" * 100)
     print ("\n" *2)
 
-def scope_clip(selection):
-    import flame
 
-    for item in selection:
-        if isinstance(item, flame.PyClip):
-            return True
-    return False
+def show_confirm_dialog(text, title):
+    """
+    Show a dialog box using PySide/QT.
+    """
+    from PySide2.QtWidgets import QMessageBox
+
+    msg_box = QMessageBox()
+    msg_box.setText(text)
+    msg_box.setWindowTitle(title)
+    msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+    msg_box.setDefaultButton(QMessageBox.Ok)
+    return msg_box.exec_() == QMessageBox.Ok
 
 def scope_not_desktop(selection):
     import flame
