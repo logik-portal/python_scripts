@@ -17,7 +17,6 @@ Description:
 To install:
 
     Copy script into /opt/Autodesk/shared/python
-
 '''
 
 def get_media_panel_custom_ui_actions():
