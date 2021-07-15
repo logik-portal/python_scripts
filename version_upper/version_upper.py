@@ -1,4 +1,4 @@
-"""
+'''
 Script Name: version_upper
 Script Version: 2.0
 Flame Version: 2020
@@ -15,7 +15,7 @@ error message in the Flame UI and the script continues.
 Menus:
     With a selection of clips, sequences, reels, or folders, right click and look for Renamers -> Version Upper.
 
-"""
+'''
 
 from __future__ import print_function
 
