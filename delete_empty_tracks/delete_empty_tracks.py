@@ -17,7 +17,6 @@ Description:
 To install:
 
     Copy script into /opt/Autodesk/shared/python
-
 '''
 
 
