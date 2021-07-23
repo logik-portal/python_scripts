@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 '''
 Script Name: Logik Portal
-Script Version: 2.3
+Script Version: 2.4
 Flame Version: 2021
-Written by: Michael Vaglienty - michael@slaytan.net
+Written by: Michael Vaglienty
 Crying Croc Design by: Enid Dalkoff
 Creation Date: 10.31.20
-Update Date: 07.06.21
+Update Date: 07.23.21
 
 Custom Action Type: Flame Main Menu
 
 Description:
 
-    Portal to share/install python scripts and batch setup
+    Share/install python scripts and batch setups
 
     Flame Main Menu -> Logik -> Logik Portal
 
@@ -22,6 +22,11 @@ To install:
 
 Updates:
 
+v2.4 07.23.21
+
+    Added submit button back. User name and password now required to submit scripts.
+
+    Fixed bug - files starting with . sometimes cause script to not work
 
 v2.3 07.06.21
 
@@ -79,15 +84,13 @@ v1.2 12.29.20
 '''
 
 from __future__ import print_function
-import os
-import ast
-import shutil
+import os, re, ast, shutil
 from ftplib import FTP
 from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 
-VERSION = 'v2.3'
+VERSION = 'v2.4'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/logik_portal'
 
@@ -288,7 +291,23 @@ class LogikPortal(object):
     def __init__(self, selection):
         import flame
 
-        print ('\n', '>' * 20, 'logik portal %s' % VERSION, '<' * 20, '\n')
+        print ('''
+                 _                 _ _
+                | |               (_) |
+                | |     ___   __ _ _| | __
+                | |    / _ \ / _` | | |/ /
+                | |___| (_) | (_| | |   <
+                |______\___/ \__, |_|_|\_\\
+                              __/ |
+                 _____       |___/        _
+                |  __ \         | |      | |
+                | |__) |__  _ __| |_ __ _| |
+                |  ___/ _ \| '__| __/ _` | |
+                | |  | (_) | |  | || (_| | |
+                |_|   \___/|_|   \__\__,_|_|
+                             ''')
+
+        print ('\n', '>' * 20, 'logik portal %s' % VERSION, '<' * 20)
 
         # Define paths
 
@@ -321,7 +340,7 @@ class LogikPortal(object):
         if  self.flame_version.count('.') > 1:
             self.flame_version = self.flame_version.rsplit('.', 1)[0]
         self.flame_version = float(self.flame_version)
-        print ('flame_version:', self.flame_version)
+        # print ('flame_version:', self.flame_version)
 
         try:
             self.ftp_download_connect()
@@ -339,6 +358,8 @@ class LogikPortal(object):
         self.batch_setups_xml_path = ''
         self.python_scripts_xml_path = ''
         self.sudo_password = ''
+        self.username = ''
+        self.password = ''
 
         self.main_window()
 
@@ -417,7 +438,7 @@ class LogikPortal(object):
         self.ftp = FTP('logik.hostedftp.com')
         self.ftp.login('logik', 'L0gikD0wnL0ad#20')
 
-        print ('\n>>> connected to portal <<<\n')
+        print ('\n>>> connected to portal <<<')
 
     def ftp_upload_connect(self):
 
@@ -493,6 +514,380 @@ class LogikPortal(object):
 
     def python_scripts_tab(self):
 
+        def login_check():
+
+            if self.password:
+                submit_script()
+            else:
+                submit_ftp_login()
+
+        def submit_ftp_login():
+
+            def check_password():
+
+                # Try connecting to ftp
+
+                self.username = str(username_lineedit.text())
+                self.password = str(password_lineedit.text())
+
+                if self.username and self.password:
+                    try:
+                        ftp = FTP('logik.hostedftp.com')
+                        ftp.login(self.username, self.password)
+                        ftp.cwd('/')
+                        submit_script()
+                        self.password_window.close()
+                    except:
+                        self.username = ''
+                        self.password = ''
+                        return message_box('login incorrect')
+                else:
+                    self.username = ''
+                    self.password = ''
+                    return message_box('Enter username and password')
+
+            self.password_window = QtWidgets.QWidget()
+            self.password_window.setMinimumSize(QtCore.QSize(500, 130))
+            self.password_window.setMaximumSize(QtCore.QSize(500, 130))
+            self.password_window.setWindowTitle('Submit Python Script Login %s' % VERSION)
+            self.password_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+            self.password_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            self.password_window.setFocusPolicy(QtCore.Qt.StrongFocus)
+            self.password_window.setStyleSheet('background-color: #272727')
+
+            username_label = FlameLabel('Username', 'normal', self.password_window)
+            username_label.setMaximumSize(110, 28)
+
+            password_label = FlameLabel('Password', 'normal', self.password_window)
+            password_label.setMaximumSize(110, 28)
+
+
+            username_lineedit = FlameLineEdit('', self.password_window)
+            username_lineedit.setMaximumWidth(60)
+            password_lineedit = FlameLineEdit('', self.password_window)
+            password_lineedit.setMaximumWidth(60)
+
+            password_lineedit.setEchoMode(QtWidgets.QLineEdit.Password)
+
+            cancel_btn = FlameButton('Cancel', self.password_window.close, self.password_window)
+            login_btn = FlameButton('Login', check_password, self.password_window)
+
+            layout = QtWidgets.QGridLayout(self.password_window)
+
+            layout.addWidget(username_label, 0, 0)
+            layout.addWidget(username_lineedit, 0, 1, 1, 2)
+            layout.addWidget(password_label, 1, 0)
+            layout.addWidget(password_lineedit, 1, 1, 1, 2)
+
+
+            layout.addWidget(cancel_btn, 2, 0)
+            layout.addWidget(login_btn, 2, 1)
+
+            self.password_window.show()
+
+            return self.password_window
+
+        def submit_script():
+
+            def upload_script():
+
+                def upload():
+
+                    def save_config():
+
+                        # Save path to config file
+
+                        edit_config = open(self.config_file, 'r')
+                        contents = edit_config.readlines()
+                        edit_config.close
+
+                        contents[8] = self.submit_script_path_lineedit.text() + '\n'
+
+                        edit_config = open(self.config_file, 'w')
+                        contents = ''.join(contents)
+                        edit_config.write(contents)
+                        edit_config.close()
+
+                    def create_script_xml(self):
+
+                        description_text = self.submit_script_description_text_edit.toPlainText()
+                        description_text = description_text.replace("'", "\"")
+                        description_text = description_text.replace('&', '-')
+
+                        # Create batch info file
+
+                        text = []
+
+                        text.insert(0, "    <script name='%s'>" % self.submit_script_name_label_02.text())
+                        text.insert(1, "        <script_version>'%s'</script_version>" % self.submit_script_version_lineedit.text())
+                        text.insert(2, "        <flame_version>'%s'</flame_version>" % self.submit_script_flame_version_lineedit.text())
+                        text.insert(3, "        <date>'%s'</date>" % self.submit_script_date_lineedit.text())
+                        text.insert(4, "        <developer>'%s'</developer>" % self.submit_script_dev_name_lineedit.text())
+                        text.insert(5, "        <description>'%s'</description>" % description_text)
+                        text.insert(6, '    </script>')
+
+                        out_file = open(script_xml_path, 'w')
+                        for line in text:
+                            print(line, file=out_file)
+                        out_file.close()
+
+                        print ('\n>>> script xml created <<<\n')
+
+                    def create_tar():
+
+                        if self.all_files_btn.isChecked():
+                            print ('button checked')
+
+                            tar_file_list = ''
+
+                            for x in os.listdir(script_folder):
+                                if not x.startswith('.'):
+                                    tar_file_list = tar_file_list + ' ' + x
+                            tar_file_list.strip()
+                            print ('tar_file_list:', tar_file_list)
+                            tar_command = 'tar -cvf %s  %s' % (script_tar_path, tar_file_list)
+                            print ('tar_command:', tar_command)
+                        else:
+                            print ('button not checked')
+                            tar_command = 'tar -cvf %s  %s' % (script_tar_path, script_name + '.py')
+                            print ('tar_command:', tar_command)
+
+                        os.chdir(script_folder)
+                        os.system(tar_command)
+
+                        print ('\n>>> batch tar file created <<<\n')
+
+                    def upload_files():
+
+                        # Connect to ftp
+
+                        ftp = FTP('logik.hostedftp.com')
+                        ftp.login(self.username, self.password)
+                        ftp.cwd('/Submit_Scripts')
+
+                        print ('\n>>> connected to portal <<<\n')
+
+                        # Upload script tgz
+
+                        print ('\nuploading...\n')
+
+                        script_ftp_path = os.path.join('/Submit_Scripts', script_name) + '.tgz'
+                        print ('script_ftp_path:', script_ftp_path)
+
+                        with open(script_tar_path, 'rb') as ftpup:
+                            ftp.storbinary('STOR ' + script_ftp_path, ftpup)
+
+                        # Upload script xml
+
+                        script_xml_ftp_path = os.path.join('/Submit_Scripts', script_name) + '.xml'
+                        print ('script_xml_ftp_path:', script_xml_ftp_path)
+
+                        with open(script_xml_path, 'rb') as ftpup:
+                            ftp.storbinary('STOR ' + script_xml_ftp_path, ftpup)
+
+                        print ('\n>>> upload done <<<\n')
+
+                        # Close window
+
+                        self.submit_script_window.close()
+
+                        # Close ftp connection
+
+                        ftp.quit()
+
+                        return message_box('<center>Python script uploaded!<br>It will be added to the portal shortly</center>')
+
+                    # Upload script and xml to ftp
+
+                    script_xml_path = os.path.join(self.temp_folder, '%s.xml' % self.submit_script_path_lineedit.text().rsplit('/', 1)[1][:-3])
+                    print ('script_xml_path:', script_xml_path)
+
+                    save_config()
+
+                    create_script_xml(self)
+
+                    script_name = self.submit_script_path_lineedit.text().rsplit('/', 1)[1][:-3]
+                    script_path = self.submit_script_path_lineedit.text()
+                    script_folder = script_path.rsplit('/', 1)[0]
+
+                    script_tar_path = os.path.join(self.temp_folder, script_name) + '.tgz'
+                    print ('script_tar_path:', script_tar_path)
+
+                    create_tar()
+
+                    upload_files()
+
+                    self.load_config()
+
+                # Check script path field
+
+                if not os.path.isfile(self.submit_script_path_lineedit.text()):
+                    return message_box('Enter path to python script')
+
+                # Check script version field
+
+                elif not self.submit_script_version_lineedit.text():
+                    return message_box('Enter script version')
+
+                # Check script version field for alpha characters
+
+                alpha = [n for n in self.submit_script_version_lineedit.text() if n.isalpha()]
+                if alpha:
+                    return message_box('Script Version should be numbers only. Such as: 1.0')
+
+                decimal = str(self.submit_script_version_lineedit.text()).count('.')
+                if decimal > 1:
+                    return message_box('Script Version should not have more than one decimal')
+
+                # Check flame version field
+
+                if not self.submit_script_flame_version_lineedit.text():
+                    return message_box('Enter minimum version of Flame needed to run script')
+
+                # Check flame version field for alpha characters
+
+                alpha = [n for n in self.submit_script_version_lineedit.text() if n.isalpha()]
+                if alpha:
+                    return message_box('Flame Version should be numbers only. Such as: 2021.2')
+
+                # Check script date field
+
+                if not self.submit_script_date_lineedit.text():
+                    return message_box('Enter date script was written or updated. Whichever is later.')
+
+                # Check date field for proper formatting
+
+                if not re.search('^\\d{2}.\\d{2}.\\d{2}',self.submit_script_date_lineedit.text()):
+                    return message_box('Script date should be entered in dd.mm.yy format')
+
+                if not len(self.submit_script_date_lineedit.text()) == 8:
+                    return message_box('Script date should be entered in dd.mm.yy format')
+
+                # Check script dev field
+
+                if not self.submit_script_dev_name_lineedit.text():
+                    return message_box('Enter name of person who wrote the script')
+
+                # Check script description field
+
+                elif not self.submit_script_description_text_edit.toPlainText():
+                    return message_box('Enter description of script and any notes on working with script')
+
+                elif self.submit_script_name_label_02.text() in self.ftp_script_list:
+
+                    overwrite = message_box_confirm('Script already exists on Logik Portal. Overwrite?')
+                    if overwrite:
+                        upload()
+                else:
+                    upload()
+
+            def python_script_browse():
+                from PySide2 import QtWidgets
+
+                script_path = QtWidgets.QFileDialog.getOpenFileName(self.window, 'Select Python File', self.submit_script_path_lineedit.text(), 'Python Files (*.py)')[0]
+
+                if os.path.isfile(script_path):
+                    self.submit_script_path_lineedit.setText(script_path)
+
+                    # Clear submit fields
+
+                    self.submit_script_version_lineedit.setText('')
+                    self.submit_script_flame_version_lineedit.setText('')
+                    self.submit_script_date_lineedit.setText('')
+                    self.submit_script_dev_name_lineedit.setText('')
+                    self.submit_script_description_text_edit.setPlainText('')
+
+                    self.get_script_info()
+
+            self.submit_script_window = QtWidgets.QWidget()
+            self.submit_script_window.setMinimumSize(QtCore.QSize(800, 500))
+            self.submit_script_window.setMaximumSize(QtCore.QSize(800, 500))
+            self.submit_script_window.setWindowTitle('Logik Portal Submit')
+            self.submit_script_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+            self.submit_script_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            self.submit_script_window.setFocusPolicy(QtCore.Qt.StrongFocus)
+            self.submit_script_window.setStyleSheet('background-color: #313131')
+
+            # Center window in linux
+
+            resolution = QtWidgets.QDesktopWidget().screenGeometry()
+            self.submit_script_window.move((resolution.width() / 2) - (self.submit_script_window.frameSize().width() / 2),
+                                           (resolution.height() / 2) - (self.submit_script_window.frameSize().height() / 2))
+
+            # Labels
+
+            self.submit_script_label = FlameLabel('Logik Portal Python Script Submit', 'background', self.window.tab1)
+            self.submit_script_path_label = FlameLabel('Script Path', 'normal', self.window.tab1)
+            self.submit_script_name_label_01 = FlameLabel('Script Name', 'normal', self.window.tab1)
+            self.submit_script_name_label_02 = FlameLabel('', 'outline', self.window.tab1)
+            self.submit_script_version_label_01 = FlameLabel('Script Version', 'normal', self.window.tab1)
+            self.submit_script_flame_version_label_01 = FlameLabel('Flame Version', 'normal', self.window.tab1)
+            self.submit_script_date_label_01 = FlameLabel('Date', 'normal', self.window.tab1)
+            self.submit_script_dev_name_label_01 = FlameLabel('Developer Name', 'normal', self.window.tab1)
+            self.submit_script_description_label = FlameLabel('Script Description', 'normal', self.window.tab1)
+
+            # LineEdits
+
+            self.submit_script_path_lineedit = FlameClickableLineEdit(self.script_submit_path, self.submit_script_window)
+            self.submit_script_path_lineedit.clicked.connect(python_script_browse)
+
+            self.submit_script_version_lineedit = FlameLineEdit('', self.submit_script_window)
+            self.submit_script_flame_version_lineedit = FlameLineEdit('', self.submit_script_window)
+            self.submit_script_date_lineedit = FlameLineEdit('', self.submit_script_window)
+            self.submit_script_dev_name_lineedit = FlameLineEdit('', self.submit_script_window)
+
+            # Text Edit
+
+            self.submit_script_description_text_edit = FlameTextEdit(self.file_description, False, self.submit_script_window)
+
+            # Push Buttons
+
+            self.all_files_btn = FlamePushButton(' All Files', False, self.submit_script_window)
+
+            # Buttons
+
+            self.submit_script_upload_btn = FlameButton('Upload', upload_script, self.submit_script_window)
+            self.submit_script_cancel_btn = FlameButton('Cancel', self.submit_script_window.close, self.submit_script_window)
+
+            #------------------------------------#
+
+            #  Window grid layout
+
+            gridlayout = QtWidgets.QGridLayout()
+            gridlayout.setMargin(30)
+            gridlayout.setVerticalSpacing(5)
+            gridlayout.setHorizontalSpacing(5)
+
+            gridlayout.addWidget(self.submit_script_label, 0, 0, 1, 6)
+
+            gridlayout.addWidget(self.submit_script_path_label, 1, 0)
+            gridlayout.addWidget(self.submit_script_name_label_01, 2, 0)
+            gridlayout.addWidget(self.submit_script_version_label_01, 3, 0)
+            gridlayout.addWidget(self.submit_script_flame_version_label_01, 4, 0)
+            gridlayout.addWidget(self.submit_script_date_label_01, 5, 0)
+            gridlayout.addWidget(self.submit_script_dev_name_label_01, 6, 0)
+            gridlayout.addWidget(self.submit_script_description_label, 7, 0)
+
+            gridlayout.addWidget(self.submit_script_path_lineedit, 1, 1, 1, 4)
+            gridlayout.addWidget(self.submit_script_name_label_02, 2, 1, 1, 4)
+            gridlayout.addWidget(self.submit_script_version_lineedit, 3, 1, 1, 4)
+            gridlayout.addWidget(self.submit_script_flame_version_lineedit, 4, 1, 1, 4)
+            gridlayout.addWidget(self.submit_script_date_lineedit, 5, 1, 1, 4)
+            gridlayout.addWidget(self.submit_script_dev_name_lineedit, 6, 1, 1, 4)
+            gridlayout.addWidget(self.submit_script_description_text_edit, 7, 1, 6, 4)
+
+            gridlayout.addWidget(self.all_files_btn, 1, 5)
+            gridlayout.addWidget(self.submit_script_upload_btn, 11, 5)
+            gridlayout.addWidget(self.submit_script_cancel_btn, 12, 5)
+
+            self.submit_script_window.setLayout(gridlayout)
+
+            self.submit_script_window.show()
+
+            if self.submit_script_path_lineedit.text().endswith('.py'):
+                if os.path.isfile(self.submit_script_path_lineedit.text()):
+                    self.update_script_info()
+
         # Tab 1
 
         # Labels
@@ -523,6 +918,7 @@ class LogikPortal(object):
 
         # Buttons
 
+        self.script_submit_btn = FlameButton('Submit', login_check, self.window.tab1)
         self.install_script_btn = FlameButton('Install', partial(self.install_script, self.portal_scripts_tree, self.installed_scripts_tree, self.shared_script_path), self.window.tab1)
         self.delete_script_btn = FlameButton('Delete', partial(self.delete_script, self.installed_scripts_tree, self.shared_script_path), self.window.tab1)
         self.script_done_btn = FlameButton('Done', self.done, self.window.tab1)
@@ -559,6 +955,7 @@ class LogikPortal(object):
         self.window.tab1.layout.addWidget(self.portal_scripts_tree, 1, 7, 1, 5)
 
         self.window.tab1.layout.addWidget(self.delete_script_btn, 2, 4)
+        self.window.tab1.layout.addWidget(self.script_submit_btn, 2, 10)
         self.window.tab1.layout.addWidget(self.install_script_btn, 2, 11)
 
         self.window.tab1.layout.addWidget(self.script_description_label, 4, 0, 1, 12)
@@ -1082,7 +1479,6 @@ class LogikPortal(object):
     # ----------------------------------------------------------------- #
 
     def get_system_password(self):
-        from PySide2 import QtCore, QtWidgets
 
         def ok():
             from subprocess import Popen, PIPE
@@ -1276,7 +1672,7 @@ class LogikPortal(object):
         # Get script info
 
         script_path = self.submit_script_path_lineedit.text()
-        print ('script_path:', script_path)
+        # print ('script_path:', script_path)
 
         with open(script_path, 'r') as script:
             script_lines = script.read()
@@ -1287,14 +1683,14 @@ class LogikPortal(object):
             file_description = file_description.strip()
         except:
             file_description = ''
-        print ('file_description:', file_description)
+        # print ('file_description:', file_description)
 
         file_description_lines = file_description.splitlines()
 
         script_name = self.submit_script_path_lineedit.text().rsplit('/', 1)[1][:-3]
         script_name = script_name.replace('_', ' ')
         self.submit_script_name_label_02.setText(script_name)
-        print ('script_name:', script_name)
+        # print ('script_name:', script_name)
 
         # Fill submit fields if data in present in script
 
@@ -1302,21 +1698,21 @@ class LogikPortal(object):
             if 'Script Version: ' in line:
                 script_version = line.split('Script Version: ', 1)[1]
                 self.submit_script_version_lineedit.setText(script_version)
-                print ('script_version:', script_version)
+                # print ('script_version:', script_version)
             elif 'Flame Version: ' in line:
                 flame_version = line.split('Flame Version: ', 1)[1]
                 self.submit_script_flame_version_lineedit.setText(flame_version)
-                print ('flame_version:', flame_version)
+                # print ('flame_version:', flame_version)
             elif 'Written by: ' in line:
                 script_dev = line.split('Written by: ', 1)[1]
                 self.submit_script_dev_name_lineedit.setText(script_dev)
-                print ('script_dev:', script_dev)
+                # print ('script_dev:', script_dev)
             elif 'Creation Date: ' in line:
                 script_date = line.split('Creation Date: ', 1)[1]
             elif 'Update Date: ' in line:
                 script_date = line.split('Update Date: ', 1)[1]
                 self.submit_script_date_lineedit.setText(script_date)
-                print ('script_date:', script_date, '\n')
+                # print ('script_date:', script_date, '\n')
 
         self.submit_script_description_text_edit.setPlainText(file_description)
 
@@ -1355,7 +1751,6 @@ class LogikPortal(object):
         text_edit.setPlainText(file_description)
 
     def get_installed_scripts(self, tree, scripts_root_path):
-        from PySide2 import QtWidgets, QtCore
 
         # Clear tree list
 
@@ -1366,97 +1761,97 @@ class LogikPortal(object):
         for root, dirs, files in os.walk(scripts_root_path, followlinks=True):
             for script in files:
                 if script.endswith('.py'):
+                    if not script.startswith('.'):
+                        # Get script name from .py file name
 
-                    # Get script name from .py file name
+                        script_name = script[:-3]
+                        script_name = script_name.replace('_', ' ')
+                        # print ('script_name:', script_name)
 
-                    script_name = script[:-3]
-                    script_name = script_name.replace('_', ' ')
-                    print ('script_name:', script_name)
+                        script_path = os.path.join(root, script)
+                        # print ('script_path:', script_path)
 
-                    script_path = os.path.join(root, script)
-                    print ('script_path:', script_path)
+                        # Read in script to separate out comments
 
-                    # Read in script to separate out comments
+                        script_code = open(script_path, 'r')
+                        script_lines = script_code.read().splitlines()[1:]
+                        script_code.close()
 
-                    script_code = open(script_path, 'r')
-                    script_lines = script_code.read().splitlines()[1:]
-                    script_code.close()
+                        # Split out script info to comment list
 
-                    # Split out script info to comment list
+                        comment_lines = []
 
-                    comment_lines = []
+                        for line in script_lines:
+                            if line != '':
+                                comment_lines.append(line)
+                            else:
+                                break
 
-                    for line in script_lines:
-                        if line != '':
-                            comment_lines.append(line)
-                        else:
-                            break
+                        # Get script info from comment list
 
-                    # Get script info from comment list
-
-                    try:
-                        script_version = [line.split('Script Version: ', 1)[1] for line in comment_lines if 'Script Version: ' in line]
-                        if script_version:
-                            script_version = script_version[0]
-                        else:
-                            script_version = [line.split("'", 2)[1] for line in script_lines if 'VERSION = ' in line] # For old scripts
+                        try:
+                            script_version = [line.split('Script Version: ', 1)[1] for line in comment_lines if 'Script Version: ' in line]
                             if script_version:
                                 script_version = script_version[0]
-                                if 'v' in script_version:
-                                    script_version = script_version[1:]
                             else:
-                                script_version = ''
-                    except:
-                        script_version = ''
-                    print ('script_version:', script_version)
+                                script_version = [line.split("'", 2)[1] for line in script_lines if 'VERSION = ' in line] # For old scripts
+                                if script_version:
+                                    script_version = script_version[0]
+                                    if 'v' in script_version:
+                                        script_version = script_version[1:]
+                                else:
+                                    script_version = ''
+                        except:
+                            script_version = ''
+                        # print ('script_version:', script_version)
 
-                    try:
-                        script_date = [line.split('Update Date: ', 1)[1] for line in comment_lines if 'Update Date: ' in line]
-                        if script_date:
-                            script_date = script_date[0]
-                        else:
-                            script_date = [line.split(' ', 1)[1] for line in comment_lines if 'Updated:' in line] # For old scripts
+                        try:
+                            script_date = [line.split('Update Date: ', 1)[1] for line in comment_lines if 'Update Date: ' in line]
                             if script_date:
                                 script_date = script_date[0]
                             else:
-                                script_date = ''
-                    except:
-                        script_date = ''
-                    print ('script_date:', script_date)
+                                script_date = [line.split(' ', 1)[1] for line in comment_lines if 'Updated:' in line] # For old scripts
+                                if script_date:
+                                    script_date = script_date[0]
+                                else:
+                                    script_date = ''
+                        except:
+                            script_date = ''
+                        # print ('script_date:', script_date)
 
-                    try:
-                        script_dev = [line.split('Written by: ', 1)[1] for line in comment_lines if 'Written by' in line]
-                        if script_dev:
-                            script_dev = script_dev[0]
-                        else:
-                            script_dev = [line.split('Created by ', 1)[1] for line in comment_lines if 'Created by' in line] # For old scripts
+                        try:
+                            script_dev = [line.split('Written by: ', 1)[1] for line in comment_lines if 'Written by' in line]
                             if script_dev:
                                 script_dev = script_dev[0]
                             else:
-                                script_dev = ''
-                    except:
-                        script_dev = ''
-                    print ('script_dev:', script_dev)
+                                script_dev = [line.split('Created by ', 1)[1] for line in comment_lines if 'Created by' in line] # For old scripts
+                                if script_dev:
+                                    script_dev = script_dev[0]
+                                else:
+                                    script_dev = ''
+                        except:
+                            script_dev = ''
+                        # print ('script_dev:', script_dev)
 
-                    try:
-                        script_flame_version = [line.split('Flame Version: ', 1)[1] for line in comment_lines if 'Flame Version: ' in line]
-                        if script_flame_version:
-                            script_flame_version = script_flame_version[0].split(' ', 1)[0]
-                        else:
-                            script_flame_version = [line.split(' ', 1)[1] for line in comment_lines if 'Flame 20' in line] # For old scripts
+                        try:
+                            script_flame_version = [line.split('Flame Version: ', 1)[1] for line in comment_lines if 'Flame Version: ' in line]
                             if script_flame_version:
                                 script_flame_version = script_flame_version[0].split(' ', 1)[0]
                             else:
-                                script_flame_version = ''
-                    except:
-                        script_version = ''
-                    print ('script_min_flame_version:', script_flame_version)
+                                script_flame_version = [line.split(' ', 1)[1] for line in comment_lines if 'Flame 20' in line] # For old scripts
+                                if script_flame_version:
+                                    script_flame_version = script_flame_version[0].split(' ', 1)[0]
+                                else:
+                                    script_flame_version = ''
+                        except:
+                            script_version = ''
+                        # print ('script_min_flame_version:', script_flame_version)
 
-                    # Add script to tree
+                        # Add script to tree
 
-                    QtWidgets.QTreeWidgetItem(tree, [script_name, script_version, script_flame_version, script_date, script_dev, script_path])
+                        QtWidgets.QTreeWidgetItem(tree, [script_name, script_version, script_flame_version, script_date, script_dev, script_path])
 
-                    self.installed_script_dict.update({script_name : script_version})
+                        self.installed_script_dict.update({script_name : script_version})
 
         # Set width of tree headers
 
@@ -1607,7 +2002,7 @@ class LogikPortal(object):
 
     def check_script_flame_version(self, tree, tree_index):
 
-        print ('\n>>> checking script version <<<\n')
+        # print ('\n>>> checking script version <<<\n')
 
         # Get selected script date
 
@@ -1616,9 +2011,9 @@ class LogikPortal(object):
         script_name = script_item.text(0)
         script_flame_version = script_item.text(2)
 
-        print ('current_flame_version:', self.flame_version)
-        print ('script_flame_version:', script_flame_version, '\n')
-        print (float(script_flame_version) > float(self.flame_version))
+        # print ('current_flame_version:', self.flame_version)
+        # print ('script_flame_version:', script_flame_version, '\n')
+        # print (float(script_flame_version) > float(self.flame_version))
 
         if float(script_flame_version) > float(self.flame_version):
             print ('\n>>> %s requires newer version of flame <<<\n' % script_name)
@@ -1628,12 +2023,12 @@ class LogikPortal(object):
 
     def ftp_script_description(self, text_edit, tree, tree_index):
 
-        print ('\n>>> getting script description <<<\n')
+        print ('\n>>> getting script description <<<')
 
         selected_item = self.portal_scripts_tree.selectedItems()
         script = selected_item[0]
         script_name = script.text(0)
-        print ('script_name:', script_name, '\n')
+        # print ('script_name:', script_name, '\n')
 
         # Add items from xml to batch list
 
@@ -1646,7 +2041,7 @@ class LogikPortal(object):
 
     def get_ftp_scripts(self, tree):
 
-        print ('\n>>> downloading python script list <<<\n')
+        print ('\n>>> downloading python script list <<<')
 
         # Download xml to temp folder
 
@@ -1666,11 +2061,11 @@ class LogikPortal(object):
             date = str(script[2].text[1:-1])
             developer_name = str(script[3].text[1:-1])
 
-            print ('script_name:', script_name)
-            print ('script_version:', script_version)
-            print ('flame_version:', flame_version)
-            print ('date:', date)
-            print ('developer_name:', developer_name, '\n')
+            #print ('script_name:', script_name)
+            #print ('script_version:', script_version)
+            #print ('flame_version:', flame_version)
+            #print ('date:', date)
+            #print ('developer_name:', developer_name, '\n')
 
             new_script = QtWidgets.QTreeWidgetItem(self.portal_scripts_tree, [script_name, script_version, flame_version, date, developer_name])
 
@@ -1678,7 +2073,7 @@ class LogikPortal(object):
 
             if script_name in self.installed_script_dict:
                 installed_script_version = self.installed_script_dict.get(script_name)
-                print ('installed_script_version:', installed_script_version)
+                # print ('installed_script_version:', installed_script_version)
                 try:
                     if float(script_version) > float(installed_script_version):
                         new_script.setForeground(0, QtGui.QColor('#ffffff'))
@@ -1700,8 +2095,8 @@ class LogikPortal(object):
 
             self.ftp_script_list.append(script_name)
 
-        print ('install_script_dict:', self.installed_script_dict, '\n')
-        print ('ftp_script_list:', self.ftp_script_list)
+        # print ('install_script_dict:', self.installed_script_dict, '\n')
+        # print ('ftp_script_list:', self.ftp_script_list)
 
         # Select top item in script setup list
 
@@ -1726,7 +2121,7 @@ class LogikPortal(object):
 
     def check_batch_flame_version(self, tree, tree_index):
 
-        print ('\n>>> checking batch version <<<\n')
+        print ('\n>>> checking batch version <<<')
 
         # Get selected script date
 
@@ -1735,8 +2130,8 @@ class LogikPortal(object):
         batch_name = batch_item.text(0)
         batch_flame_version = batch_item.text(1)
 
-        print ('current_flame_version:', self.flame_version)
-        print ('batch_flame_version:', batch_flame_version, '\n')
+        # print ('current_flame_version:', self.flame_version)
+        # print ('batch_flame_version:', batch_flame_version, '\n')
 
         if float(batch_flame_version) > float(self.flame_version):
             print ('\n>>> %s requires newer version of flame <<<\n' % batch_name)
@@ -1762,7 +2157,7 @@ class LogikPortal(object):
 
     def get_batch_setups(self, tree):
 
-        print ('\n>>> downloading batch setups list <<<\n')
+        print ('\n>>> downloading batch setups list <<<')
 
         # Download xml to temp folder
 
