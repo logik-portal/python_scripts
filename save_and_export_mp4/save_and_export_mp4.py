@@ -1,14 +1,14 @@
 '''
 Script Name: save_and_export_mp4
-Script Version: 1.0
+Script Version: 1.1
 Flame Version: 2020
 Written by: John Geehreng
 Creation Date: 07.28.21
-Update Date: 07.28.21
+Update Date: 07.29.21
 
 Description: This will save your selection into the FROM_FLAME Shared Library under Dated and Timestamped folers. Then it will export into a dated and timestamped folder in the FROM_FLAME folder in your job.
 It works with a selection of clips, sequences, folders, or reels. Basically anything but a Desktop. Then it changes the extension from .mov to .mp4.
-
+7.29 - Limited to Python 3 (Flame 2022 and above because glob.glob(export_path, recursive=True) only works with a Python Version > 3.5)
 To change for your facility modify the paths in lines: 48, 58, 142 & 143
 
 '''
@@ -283,25 +283,25 @@ def get_media_panel_custom_ui_actions():
                     'name': "Export H264 and Copy Path - Automatic",
                     'isVisible': scope_not_desktop,
                     'execute': export_and_copy_path,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': "Export H264 and Copy Path - Manual",
                     'isVisible': scope_not_desktop,
                     'execute': export_and_copy_path_manual,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
                     "name": "Export H264 and Reveal in Finder - Automatic",
                     "isVisible": scope_not_desktop,
                     "execute": export_and_open_finder,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
                     "name": "Export H264 and Reveal in Finder - Manual",
                     "isVisible": scope_not_desktop,
                     "execute": export_and_open_finder_manual,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
 
             ]
