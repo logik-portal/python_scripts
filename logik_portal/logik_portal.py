@@ -6,7 +6,7 @@ Flame Version: 2021
 Written by: Michael Vaglienty
 Crying Croc Design by: Enid Dalkoff
 Creation Date: 10.31.20
-Update Date: 07.23.21
+Update Date: 07.30.21
 
 Custom Action Type: Flame Main Menu
 
@@ -22,11 +22,17 @@ To install:
 
 Updates:
 
+v2.5 07.30.21
+
+    Added ability to upload/download archives - Archive size limit is 200MB
+
+    Config is now XML
+
 v2.4 07.23.21
 
     Added submit button back. User name and password now required to submit scripts.
 
-    Fixed bug - files starting with . sometimes cause script to not work
+    Fixed bug - files starting with . sometimes caused script to not work
 
 v2.3 07.06.21
 
@@ -90,7 +96,7 @@ from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 
-VERSION = 'v2.4'
+VERSION = 'v2.5'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/logik_portal'
 
@@ -313,12 +319,12 @@ class LogikPortal(object):
 
         self.shared_script_path = '/opt/Autodesk/shared/python'
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
-        self.config_file = os.path.join(self.config_path, 'config')
+        # self.config_file = os.path.join(self.config_path, 'config')
+        self.config_xml = os.path.join(self.config_path, 'config.xml')
 
         # Load config file
 
-        self.config_file_check()
-        self.load_config()
+        self.config()
 
         # Get user
 
@@ -367,6 +373,8 @@ class LogikPortal(object):
 
         self.get_batch_setups(self.batch_setups_tree)
 
+        self.get_archives(self.archives_tree)
+
         self.get_ftp_scripts(self.portal_scripts_tree)
 
         # Close ftp connection
@@ -375,59 +383,68 @@ class LogikPortal(object):
 
         # Check first items in tree lists for install/download button disable
 
+        self.check_archive_flame_version(self.archives_tree, 0)
+
         self.check_batch_flame_version(self.batch_setups_tree, 0)
 
         self.check_script_flame_version(self.portal_scripts_tree, 0)
 
         print ('\n>>> logik portal loaded <<<\n')
 
-    def load_config(self):
+    def config(self):
 
-        # Load config file values
+        def get_config_values():
 
-        get_config_values = open(self.config_file, 'r')
-        values = get_config_values.read().splitlines()
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
 
-        self.matchbox_path = values[2]
-        self.batch_setup_download_path = values[4]
-        self.batch_submit_path = values[6]
-        self.script_submit_path = values[8]
-        self.open_batch = ast.literal_eval(values[10])
+            # Get UI settings
 
-        get_config_values.close()
+            for setting in root.iter('config'):
+                self.matchbox_path = setting.find('matchbox_path').text
+                self.batch_setup_download_path = setting.find('batch_setup_download_path').text
+                self.batch_submit_path = setting.find('batch_submit_path').text
+                self.script_submit_path = setting.find('script_submit_path').text
+                self.open_batch = ast.literal_eval(setting.find('open_batch').text)
+                self.archive_download_path = setting.find('archive_download_path').text
+                self.archive_submit_path = setting.find('archive_submit_path').text
 
-    def config_file_check(self):
+            print ('\n>>> config loaded <<<')
 
-        # Check for and load config file
-        #-------------------------------
+        def create_config_file():
 
-        if not os.path.isdir(self.config_path):
-            try:
-                os.makedirs(self.config_path)
-            except:
-                message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+            if not os.path.isdir(self.config_path):
+                try:
+                    os.makedirs(self.config_path)
+                except:
+                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
 
-        if not os.path.isfile(self.config_file):
-            print ('>>> config file does not exist, creating new config file <<<\n')
+            if not os.path.isfile(self.config_xml):
+                print ('\n>>> config file does not exist, creating new config file <<<')
 
-            config_text = []
+                config = """
+<settings>
+    <config>
+        <matchbox_path></matchbox_path>
+        <batch_setup_download_path>/</batch_setup_download_path>
+        <batch_submit_path>/</batch_submit_path>
+        <script_submit_path>/</script_submit_path>
+        <open_batch>False</open_batch>
+        <archive_download_path>/</archive_download_path>
+        <archive_submit_path>/</archive_submit_path>
+    </config>
+</settings>"""
 
-            config_text.insert(0, 'Values for Logik Portal script.')
-            config_text.insert(1, 'Matchbox Path:')
-            config_text.insert(2, '')
-            config_text.insert(3, 'Batch Setup Download Path:')
-            config_text.insert(4, '/')
-            config_text.insert(5, 'Batch Submit Path:')
-            config_text.insert(6, '/')
-            config_text.insert(7, 'Script Submit Path:')
-            config_text.insert(8, '/')
-            config_text.insert(9, 'Open Batch after download:')
-            config_text.insert(10, 'False')
+                with open(self.config_xml, 'a') as config_file:
+                    config_file.write(config)
+                    config_file.close()
 
-            out_file = open(self.config_file, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
+        if os.path.isfile(self.config_xml):
+            get_config_values()
+        else:
+            create_config_file()
+            if os.path.isfile(self.config_xml):
+                get_config_values()
 
     # ----------------------------------------------------------------- #
 
@@ -480,6 +497,7 @@ class LogikPortal(object):
         self.window.tab2 = QtWidgets.QWidget()
         self.window.tab3 = QtWidgets.QWidget()
         self.window.tab4 = QtWidgets.QWidget()
+        self.window.tab5 = QtWidgets.QWidget()
 
         self.window.setStyleSheet('QTabWidget {background-color: #212121; font: 14px "Discreet"}'
                                   'QTabWidget::tab-bar {alignment: center}'
@@ -490,10 +508,12 @@ class LogikPortal(object):
         self.window.addTab(self.window.tab1, 'Python Scripts')
         self.window.addTab(self.window.tab3, 'Matchbox')
         self.window.addTab(self.window.tab4, 'Batch Setups')
+        self.window.addTab(self.window.tab5, 'Archives')
 
         self.python_scripts = self.python_scripts_tab()
         self.matchbox = self.matchbox_tab()
         self.batch_setups = self.batch_setups_tab()
+        self.archives = self.archives_tab()
 
         #------------------------------------#
 
@@ -505,6 +525,7 @@ class LogikPortal(object):
         self.vbox.addLayout(self.window.tab1.layout)
         self.vbox.addLayout(self.window.tab3.layout)
         self.vbox.addLayout(self.window.tab4.layout)
+        self.vbox.addLayout(self.window.tab5.layout)
 
         self.window.setLayout(self.vbox)
 
@@ -597,16 +618,15 @@ class LogikPortal(object):
 
                         # Save path to config file
 
-                        edit_config = open(self.config_file, 'r')
-                        contents = edit_config.readlines()
-                        edit_config.close
+                        xml_tree = ET.parse(self.config_xml)
+                        root = xml_tree.getroot()
 
-                        contents[8] = self.submit_script_path_lineedit.text() + '\n'
+                        script_submit_path = root.find('.//script_submit_path')
+                        script_submit_path.text = self.submit_script_path_lineedit.text()
 
-                        edit_config = open(self.config_file, 'w')
-                        contents = ''.join(contents)
-                        edit_config.write(contents)
-                        edit_config.close()
+                        xml_tree.write(self.config_xml)
+
+                        print ('\n>>> config saved <<<\n')
 
                     def create_script_xml(self):
 
@@ -782,7 +802,6 @@ class LogikPortal(object):
                     upload()
 
             def python_script_browse():
-                from PySide2 import QtWidgets
 
                 script_path = QtWidgets.QFileDialog.getOpenFileName(self.window, 'Select Python File', self.submit_script_path_lineedit.text(), 'Python Files (*.py)')[0]
 
@@ -806,7 +825,7 @@ class LogikPortal(object):
             self.submit_script_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
             self.submit_script_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
             self.submit_script_window.setFocusPolicy(QtCore.Qt.StrongFocus)
-            self.submit_script_window.setStyleSheet('background-color: #313131')
+            self.submit_script_window.setStyleSheet('background-color: #272727')
 
             # Center window in linux
 
@@ -976,6 +995,87 @@ class LogikPortal(object):
             if file_browser.exec_():
                 self.matchbox_path_lineedit.setText(str(file_browser.selectedFiles()[0]))
 
+        def download_logik():
+
+            def save_config():
+
+                # Save path to config file
+
+                xml_tree = ET.parse(self.config_xml)
+                root = xml_tree.getroot()
+
+                matchbox_path = root.find('.//matchbox_path')
+                matchbox_path.text = self.matchbox_install_path
+
+                xml_tree.write(self.config_xml)
+
+                print ('\n>>> config saved <<<\n')
+
+            def download():
+                from subprocess import Popen, PIPE
+                import time
+
+                print ('\ndownloading Logik Matchboxes...\n')
+
+                # Change cursor to busy
+
+                QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.BusyCursor)
+
+                # Set download path
+
+                tar_path = '/opt/Autodesk/shared/python/logik_portal/MatchboxShaderCollection.tgz'
+
+                # Download matchbox archive
+
+                self.ftp_download_connect()
+
+                self.ftp.retrbinary('RETR ' + '/Logik_Matchbox/MatchboxShaderCollection.tgz', open(tar_path, 'wb').write)
+
+                # Untar matchbox archive
+
+                command = 'tar -xvpzf /opt/Autodesk/shared/python/logik_portal/MatchboxShaderCollection.tgz --strip-components 1 -C %s' % self.matchbox_install_path
+                command = command.split(' ', 6)
+
+                if not self.folder_write_permission:
+
+                    # Sudo untar
+
+                    p = Popen(['sudo', '-S'] + command, stdin=PIPE, stderr=PIPE, universal_newlines=True)
+                    p.communicate(self.sudo_password + '\n')[1]
+
+                else:
+
+                    # Normal untar
+
+                    Popen(command, stdin=PIPE, stderr=PIPE, universal_newlines=True)
+
+                time.sleep(5)
+
+                QtWidgets.QApplication.restoreOverrideCursor()
+
+                if os.listdir(self.matchbox_install_path) != []:
+                    os.remove(tar_path)
+                    message_box('Logik Matchboxes installed')
+                else:
+                    message_box('Install Failed')
+
+
+            self.matchbox_install_path = self.matchbox_path_lineedit.text()
+
+            if not os.path.isdir(self.matchbox_install_path):
+                message_box('Select valid install path')
+                return
+
+            save_config()
+
+            self.folder_write_permission = os.access(self.matchbox_install_path, os.W_OK)
+            print ('folder write permission:', self.folder_write_permission)
+
+            if not self.folder_write_permission:
+                self.get_system_password()
+            else:
+                download()
+
         # Tab 3
 
         # Labels
@@ -1001,7 +1101,7 @@ class LogikPortal(object):
 
         # Buttons
 
-        self.matchbox_download_btn = FlameButton('Download', self.check_matchbox_download_path, self.window.tab3)
+        self.matchbox_download_btn = FlameButton('Download', download_logik, self.window.tab3)
         self.matchbox_done_btn = FlameButton('Done', self.done, self.window.tab3)
 
         # Layout
@@ -1031,19 +1131,17 @@ class LogikPortal(object):
 
             def save_config():
 
-                # Save path to config file
+                xml_tree = ET.parse(self.config_xml)
+                root = xml_tree.getroot()
 
-                edit_config = open(self.config_file, 'r')
-                contents = edit_config.readlines()
-                edit_config.close
+                batch_setup_download_path = root.find('.//batch_setup_download_path')
+                batch_setup_download_path.text = self.batch_setup_download_path
+                open_batch = root.find('.//open_batch')
+                open_batch.text = str(self.open_batch_btn.isChecked())
 
-                contents[4] = self.batch_setup_download_path + '\n'
-                contents[10] = str(self.open_batch_btn.isChecked())
+                xml_tree.write(self.config_xml)
 
-                edit_config = open(self.config_file, 'w')
-                contents = ''.join(contents)
-                edit_config.write(contents)
-                edit_config.close()
+                print ('\n>>> config saved <<<\n')
 
             def open_batch():
                 import flame
@@ -1072,7 +1170,6 @@ class LogikPortal(object):
                 print ('\n>>> batch setup loaded <<<\n')
 
             def batch_browse():
-                from PySide2 import QtWidgets
 
                 file_browser = QtWidgets.QFileDialog()
                 file_browser.setDirectory(self.batch_setup_download_path)
@@ -1154,10 +1251,8 @@ class LogikPortal(object):
                 message_box('%s downloaded' % batch_name)
 
         def submit_batch_setup():
-            from PySide2 import QtCore, QtWidgets
 
             def batch_setup_browse():
-                from PySide2 import QtWidgets
 
                 batch_setup_path = QtWidgets.QFileDialog.getOpenFileName(self.window, 'Select .batch File', self.submit_batch_path_lineedit.text(), 'Batch Files (*.batch)')[0]
 
@@ -1167,7 +1262,7 @@ class LogikPortal(object):
                     batch_name = batch_setup_path.rsplit('/', 1)[1][:-6]
                     if batch_name.endswith('.flare'):
                         batch_name = batch_name[:-6]
-                    self.submit_batch_name_02_lable.setText(batch_name)
+                    self.submit_batch_name_02_label.setText(batch_name)
 
             def batch_setup_upload():
 
@@ -1175,16 +1270,15 @@ class LogikPortal(object):
 
                     # Save path to config file
 
-                    edit_config = open(self.config_file, 'r')
-                    contents = edit_config.readlines()
-                    edit_config.close
+                    xml_tree = ET.parse(self.config_xml)
+                    root = xml_tree.getroot()
 
-                    contents[6] = self.submit_batch_path_lineedit.text() + '\n'
+                    batch_submit_path = root.find('.//batch_submit_path')
+                    batch_submit_path.text = self.submit_batch_path_lineedit.text()
 
-                    edit_config = open(self.config_file, 'w')
-                    contents = ''.join(contents)
-                    edit_config.write(contents)
-                    edit_config.close()
+                    xml_tree.write(self.config_xml)
+
+                    print ('\n>>> config saved <<<\n')
 
                 def compress_batch_setup():
 
@@ -1322,7 +1416,7 @@ class LogikPortal(object):
             self.submit_batch_window.setWindowTitle('Logik Portal Batch Setup Submit')
             self.submit_batch_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
             self.submit_batch_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-            self.submit_batch_window.setStyleSheet('background-color: #313131')
+            self.submit_batch_window.setStyleSheet('background-color: #272727')
 
             # Center window in linux
 
@@ -1334,8 +1428,8 @@ class LogikPortal(object):
 
             self.submit_batch_label = FlameLabel('Logik Portal Batch Setup Submit', 'background', self.submit_batch_window)
             self.submit_batch_path_label = FlameLabel('Batch Path', 'normal', self.submit_batch_window)
-            self.submit_batch_name_01_lable = FlameLabel('Batch Name', 'normal', self.submit_batch_window)
-            self.submit_batch_name_02_lable = FlameLabel('', 'outline', self.submit_batch_window)
+            self.submit_batch_name_01_label = FlameLabel('Batch Name', 'normal', self.submit_batch_window)
+            self.submit_batch_name_02_label = FlameLabel('', 'outline', self.submit_batch_window)
             self.submit_batch_flame_version_label = FlameLabel('Flame Version', 'normal', self.submit_batch_window)
             self.submit_batch_flame_version_label2 = FlameLabel(flame_version, 'outline', self.submit_batch_window)
             self.submit_batch_artist_name_label = FlameLabel('Artist Name', 'normal', self.submit_batch_window)
@@ -1352,9 +1446,9 @@ class LogikPortal(object):
                     batch_name = self.submit_batch_path_lineedit.text().rsplit('/', 1)[1][:-6]
                     if batch_name.endswith('.flare'):
                         batch_name = batch_name[:-6]
-                    self.submit_batch_name_02_lable.setText(batch_name)
+                    self.submit_batch_name_02_label.setText(batch_name)
                 else:
-                    self.submit_batch_name_02_lable.setText('')
+                    self.submit_batch_name_02_label.setText('')
 
             self.submit_batch_path_lineedit = FlameClickableLineEdit(self.batch_submit_path, self.submit_batch_window)
             self.submit_batch_path_lineedit.clicked.connect(batch_setup_browse)
@@ -1383,13 +1477,13 @@ class LogikPortal(object):
 
             gridlayout.addWidget(self.submit_batch_label, 0, 0, 1, 6)
             gridlayout.addWidget(self.submit_batch_path_label, 1, 0)
-            gridlayout.addWidget(self.submit_batch_name_01_lable, 2, 0)
+            gridlayout.addWidget(self.submit_batch_name_01_label, 2, 0)
             gridlayout.addWidget(self.submit_batch_artist_name_label, 3, 0)
             gridlayout.addWidget(self.submit_batch_flame_version_label, 4, 0)
             gridlayout.addWidget(self.submit_batch_description_label, 5, 0)
 
             gridlayout.addWidget(self.submit_batch_path_lineedit, 1, 1, 1, 4)
-            gridlayout.addWidget(self.submit_batch_name_02_lable, 2, 1, 1, 4)
+            gridlayout.addWidget(self.submit_batch_name_02_label, 2, 1, 1, 4)
             gridlayout.addWidget(self.submit_batch_artist_name_lineedit, 3, 1, 1, 4)
             gridlayout.addWidget(self.submit_batch_flame_version_label2, 4, 1)
             gridlayout.addWidget(self.submit_batch_description_text_edit, 5, 1, 6, 4)
@@ -1475,6 +1569,455 @@ class LogikPortal(object):
         self.window.tab4.layout.addWidget(self.batch_setups_done_btn, 6, 4)
 
         self.window.tab4.setLayout(self.window.tab4.layout)
+
+    def archives_tab(self):
+
+        def archive_download():
+
+            def save_config():
+
+                # Save path to config file
+
+                xml_tree = ET.parse(self.config_xml)
+                root = xml_tree.getroot()
+
+                archive_download_path = root.find('.//archive_download_path')
+                archive_download_path.text = self.archive_download_path
+
+                xml_tree.write(self.config_xml)
+
+                print ('\n>>> config saved <<<\n')
+
+            def browse():
+
+                file_browser = QtWidgets.QFileDialog()
+                file_browser.setDirectory(self.archive_download_path)
+                file_browser.setFileMode(QtWidgets.QFileDialog.DirectoryOnly)
+                if file_browser.exec_():
+                    return str(file_browser.selectedFiles()[0])
+
+            self.archive_download_path = browse()
+            print ('archive_download_path:', self.archive_download_path)
+
+            if self.archive_download_path:
+
+                save_config()
+
+                # Read description from script
+
+                selected_archive = self.archives_tree.selectedItems()
+                archive_item = selected_archive[0]
+                archive_name = archive_item.text(0)
+                print ('archive_name:', archive_name)
+
+                # Check path to see if batch already exists
+
+                archive_exists = [a for a in os.listdir(self.archive_download_path) if a.split('.', 1)[0] == archive_name]
+                print ('archive_exists:', archive_exists)
+
+                # If archive already exists prompt to overwrite or cancel
+
+                if archive_exists:
+                    overwrite_archive = message_box_confirm('Archive Already Exists. Overwrite?')
+                    print ('overwrite_archive:', overwrite_archive)
+                    if not overwrite_archive:
+                        print ('\n>>> download cancelled <<<\n')
+                        return
+                    else:
+                        for a in archive_exists:
+                            path_to_delete = os.path.join(self.archive_download_path, a)
+                            print ('path_to_delete:', path_to_delete)
+                            if os.path.isfile(path_to_delete):
+                                os.remove(path_to_delete)
+                            elif os.path.isdir(path_to_delete):
+                                shutil.rmtree(path_to_delete)
+                        print ('\n')
+
+                # Connect to ftp
+
+                self.ftp_download_connect()
+
+                # Download dest path
+
+                tgz_path = os.path.join(self.archive_download_path, archive_name + '.tgz')
+                print ('tgz_path:', tgz_path)
+
+                # Download archive tgz file
+
+                self.ftp.retrbinary('RETR ' + os.path.join('/Archives', archive_item.text(1), archive_name + '.tgz'), open(tgz_path, 'wb').write)
+
+                # Uncompress tgz file
+
+                tgz_escaped_path = tgz_path.replace(' ', '\ ')
+                download_escaped_path = self.archive_download_path.replace(' ', '\ ')
+
+                tar_command = 'tar -xvf %s -C %s' % (tgz_escaped_path, download_escaped_path + '/')
+                print ('tar_command:', tar_command)
+
+                os.system(tar_command)
+
+                # Delete tgz file
+
+                os.remove(tgz_path)
+
+                # Disconnect ftp
+
+                self.ftp.quit()
+
+                # if self.open_archive_btn.isChecked():
+                    # open_archive()
+
+                message_box('archive %s downloaded' % archive_name)
+
+        def submit_archive():
+
+            def archive_browse():
+
+                archive_path = str(QtWidgets.QFileDialog.getExistingDirectory(self.submit_archive_window, 'Select Directory', self.submit_archive_path_lineedit.text(), QtWidgets.QFileDialog.ShowDirsOnly))
+
+                # Check selected folder for archive seg file. Give error if not found.
+
+                if os.path.isdir(archive_path):
+                    seg_file = [f for f in os.listdir(archive_path) if f.endswith('.seg')]
+                    if not seg_file:
+                        self.submit_archive_path_lineedit.setText('')
+                        self.submit_archive_name_02_label.setText('')
+                        return message_box('Archive not found in selected folder')
+                    else:
+                        self.submit_archive_path_lineedit.setText(archive_path)
+                        for f in os.listdir(archive_path):
+                            file_ext = os.path.splitext(f)[-1]
+                            if '' == file_ext:
+                                self.submit_archive_name_02_label.setText(f)
+
+            def archive_upload():
+
+                def save_config():
+
+                    # Save path to config file
+
+                    xml_tree = ET.parse(self.config_xml)
+                    root = xml_tree.getroot()
+
+                    archive_submit_path = root.find('.//archive_submit_path')
+                    archive_submit_path.text = self.submit_archive_path_lineedit.text()
+
+                    xml_tree.write(self.config_xml)
+
+                    print ('\n>>> config saved <<<\n')
+
+                def compress_archive():
+
+                    # Add batch files to tar file
+
+                    archive_folder = self.submit_archive_path_lineedit.text()
+                    print ('archive_folder:', archive_folder, '\n')
+
+                    self.tar_file_name = self.submit_archive_name_02_label.text()
+                    # print ('tar_file_name:', self.tar_file_name)
+
+                    self.tar_path = os.path.join(self.temp_folder, self.tar_file_name) + '.tgz'
+                    # print ('tar_path:', self.tar_path)
+
+                    tar_file_list = ''
+
+                    for f in os.listdir(archive_folder):
+                        if not f.startswith('.'):
+                            tar_file_list = tar_file_list + ' ' + f
+                    tar_file_list.strip()
+                    # print ('tar_file_list:', tar_file_list)
+
+                    tar_command = 'tar -cvf %s  %s' % (self.tar_path, tar_file_list)
+                    # print ('tar_command:', tar_command)
+
+                    os.chdir(archive_folder)
+                    os.system(tar_command)
+
+                    print ('\n>>> archive tar file created <<<\n')
+
+                def create_archive_xml_file():
+
+                    description_text = self.submit_archive_description_text_edit.toPlainText()
+                    description_text = description_text.replace("'", "\"")
+                    description_text = description_text.replace('&', '-')
+
+                    # Get tar file size. If file is larger than 200mb, give error
+
+                    tar_file_size = os.path.getsize(self.tar_path)
+
+                    if len(str(tar_file_size)) > 6:
+                        tar_file_size = int(str(tar_file_size)[:-6])
+                        if tar_file_size > 200:
+                            return message_box('Archive to large. Reduce size and try again.')
+                        else:
+                            tar_file_size = str(tar_file_size) + 'mb'
+                    else:
+                        tar_file_size = '> 1mb'
+
+                    print ('tar_file_size:', tar_file_size)
+
+                    # Create batch info file
+
+                    text = []
+
+                    text.insert(0, "    <archive name='%s'>" % self.tar_file_name)
+                    text.insert(1, "        <flame_version>'%s'</flame_version>" % self.submit_archive_flame_version_label2.text())
+                    text.insert(2, "        <file_size>'%s'</file_size>" % tar_file_size)
+                    text.insert(3, "        <artist>'%s'</artist>" % self.submit_archive_artist_name_lineedit.text())
+                    text.insert(4, "        <description>'%s'</description>" % description_text)
+                    text.insert(5, '    </archive>')
+
+                    out_file = open(xml_file, 'w')
+                    for line in text:
+                        print (line, file=out_file)
+                    out_file.close()
+
+                def upload_archive():
+
+                    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.BusyCursor)
+
+                    submit_archive_path = '/Submit/Archives'
+
+                    self.ftp_upload_connect()
+
+                    # Check to see if file already exists on ftp
+
+                    ftp_file_list = self.ftp.nlst(submit_archive_path)
+
+                    if self.tar_file_name + '.tgz' in ftp_file_list:
+                        QtWidgets.QApplication.restoreOverrideCursor()
+                        self.ftp.quit()
+                        return message_box('Archive already exists. Rename and try again.')
+
+                    print ('\nuploading...\n')
+
+                    # Upload archive tar to ftp
+
+                    tar_ftp_path = os.path.join(submit_archive_path, self.tar_file_name) + '.tgz'
+
+                    with open(self.tar_path, 'rb') as ftpup:
+                        self.ftp.storbinary('STOR ' + tar_ftp_path, ftpup)
+
+                    # Delete local tar file
+
+                    os.remove(self.tar_path)
+
+                    # Upload archive xml file
+
+                    archive_xml_ftp_path = os.path.join(submit_archive_path, self.tar_file_name) + '.xml'
+
+                    with open(xml_file, 'rb') as ftpup:
+                        self.ftp.storbinary('STOR ' + archive_xml_ftp_path, ftpup)
+
+                    QtWidgets.QApplication.restoreOverrideCursor()
+
+                    # Check that both files were uploaded to site
+
+                    ftp_file_list = self.ftp.nlst(submit_archive_path)
+
+                    if self.tar_file_name + '.tgz' and self.tar_file_name + '.xml' not in ftp_file_list:
+                        QtWidgets.QApplication.restoreOverrideCursor()
+                        self.ftp.quit()
+                        return message_box('Upload failed. Try again.')
+
+                    print ('\n>>> upload done <<<\n')
+
+                    os.remove(xml_file)
+
+                    # Close window
+
+                    self.submit_archive_window.close()
+
+                    # Close ftp connection
+
+                    self.ftp.quit()
+
+                    # Confirm file uploaded
+
+                    return message_box('<center>Archive uploaded!<br>It will be added to the Logik Portal shortly.</center>')
+
+                if not os.path.isdir(self.submit_archive_path_lineedit.text()):
+                    return message_box('Enter path to archive')
+                seg_file = [f for f in os.listdir(self.submit_archive_path_lineedit.text()) if f.endswith('.seg')]
+                if not seg_file:
+                    return message_box('Archive not found in selected folder')
+                if self.submit_archive_artist_name_lineedit.text() == '':
+                    return message_box('Enter Artist name')
+                elif self.submit_archive_description_text_edit.toPlainText() == '':
+                    return message_box('Enter archive description')
+                else:
+                    upload = message_box_confirm('All files in selected folder will be uploaded')
+
+                    if upload:
+                        save_config()
+                        compress_archive()
+                        xml_file = os.path.join(self.temp_folder, '%s.xml' % self.tar_file_name)
+                        create_archive_xml_file()
+                        upload_archive()
+
+            flame_version = str(self.flame_version)
+            if flame_version.endswith('.0'):
+                flame_version = flame_version[:-2]
+
+            self.submit_archive_window = QtWidgets.QWidget()
+            self.submit_archive_window.setMinimumSize(QtCore.QSize(800, 400))
+            self.submit_archive_window.setMaximumSize(QtCore.QSize(800, 400))
+            self.submit_archive_window.setWindowTitle('Logik Portal Archive Submit')
+            self.submit_archive_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+            self.submit_archive_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+            self.submit_archive_window.setStyleSheet('background-color: #272727')
+
+            # Center window in linux
+
+            resolution = QtWidgets.QDesktopWidget().screenGeometry()
+            self.submit_archive_window.move((resolution.width() / 2) - (self.submit_archive_window.frameSize().width() / 2),
+                                            (resolution.height() / 2) - (self.submit_archive_window.frameSize().height() / 2))
+
+            # Labels
+
+            self.submit_archive_label = FlameLabel('Logik Portal Archive Submit', 'background', self.submit_archive_window)
+            self.submit_archive_path_label = FlameLabel('Archive Path', 'normal', self.submit_archive_window)
+            self.submit_archive_name_01_label = FlameLabel('Archive Name', 'normal', self.submit_archive_window)
+            self.submit_archive_name_02_label = FlameLabel('', 'outline', self.submit_archive_window)
+            self.submit_archive_flame_version_label = FlameLabel('Flame Version', 'normal', self.submit_archive_window)
+            self.submit_archive_flame_version_label2 = FlameLabel(flame_version, 'outline', self.submit_archive_window)
+            self.submit_archive_artist_name_label = FlameLabel('Artist Name', 'normal', self.submit_archive_window)
+            self.submit_archive_description_label = FlameLabel('Archive Description', 'normal', self.submit_archive_window)
+
+            # LineEdits
+
+            def get_archive_name():
+
+                archive_path = self.submit_archive_path_lineedit.text()
+
+                if os.path.isdir(archive_path):
+                    seg_file = [f for f in os.listdir(archive_path) if f.endswith('.seg')]
+                    if not seg_file:
+                        self.submit_archive_path_lineedit.setText('')
+                        self.submit_archive_name_02_label.setText('')
+                    else:
+                        for f in os.listdir(self.submit_archive_path_lineedit.text()):
+                            if not f.startswith('.'):
+                                file_ext = os.path.splitext(f)[-1]
+                                if '' == file_ext:
+                                    self.submit_archive_name_02_label.setText(f)
+                else:
+                    self.submit_archive_path_lineedit.setText('')
+                    self.submit_archive_name_02_label.setText('')
+
+            self.submit_archive_path_lineedit = FlameClickableLineEdit(self.archive_submit_path, self.submit_archive_window)
+            self.submit_archive_path_lineedit.clicked.connect(archive_browse)
+
+            self.submit_archive_artist_name_lineedit = FlameLineEdit('', self.submit_archive_window)
+
+            get_archive_name()
+
+            # Text Edit
+
+            self.submit_archive_description_text_edit = FlameTextEdit(self.file_description, False, self.submit_archive_window)
+
+            # Buttons
+
+            self.submit_archive_upload_btn = FlameButton('Upload', archive_upload, self.submit_archive_window)
+            self.submit_archive_cancel_btn = FlameButton('Cancel', self.submit_archive_window.close, self.submit_archive_window)
+
+            #------------------------------------#
+
+            #  Window grid layout
+
+            gridlayout = QtWidgets.QGridLayout()
+            gridlayout.setMargin(30)
+            gridlayout.setVerticalSpacing(5)
+            gridlayout.setHorizontalSpacing(5)
+
+            gridlayout.addWidget(self.submit_archive_label, 0, 0, 1, 6)
+            gridlayout.addWidget(self.submit_archive_path_label, 1, 0)
+            gridlayout.addWidget(self.submit_archive_name_01_label, 2, 0)
+            gridlayout.addWidget(self.submit_archive_artist_name_label, 3, 0)
+            gridlayout.addWidget(self.submit_archive_flame_version_label, 4, 0)
+            gridlayout.addWidget(self.submit_archive_description_label, 5, 0)
+
+            gridlayout.addWidget(self.submit_archive_path_lineedit, 1, 1, 1, 4)
+            gridlayout.addWidget(self.submit_archive_name_02_label, 2, 1, 1, 4)
+            gridlayout.addWidget(self.submit_archive_artist_name_lineedit, 3, 1, 1, 4)
+            gridlayout.addWidget(self.submit_archive_flame_version_label2, 4, 1)
+            gridlayout.addWidget(self.submit_archive_description_text_edit, 5, 1, 6, 4)
+
+            gridlayout.addWidget(self.submit_archive_upload_btn, 9, 5)
+            gridlayout.addWidget(self.submit_archive_cancel_btn, 10, 5)
+
+            self.submit_archive_window.setLayout(gridlayout)
+
+            self.submit_archive_window.show()
+
+        #  Tab 5
+
+        # Labels
+
+        self.archives_label = FlameLabel('Archives', 'background', self.window.tab4)
+        self.archives_desciption_label = FlameLabel('Archive Description', 'background', self.window.tab5)
+
+        # Logo
+
+        self.logik_logo_label = QtWidgets.QLabel(self.window.tab1)
+        self.logo_label_pixmap = QtGui.QPixmap(os.path.join(SCRIPT_PATH, 'logik_logo.png'))
+        self.logik_logo_label.setPixmap(self.logo_label_pixmap)
+
+        # Text Edit
+
+        self.archives_text_edit = FlameTextEdit(self.file_description, True, self.window.tab5)
+
+        # Batch Setups TreeWidget
+
+        archive_tree_headers = ['Name', 'Flame', 'Size', 'Artist']
+        self.archives_tree = FlameTreeWidget(self.get_archive_description, self.archives_text_edit, archive_tree_headers, self.window.tab5)
+
+        self.archives_tree.setColumnWidth(0, 600)
+        self.archives_tree.setColumnWidth(1, 100)
+        self.archives_tree.setColumnWidth(2, 100)
+        self.archives_tree.setColumnWidth(3, 300)
+        self.archives_tree.setTextElideMode(QtCore.Qt.ElideNone)
+
+        # Disable batch download button if current flame version older than batch minimum
+
+        self.archives_tree.clicked.connect(partial(self.check_archive_flame_version, self.archives_tree))
+
+        # Buttons
+
+        self.archives_submit_btn = FlameButton('Submit', submit_archive, self.window.tab5)
+        self.archives_download_btn = FlameButton('Download', archive_download, self.window.tab5)
+        self.archives_done_btn = FlameButton('Done', self.done, self.window.tab5)
+
+        # Contextual menu
+
+        self.action_download_archive = QtWidgets.QAction('Download Archive', self.window.tab5)
+        self.action_download_archive.triggered.connect(archive_download)
+        self.archives_tree.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        self.archives_tree.addAction(self.action_download_archive)
+
+        #------------------------------------#
+
+        #  Tab layout
+
+        self.window.tab5.layout = QtWidgets.QGridLayout()
+        self.window.tab5.layout.setMargin(30)
+        self.window.tab5.layout.setVerticalSpacing(5)
+        self.window.tab5.layout.setHorizontalSpacing(5)
+
+        self.window.tab5.layout.addWidget(self.archives_label, 0, 0, 1, 5)
+
+        self.window.tab5.layout.addWidget(self.archives_tree, 1, 0, 1, 5)
+
+        self.window.tab5.layout.addWidget(self.archives_submit_btn, 2, 3)
+        self.window.tab5.layout.addWidget(self.archives_download_btn, 2, 4)
+
+        self.window.tab5.layout.addWidget(self.archives_desciption_label, 4, 0, 1, 5)
+        self.window.tab5.layout.addWidget(self.archives_text_edit, 5, 0, 1, 5)
+
+        self.window.tab5.layout.addWidget(self.logik_logo_label, 6, 0)
+        self.window.tab5.layout.addWidget(self.archives_done_btn, 6, 4)
+
+        self.window.tab5.setLayout(self.window.tab5.layout)
 
     # ----------------------------------------------------------------- #
 
@@ -1562,91 +2105,6 @@ class LogikPortal(object):
         self.password_window.setLayout(vbox)
 
         self.password_window.show()
-
-    # ----------------------------------------------------------------- #
-
-    def check_matchbox_download_path(self):
-
-        def save_config_file():
-
-            # Save path to config file
-
-            edit_config = open(self.config_file, 'r')
-            contents = edit_config.readlines()
-            edit_config.close
-
-            contents[2] = self.matchbox_install_path + '\n'
-
-            edit_config = open(self.config_file, 'w')
-            contents = ''.join(contents)
-            edit_config.write(contents)
-            edit_config.close()
-
-            print ('\n>>> config file updated <<<\n')
-
-        self.matchbox_install_path = self.matchbox_path_lineedit.text()
-
-        if not os.path.isdir(self.matchbox_install_path):
-            message_box('Select valid install path')
-            return
-
-        save_config_file()
-
-        self.folder_write_permission = os.access(self.matchbox_install_path, os.W_OK)
-        print ('folder write permission:', self.folder_write_permission)
-
-        if not self.folder_write_permission:
-            self.get_system_password()
-        else:
-            self.download_logik_matchboxes()
-
-    def download_logik_matchboxes(self):
-        from subprocess import Popen, PIPE
-        import time
-
-        print ('\ndownloading Logik Matchboxes...\n')
-
-        # Change cursor to busy
-
-        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.BusyCursor)
-
-        # Set download path
-
-        tar_path = '/opt/Autodesk/shared/python/logik_portal/MatchboxShaderCollection.tgz'
-
-        # Download matchbox archive
-
-        self.ftp_download_connect()
-
-        self.ftp.retrbinary('RETR ' + '/Logik_Matchbox/MatchboxShaderCollection.tgz', open(tar_path, 'wb').write)
-
-        # Untar matchbox archive
-
-        command = 'tar -xvpzf /opt/Autodesk/shared/python/logik_portal/MatchboxShaderCollection.tgz --strip-components 1 -C %s' % self.matchbox_install_path
-        command = command.split(' ', 6)
-
-        if not self.folder_write_permission:
-
-            # Sudo untar
-
-            p = Popen(['sudo', '-S'] + command, stdin=PIPE, stderr=PIPE, universal_newlines=True)
-            p.communicate(self.sudo_password + '\n')[1]
-
-        else:
-
-            # Normal untar
-
-            Popen(command, stdin=PIPE, stderr=PIPE, universal_newlines=True)
-
-        time.sleep(5)
-
-        QtWidgets.QApplication.restoreOverrideCursor()
-
-        if os.listdir(self.matchbox_install_path) != []:
-            os.remove(tar_path)
-            message_box('Logik Matchboxes installed')
-        else:
-            message_box('Install Failed')
 
     # ----------------------------------------------------------------- #
 
@@ -1916,8 +2374,6 @@ class LogikPortal(object):
             self.get_installed_scripts(tree, root_script_path)
 
     def install_script(self, portal_tree, installed_tree, script_path):
-        from PySide2 import QtGui
-        import shutil
         import flame
 
         print ('\n>>> downloading script <<<\n')
@@ -1999,6 +2455,7 @@ class LogikPortal(object):
         return message_box('download failed')
 
     # ----------------------------------------------------------------- #
+    # Python Scripts
 
     def check_script_flame_version(self, tree, tree_index):
 
@@ -2118,6 +2575,7 @@ class LogikPortal(object):
         self.portal_scripts_tree.setTextElideMode(QtCore.Qt.ElideNone)
 
     # ----------------------------------------------------------------- #
+    # Batch Setups
 
     def check_batch_flame_version(self, tree, tree_index):
 
@@ -2195,6 +2653,84 @@ class LogikPortal(object):
         # Get selected batch setup description
 
         self.get_batch_description(self.batch_setups_text_edit, tree, tree)
+
+    # ----------------------------------------------------------------- #
+    # Archives
+
+    def check_archive_flame_version(self, tree, tree_index):
+
+        print ('\n>>> checking archive version <<<')
+
+        # Get selected script date
+
+        selected_archive = tree.selectedItems()
+        archive_item = selected_archive[0]
+        archive_name = archive_item.text(0)
+        archive_flame_version = archive_item.text(1)
+
+        # print ('current_flame_version:', self.flame_version)
+        # print ('archive_flame_version:', archive_flame_version, '\n')
+
+        if float(archive_flame_version) > float(self.flame_version):
+            print ('\n>>> %s requires newer version of flame <<<\n' % archive_name)
+            self.archives_download_btn.setEnabled(False)
+        else:
+            self.archives_download_btn.setEnabled(True)
+
+    def get_archive_description(self, text_edit, tree, tree_index):
+
+        selected_archive = tree.selectedItems()
+        archive_item = selected_archive[0]
+        archive_name = archive_item.text(0)
+        archive_name = archive_name.replace(' ', '_')
+
+        # Add items from xml to archive list
+
+        xml_tree = ET.parse(self.archives_xml_path)
+        root = xml_tree.getroot()
+
+        for archive in root.findall('archive'):
+            if archive.get('name') == archive_name:
+                text_edit.setPlainText(archive[3].text[1:-1])
+
+    def get_archives(self, tree):
+
+        print ('\n>>> downloading archive list <<<')
+
+        # Download xml to temp folder
+
+        self.archives_xml_path = os.path.join(self.temp_folder, 'archives.xml')
+
+        self.ftp.retrbinary('RETR ' + '/Archives/archives.xml', open(self.archives_xml_path, 'wb').write)
+
+        # Add items from xml to archive list
+
+        xml_tree = ET.parse(self.archives_xml_path)
+        root = xml_tree.getroot()
+
+        for arc in root.findall('archive'):
+            archive_name = str(arc.get('name'))
+            flame_version = str(arc[0].text[1:-1])
+            archive_size = str(arc[1].text[1:-1])
+            artist_name = str(arc[2].text[1:-1])
+
+            archive = QtWidgets.QTreeWidgetItem(tree, [archive_name, flame_version, archive_size, artist_name])
+
+            # if archive requires newer version of flame grey out script entry
+
+            if float(self.flame_version) < float(flame_version):
+                archive.setForeground(0, QtGui.QColor('#555555'))
+                archive.setForeground(1, QtGui.QColor('#555555'))
+                archive.setForeground(2, QtGui.QColor('#555555'))
+                archive.setForeground(3, QtGui.QColor('#555555'))
+
+        # Select top item in batch setup list
+
+        tree.setCurrentItem(tree.topLevelItem(0))
+
+        # Get selected batch setup description
+
+        self.get_archive_description(self.archives_text_edit, tree, tree)
 
     # ----------------------------------------------------------------- #
 
