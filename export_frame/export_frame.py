@@ -369,7 +369,7 @@ class ExportCurrentFrame(object):
         self.setup_window = QtWidgets.QWidget()
         self.setup_window.setMinimumSize(QtCore.QSize(900, 400))
         self.setup_window.setMaximumSize(QtCore.QSize(900, 400))
-        self.setup_window.setWindowTitle('Export Current Frame Setup %s' % VERSION)
+        self.setup_window.setWindowTitle('Export Frame Setup %s' % VERSION)
         self.setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         self.setup_window.setStyleSheet('background-color: #272727')
