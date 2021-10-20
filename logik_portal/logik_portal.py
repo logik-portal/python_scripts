@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 '''
 Script Name: Logik Portal
-Script Version: 2.4
+Script Version: 2.7
 Flame Version: 2021
 Written by: Michael Vaglienty
 Crying Croc Design by: Enid Dalkoff
 Creation Date: 10.31.20
-Update Date: 07.30.21
+Update Date: 10.16.21
 
 Custom Action Type: Flame Main Menu
 
 Description:
 
-    Share/install python scripts and batch setups
+    Share/install python scripts, batch setups, archives, and download matchboxes
 
     Flame Main Menu -> Logik -> Logik Portal
 
@@ -22,6 +22,18 @@ To install:
 
 Updates:
 
+v2.7 10.16.21
+
+    Install Local button added to python tab to install python scripts from local drive
+
+    Improved Flame version detection
+
+    Script will now attempt to download matchbox collection from website. If website is down, it will download from portal ftp.
+
+v2.6 09.06.21
+
+    Misc bug fixes / fixed problem with not being able to enter system password to load matchboxes to write protected folder
+
 v2.5 07.30.21
 
     Added ability to upload/download archives - Archive size limit is 200MB
@@ -30,7 +42,7 @@ v2.5 07.30.21
 
 v2.4 07.23.21
 
-    Added submit button back. User name and password now required to submit scripts.
+    Added python submit button back. User name and password now required to submit scripts.
 
     Fixed bug - files starting with . sometimes caused script to not work
 
@@ -90,13 +102,14 @@ v1.2 12.29.20
 '''
 
 from __future__ import print_function
-import os, re, ast, shutil
+import os, re, ast, time, urllib, shutil
+from subprocess import Popen, PIPE
 from ftplib import FTP
 from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 
-VERSION = 'v2.5'
+VERSION = 'v2.7'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/logik_portal'
 
@@ -319,7 +332,6 @@ class LogikPortal(object):
 
         self.shared_script_path = '/opt/Autodesk/shared/python'
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
-        # self.config_file = os.path.join(self.config_path, 'config')
         self.config_xml = os.path.join(self.config_path, 'config.xml')
 
         # Load config file
@@ -341,12 +353,12 @@ class LogikPortal(object):
 
         self.flame_version = flame.get_version()
 
-        if 'pr' in self.flame_version:
-            self.flame_version = self.flame_version.rsplit('.pr', 1)[0]
-        if  self.flame_version.count('.') > 1:
-            self.flame_version = self.flame_version.rsplit('.', 1)[0]
+        if len(self.flame_version) > 6:
+            self.flame_version = self.flame_version[:6]
         self.flame_version = float(self.flame_version)
-        # print ('flame_version:', self.flame_version)
+        print ('    flame_version:', self.flame_version, '\n')
+
+        # Check internet connection to ftp
 
         try:
             self.ftp_download_connect()
@@ -389,7 +401,7 @@ class LogikPortal(object):
 
         self.check_script_flame_version(self.portal_scripts_tree, 0)
 
-        print ('\n>>> logik portal loaded <<<\n')
+        print ('>>> logik portal loaded <<<\n')
 
     def config(self):
 
@@ -400,7 +412,7 @@ class LogikPortal(object):
 
             # Get UI settings
 
-            for setting in root.iter('config'):
+            for setting in root.iter('logik_portal_settings'):
                 self.matchbox_path = setting.find('matchbox_path').text
                 self.batch_setup_download_path = setting.find('batch_setup_download_path').text
                 self.batch_submit_path = setting.find('batch_submit_path').text
@@ -409,7 +421,7 @@ class LogikPortal(object):
                 self.archive_download_path = setting.find('archive_download_path').text
                 self.archive_submit_path = setting.find('archive_submit_path').text
 
-            print ('\n>>> config loaded <<<')
+            print ('\n>>> config loaded <<<\n')
 
         def create_config_file():
 
@@ -420,11 +432,11 @@ class LogikPortal(object):
                     message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
 
             if not os.path.isfile(self.config_xml):
-                print ('\n>>> config file does not exist, creating new config file <<<')
+                print ('>>> config file does not exist, creating new config file <<<')
 
                 config = """
 <settings>
-    <config>
+    <logik_portal_settings>
         <matchbox_path></matchbox_path>
         <batch_setup_download_path>/</batch_setup_download_path>
         <batch_submit_path>/</batch_submit_path>
@@ -432,7 +444,7 @@ class LogikPortal(object):
         <open_batch>False</open_batch>
         <archive_download_path>/</archive_download_path>
         <archive_submit_path>/</archive_submit_path>
-    </config>
+    </logik_portal_settings>
 </settings>"""
 
                 with open(self.config_xml, 'a') as config_file:
@@ -455,7 +467,7 @@ class LogikPortal(object):
         self.ftp = FTP('logik.hostedftp.com')
         self.ftp.login('logik', 'L0gikD0wnL0ad#20')
 
-        print ('\n>>> connected to portal <<<')
+        print ('>>> connected to portal <<<\n')
 
     def ftp_upload_connect(self):
 
@@ -465,13 +477,13 @@ class LogikPortal(object):
         self.ftp.login('logik_upload', 'L0gikUpl0ad#20')
         self.ftp.cwd('/Submit')
 
-        print ('\n>>> connected to portal <<<\n')
+        print ('>>> connected to portal <<<\n')
 
     def ftp_disconnect(self):
 
         self.ftp.quit()
 
-        print ('\n>>> disconnected from portal <<<\n')
+        print ('>>> disconnected from portal <<<\n')
 
     # ----------------------------------------------------------------- #
 
@@ -626,7 +638,7 @@ class LogikPortal(object):
 
                         xml_tree.write(self.config_xml)
 
-                        print ('\n>>> config saved <<<\n')
+                        print ('>>> config saved <<<\n')
 
                     def create_script_xml(self):
 
@@ -651,7 +663,7 @@ class LogikPortal(object):
                             print(line, file=out_file)
                         out_file.close()
 
-                        print ('\n>>> script xml created <<<\n')
+                        print ('>>> script xml created <<<\n')
 
                     def create_tar():
 
@@ -720,7 +732,7 @@ class LogikPortal(object):
                     # Upload script and xml to ftp
 
                     script_xml_path = os.path.join(self.temp_folder, '%s.xml' % self.submit_script_path_lineedit.text().rsplit('/', 1)[1][:-3])
-                    print ('script_xml_path:', script_xml_path)
+                    # print ('script_xml_path:', script_xml_path)
 
                     save_config()
 
@@ -731,13 +743,13 @@ class LogikPortal(object):
                     script_folder = script_path.rsplit('/', 1)[0]
 
                     script_tar_path = os.path.join(self.temp_folder, script_name) + '.tgz'
-                    print ('script_tar_path:', script_tar_path)
+                    # print ('script_tar_path:', script_tar_path)
 
                     create_tar()
 
                     upload_files()
 
-                    self.load_config()
+                    self.config()
 
                 # Check script path field
 
@@ -907,11 +919,56 @@ class LogikPortal(object):
                 if os.path.isfile(self.submit_script_path_lineedit.text()):
                     self.update_script_info()
 
+        def install_local_script():
+            import flame
+
+            script_path = QtWidgets.QFileDialog.getOpenFileName(self.window, 'Select Python File', '/', 'Python Files (*.py)')[0]
+
+            if os.path.isfile(script_path):
+                script_name = script_path.rsplit('/', 1)[1][:-3]
+                install_script = message_box_confirm('Install: %s ?' % script_name)
+                if install_script:
+
+                    dest_folder = os.path.join(self.shared_script_path, script_name)
+
+                    if os.path.isdir(dest_folder):
+                        overwrite_script = message_box_confirm('Script already exists. Overwrite?')
+
+                        if not overwrite_script:
+                            print ('>>> script not installed <<<\n')
+                            return
+                        else:
+                            shutil.rmtree(dest_folder)
+
+                    # Create local folder for script
+
+                    try:
+                        os.makedirs(dest_folder)
+                    except:
+                        pass
+
+                    # Copy script to dest folder
+
+                    shutil.copy(script_path, dest_folder)
+
+                    # Refresh installed scripts tree list
+
+                    self.get_installed_scripts(self.installed_scripts_tree, self.shared_script_path)
+
+                    # Refresh python hooks
+
+                    flame.execute_shortcut('Rescan Python Hooks')
+                    print ('>>> python hooks refreshed <<<\n')
+
+                    if os.path.isfile(os.path.join(dest_folder, script_name + '.py')):
+                        return message_box('%s script installed' % script_name.replace('_', ' '))
+                    return message_box('script install failed')
+
         # Tab 1
 
         # Labels
 
-        self.installed_scripts_label = FlameLabel('Installed Scripts: /opt/Autodesk/shared/python', 'background', self.window.tab1)
+        self.installed_scripts_label = FlameLabel('Installed Scripts', 'background', self.window.tab1)
         self.portal_scripts_label = FlameLabel('Portal Scripts', 'background', self.window.tab1)
         self.script_description_label = FlameLabel('Script Description', 'background', self.window.tab1)
 
@@ -939,6 +996,7 @@ class LogikPortal(object):
 
         self.script_submit_btn = FlameButton('Submit', login_check, self.window.tab1)
         self.install_script_btn = FlameButton('Install', partial(self.install_script, self.portal_scripts_tree, self.installed_scripts_tree, self.shared_script_path), self.window.tab1)
+        self.install_local_script_btn = FlameButton('Install Local', install_local_script, self.window.tab1)
         self.delete_script_btn = FlameButton('Delete', partial(self.delete_script, self.installed_scripts_tree, self.shared_script_path), self.window.tab1)
         self.script_done_btn = FlameButton('Done', self.done, self.window.tab1)
 
@@ -973,7 +1031,9 @@ class LogikPortal(object):
         self.window.tab1.layout.addWidget(self.installed_scripts_tree, 1, 0, 1, 5)
         self.window.tab1.layout.addWidget(self.portal_scripts_tree, 1, 7, 1, 5)
 
-        self.window.tab1.layout.addWidget(self.delete_script_btn, 2, 4)
+        self.window.tab1.layout.addWidget(self.delete_script_btn, 2, 3)
+        self.window.tab1.layout.addWidget(self.install_local_script_btn, 2, 4)
+
         self.window.tab1.layout.addWidget(self.script_submit_btn, 2, 10)
         self.window.tab1.layout.addWidget(self.install_script_btn, 2, 11)
 
@@ -1011,11 +1071,102 @@ class LogikPortal(object):
 
                 print ('\n>>> config saved <<<\n')
 
-            def download():
-                from subprocess import Popen, PIPE
-                import time
+            def get_system_password():
 
-                print ('\ndownloading Logik Matchboxes...\n')
+                def ok():
+                    from subprocess import Popen, PIPE
+
+                    temp_folder = '/opt/Autodesk/password_test_folder'
+
+                    self.sudo_password = self.password_lineedit.text()
+
+                    p = Popen(['sudo', '-S', 'mkdir', temp_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
+                    p.communicate(self.sudo_password + '\n')[1]
+
+                    if os.path.isdir(temp_folder):
+
+                        # Remove temp folder
+
+                        p = Popen(['sudo', '-S', 'rmdir', temp_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
+                        p.communicate(self.sudo_password + '\n')[1]
+
+                        self.password_window.close()
+
+                        download()
+                    else:
+                        message_box('System Password Incorrect')
+                        return
+
+                def cancel():
+                    self.password_window.close()
+
+                self.password_window = QtWidgets.QWidget()
+                self.password_window.setMinimumSize(QtCore.QSize(400, 120))
+                self.password_window.setMaximumSize(QtCore.QSize(400, 120))
+                self.password_window.setWindowTitle('Enter System Password')
+                self.password_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+                self.password_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+                self.password_window.setFocusPolicy(QtCore.Qt.StrongFocus)
+                self.password_window.setStyleSheet('background-color: #272727')
+                self.password_window.setWindowModality(QtCore.Qt.WindowModal)
+
+                # Center window in linux
+
+                resolution = QtWidgets.QDesktopWidget().screenGeometry()
+                self.password_window.move((resolution.width() / 2) - (self.password_window.frameSize().width() / 2),
+                                          (resolution.height() / 2) - (self.password_window.frameSize().height() / 2))
+
+                #  Labels
+
+                self.password_label = FlameLabel('System Password', 'normal', self.password_window)
+                self.password_label.setMinimumWidth(125)
+                self.password_label.setMaximumWidth(125)
+
+                # LineEdits
+
+                self.password_lineedit = FlameLineEdit('', self.password_window)
+                self.password_lineedit.setEchoMode(QtWidgets.QLineEdit.Password)
+                self.password_lineedit.setMinimumWidth(150)
+
+                self.password_lineedit.setMaximumWidth(150)
+
+                #  Buttons
+
+                self.password_ok_btn = FlameButton('Ok', ok, self.password_window)
+                self.password_cancel_btn = FlameButton('Cancel', cancel, self.password_window)
+
+                #------------------------------------#
+
+                #  Window Layout
+
+                hbox = QtWidgets.QHBoxLayout()
+
+                hbox.addWidget(self.password_cancel_btn)
+                hbox.addWidget(self.password_ok_btn)
+
+
+                hbox2 = QtWidgets.QHBoxLayout()
+
+                hbox2.addWidget(self.password_label)
+                hbox2.addWidget(self.password_lineedit)
+
+                vbox = QtWidgets.QVBoxLayout()
+                vbox.addLayout(hbox2)
+                vbox.addLayout(hbox)
+
+                self.password_window.setLayout(vbox)
+
+                self.password_window.show()
+
+                message_box('<center>Folder is write protected.<br>Enter system password to continue.')
+
+            def download():
+
+                def matchbox_file_write(data):
+
+                    matchbox_file.write(data)
+                    self.matchbox_downloaded += len(data)
+                    # print (self.matchbox_downloaded)
 
                 # Change cursor to busy
 
@@ -1025,11 +1176,29 @@ class LogikPortal(object):
 
                 tar_path = '/opt/Autodesk/shared/python/logik_portal/MatchboxShaderCollection.tgz'
 
-                # Download matchbox archive
+                # Try to download from logik matchbox website. If site is down, download from portal ftp
 
-                self.ftp_download_connect()
+                try:
 
-                self.ftp.retrbinary('RETR ' + '/Logik_Matchbox/MatchboxShaderCollection.tgz', open(tar_path, 'wb').write)
+                    print ('downloading Logik Matchboxes from logik-matchbook.org...\n')
+
+                    # Download matchbox archive from logik matchbox website
+
+                    urllib.request.urlretrieve('https://logik-matchbook.org/MatchboxShaderCollection.tgz', tar_path)
+
+                except:
+
+                    print ('>>> Unable to download from website... downloading from logik portal ftp')
+
+                    # Download matchbox archive from ftp
+
+                    self.ftp_download_connect()
+
+                    ftp_file_size = self.ftp.size('/Logik_Matchbox/MatchboxShaderCollection.tgz')
+
+                    matchbox_file = open(tar_path, 'wb')
+
+                    self.ftp.retrbinary('RETR ' + '/Logik_Matchbox/MatchboxShaderCollection.tgz', matchbox_file_write)
 
                 # Untar matchbox archive
 
@@ -1059,7 +1228,6 @@ class LogikPortal(object):
                 else:
                     message_box('Install Failed')
 
-
             self.matchbox_install_path = self.matchbox_path_lineedit.text()
 
             if not os.path.isdir(self.matchbox_install_path):
@@ -1069,10 +1237,10 @@ class LogikPortal(object):
             save_config()
 
             self.folder_write_permission = os.access(self.matchbox_install_path, os.W_OK)
-            print ('folder write permission:', self.folder_write_permission)
+            # print ('folder write permission:', self.folder_write_permission)
 
             if not self.folder_write_permission:
-                self.get_system_password()
+                get_system_password()
             else:
                 download()
 
@@ -1141,7 +1309,7 @@ class LogikPortal(object):
 
                 xml_tree.write(self.config_xml)
 
-                print ('\n>>> config saved <<<\n')
+                print ('>>> config saved <<<\n')
 
             def open_batch():
                 import flame
@@ -1152,7 +1320,7 @@ class LogikPortal(object):
                     if f.split('.', 1)[0] == batch_name and f.endswith('.batch'):
 
                         setup_path = os.path.join(self.batch_setup_download_path, f)
-                        print ('setup_path:', setup_path)
+                        # print ('setup_path:', setup_path)
 
                 # Create new batch group
                 # Names for shelf and schematic reels can be added or deleted here
@@ -1167,7 +1335,7 @@ class LogikPortal(object):
 
                 self.batch_group.load_setup(setup_path)
 
-                print ('\n>>> batch setup loaded <<<\n')
+                print ('>>> batch setup loaded <<<\n')
 
             def batch_browse():
 
@@ -1178,7 +1346,7 @@ class LogikPortal(object):
                     return str(file_browser.selectedFiles()[0])
 
             self.batch_setup_download_path = batch_browse()
-            print ('batch_setup_download_path:', self.batch_setup_download_path)
+            # print ('batch_setup_download_path:', self.batch_setup_download_path)
 
             if self.batch_setup_download_path:
 
@@ -1189,30 +1357,27 @@ class LogikPortal(object):
                 selected_batch = self.batch_setups_tree.selectedItems()
                 batch_item = selected_batch[0]
                 batch_name = batch_item.text(0)
-                print ('batch_name:', batch_name)
+                # print ('batch_name:', batch_name)
 
                 # Check path to see if batch already exists
 
                 batch_exists = [b for b in os.listdir(self.batch_setup_download_path) if b.split('.', 1)[0] == batch_name]
-                print ('batch_exists:', batch_exists)
+                # print ('batch_exists:', batch_exists)
 
                 # If batch already exists prompt to overwrite or cancel
 
                 if batch_exists:
                     overwrite_batch = message_box_confirm('Batch Already Exists. Overwrite?')
-                    print ('overwrite_batch:', overwrite_batch)
                     if not overwrite_batch:
-                        print ('\n>>> download cancelled <<<\n')
+                        print ('>>> download cancelled <<<\n')
                         return
                     else:
                         for b in batch_exists:
                             path_to_delete = os.path.join(self.batch_setup_download_path, b)
-                            print ('path_to_delete:', path_to_delete)
                             if os.path.isfile(path_to_delete):
                                 os.remove(path_to_delete)
                             elif os.path.isdir(path_to_delete):
                                 shutil.rmtree(path_to_delete)
-                        print ('\n')
 
                 # Connect to ftp
 
@@ -1221,7 +1386,7 @@ class LogikPortal(object):
                 # Download dest path
 
                 tgz_path = os.path.join(self.batch_setup_download_path, batch_name + '.tgz')
-                print ('tgz_path:', tgz_path)
+                # print ('tgz_path:', tgz_path)
 
                 # Download batch tgz file
 
@@ -1233,7 +1398,7 @@ class LogikPortal(object):
                 download_escaped_path = self.batch_setup_download_path.replace(' ', '\ ')
 
                 tar_command = 'tar -xvf %s -C %s' % (tgz_escaped_path, download_escaped_path + '/')
-                print ('tar_command:', tar_command)
+                # print ('tar_command:', tar_command)
 
                 os.system(tar_command)
 
@@ -1278,7 +1443,7 @@ class LogikPortal(object):
 
                     xml_tree.write(self.config_xml)
 
-                    print ('\n>>> config saved <<<\n')
+                    print ('>>> config saved <<<\n')
 
                 def compress_batch_setup():
 
@@ -1346,7 +1511,7 @@ class LogikPortal(object):
                         self.ftp.quit()
                         return message_box('Batch setup already exists. Rename and try again.')
 
-                    print ('\nuploading...\n')
+                    print ('uploading...\n')
 
                     # Upload tar to ftp
 
@@ -1377,7 +1542,7 @@ class LogikPortal(object):
                         self.ftp.quit()
                         return message_box('Upload failed. Try again.')
 
-                    print ('\n>>> upload done <<<\n')
+                    print ('>>> upload done <<<\n')
 
                     os.remove(xml_file)
 
@@ -1586,7 +1751,7 @@ class LogikPortal(object):
 
                 xml_tree.write(self.config_xml)
 
-                print ('\n>>> config saved <<<\n')
+                print ('>>> config saved <<<\n')
 
             def browse():
 
@@ -1597,7 +1762,6 @@ class LogikPortal(object):
                     return str(file_browser.selectedFiles()[0])
 
             self.archive_download_path = browse()
-            print ('archive_download_path:', self.archive_download_path)
 
             if self.archive_download_path:
 
@@ -1608,25 +1772,23 @@ class LogikPortal(object):
                 selected_archive = self.archives_tree.selectedItems()
                 archive_item = selected_archive[0]
                 archive_name = archive_item.text(0)
-                print ('archive_name:', archive_name)
+                # print ('archive_name:', archive_name)
 
                 # Check path to see if batch already exists
 
                 archive_exists = [a for a in os.listdir(self.archive_download_path) if a.split('.', 1)[0] == archive_name]
-                print ('archive_exists:', archive_exists)
+                # print ('archive_exists:', archive_exists)
 
                 # If archive already exists prompt to overwrite or cancel
 
                 if archive_exists:
                     overwrite_archive = message_box_confirm('Archive Already Exists. Overwrite?')
-                    print ('overwrite_archive:', overwrite_archive)
                     if not overwrite_archive:
-                        print ('\n>>> download cancelled <<<\n')
+                        print ('>>> download cancelled <<<\n')
                         return
                     else:
                         for a in archive_exists:
                             path_to_delete = os.path.join(self.archive_download_path, a)
-                            print ('path_to_delete:', path_to_delete)
                             if os.path.isfile(path_to_delete):
                                 os.remove(path_to_delete)
                             elif os.path.isdir(path_to_delete):
@@ -1640,7 +1802,7 @@ class LogikPortal(object):
                 # Download dest path
 
                 tgz_path = os.path.join(self.archive_download_path, archive_name + '.tgz')
-                print ('tgz_path:', tgz_path)
+                # print ('tgz_path:', tgz_path)
 
                 # Download archive tgz file
 
@@ -1652,7 +1814,7 @@ class LogikPortal(object):
                 download_escaped_path = self.archive_download_path.replace(' ', '\ ')
 
                 tar_command = 'tar -xvf %s -C %s' % (tgz_escaped_path, download_escaped_path + '/')
-                print ('tar_command:', tar_command)
+                # print ('tar_command:', tar_command)
 
                 os.system(tar_command)
 
@@ -1704,7 +1866,7 @@ class LogikPortal(object):
 
                     xml_tree.write(self.config_xml)
 
-                    print ('\n>>> config saved <<<\n')
+                    print ('>>> config saved <<<\n')
 
                 def compress_archive():
 
@@ -1733,7 +1895,7 @@ class LogikPortal(object):
                     os.chdir(archive_folder)
                     os.system(tar_command)
 
-                    print ('\n>>> archive tar file created <<<\n')
+                    print ('>>> archive tar file created <<<\n')
 
                 def create_archive_xml_file():
 
@@ -1754,7 +1916,7 @@ class LogikPortal(object):
                     else:
                         tar_file_size = '> 1mb'
 
-                    print ('tar_file_size:', tar_file_size)
+                    # print ('tar_file_size:', tar_file_size)
 
                     # Create batch info file
 
@@ -1789,7 +1951,7 @@ class LogikPortal(object):
                         self.ftp.quit()
                         return message_box('Archive already exists. Rename and try again.')
 
-                    print ('\nuploading...\n')
+                    print ('uploading...\n')
 
                     # Upload archive tar to ftp
 
@@ -1820,7 +1982,7 @@ class LogikPortal(object):
                         self.ftp.quit()
                         return message_box('Upload failed. Try again.')
 
-                    print ('\n>>> upload done <<<\n')
+                    print ('>>> upload done <<<\n')
 
                     os.remove(xml_file)
 
@@ -2018,93 +2180,6 @@ class LogikPortal(object):
         self.window.tab5.layout.addWidget(self.archives_done_btn, 6, 4)
 
         self.window.tab5.setLayout(self.window.tab5.layout)
-
-    # ----------------------------------------------------------------- #
-
-    def get_system_password(self):
-
-        def ok():
-            from subprocess import Popen, PIPE
-
-            temp_folder = '/opt/Autodesk/password_test_folder'
-
-            self.sudo_password = self.password_lineedit.text()
-
-            p = Popen(['sudo', '-S', 'mkdir', temp_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
-            p.communicate(self.sudo_password + '\n')[1]
-
-            if os.path.isdir(temp_folder):
-
-                # Remove temp folder
-
-                p = Popen(['sudo', '-S', 'rmdir', temp_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
-                p.communicate(self.sudo_password + '\n')[1]
-
-                self.password_window.close()
-
-                self.download_logik_matchboxes()
-            else:
-                message_box('System Password Incorrect')
-                return
-
-        def cancel():
-            self.password_window.close()
-
-        self.password_window = QtWidgets.QWidget()
-        self.password_window.setMinimumSize(QtCore.QSize(500, 175))
-        self.password_window.setMaximumSize(QtCore.QSize(1000, 300))
-        self.password_window.setWindowTitle('Enter System Password')
-        self.password_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.password_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.password_window.setFocusPolicy(QtCore.Qt.StrongFocus)
-        self.password_window.setStyleSheet('background-color: #272727')
-        self.password_window.setWindowModality(QtCore.Qt.WindowModal)
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.password_window.move((resolution.width() / 2) - (self.password_window.frameSize().width() / 2),
-                               (resolution.height() / 2) - (self.password_window.frameSize().height() / 2))
-
-        #  Labels
-
-        self.password_label = FlameLabel('System Password', self.password_window)
-        self.password_label.setMinimumWidth(150)
-
-        # LineEdits
-
-        self.password_lineedit = FlameLineEdit('', self.password_window)
-        self.password_lineedit.setMaximumWidth(150)
-        self.password_lineedit.setEchoMode(QtWidgets.QLineEdit.Password)
-
-        #  Buttons
-
-        self.password_ok_btn = FlameButton('Ok', ok, self.password_window)
-        self.password_cancel_btn = FlameButton('Cancel', cancel, self.password_window)
-
-        #------------------------------------#
-
-        #  Window Layout
-
-        hbox = QtWidgets.QHBoxLayout()
-
-        hbox.addWidget(self.password_cancel_btn)
-        hbox.addWidget(self.password_ok_btn)
-
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setVerticalSpacing(20)
-        gridbox.setHorizontalSpacing(20)
-
-        gridbox.addWidget(self.password_label, 1, 0)
-        gridbox.addWidget(self.password_lineedit, 1, 1)
-
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.addLayout(gridbox)
-        vbox.addLayout(hbox)
-
-        self.password_window.setLayout(vbox)
-
-        self.password_window.show()
 
     # ----------------------------------------------------------------- #
 
@@ -2352,7 +2427,7 @@ class LogikPortal(object):
         delete_script = message_box_confirm('Delete: %s ?' % script_name)
 
         if not delete_script:
-            print ('\n>>> delete cancelled <<<\n')
+            print ('>>> delete cancelled <<<\n')
         else:
 
             # Remove script
@@ -2367,7 +2442,7 @@ class LogikPortal(object):
                 except:
                     pass
 
-            print ('\n>>> DELETED: %s <<<\n' % script_name)
+            print ('>>> DELETED: %s <<<\n' % script_name)
 
             # Update list of installed scripts
 
@@ -2376,7 +2451,7 @@ class LogikPortal(object):
     def install_script(self, portal_tree, installed_tree, script_path):
         import flame
 
-        print ('\n>>> downloading script <<<\n')
+        print ('>>> downloading script <<<\n')
 
         self.ftp_download_connect()
 
@@ -2406,7 +2481,7 @@ class LogikPortal(object):
             overwrite_script = message_box_confirm('Script already exists. Overwrite?')
 
             if not overwrite_script:
-                print ('\n>>> script not installed <<<\n')
+                print ('>>> script not installed <<<\n')
                 return
             else:
                 shutil.rmtree(dest_folder)
@@ -2425,7 +2500,7 @@ class LogikPortal(object):
         # Uncompress tgz file
 
         tar_command = 'tar -xvf %s -C %s' % (dest_script_path, dest_folder)
-        print ('tar_command:', tar_command)
+        # print ('tar_command:', tar_command)
 
         os.system(tar_command)
 
@@ -2448,7 +2523,7 @@ class LogikPortal(object):
         # Refresh python hooks
 
         flame.execute_shortcut('Rescan Python Hooks')
-        print ('\n>>> python hooks refreshed <<<\n')
+        print ('>>> python hooks refreshed <<<\n')
 
         if os.path.isfile(dest_script_path[:-3] + 'py'):
             return message_box('%s script installed' % script_name.replace('_', ' '))
@@ -2473,14 +2548,14 @@ class LogikPortal(object):
         # print (float(script_flame_version) > float(self.flame_version))
 
         if float(script_flame_version) > float(self.flame_version):
-            print ('\n>>> %s requires newer version of flame <<<\n' % script_name)
+            print ('>>> %s requires newer version of flame <<<\n' % script_name)
             self.install_script_btn.setEnabled(False)
         else:
             self.install_script_btn.setEnabled(True)
 
     def ftp_script_description(self, text_edit, tree, tree_index):
 
-        print ('\n>>> getting script description <<<')
+        print ('>>> getting script description <<<\n')
 
         selected_item = self.portal_scripts_tree.selectedItems()
         script = selected_item[0]
@@ -2498,7 +2573,7 @@ class LogikPortal(object):
 
     def get_ftp_scripts(self, tree):
 
-        print ('\n>>> downloading python script list <<<')
+        print ('>>> downloading python script list <<<\n')
 
         # Download xml to temp folder
 
@@ -2579,7 +2654,7 @@ class LogikPortal(object):
 
     def check_batch_flame_version(self, tree, tree_index):
 
-        print ('\n>>> checking batch version <<<')
+        print ('>>> checking batch version <<<\n')
 
         # Get selected script date
 
@@ -2592,7 +2667,7 @@ class LogikPortal(object):
         # print ('batch_flame_version:', batch_flame_version, '\n')
 
         if float(batch_flame_version) > float(self.flame_version):
-            print ('\n>>> %s requires newer version of flame <<<\n' % batch_name)
+            print ('>>> %s requires newer version of flame <<<\n' % batch_name)
             self.batch_setups_download_btn.setEnabled(False)
         else:
             self.batch_setups_download_btn.setEnabled(True)
@@ -2615,7 +2690,7 @@ class LogikPortal(object):
 
     def get_batch_setups(self, tree):
 
-        print ('\n>>> downloading batch setups list <<<')
+        print ('>>> downloading batch setups list <<<\n')
 
         # Download xml to temp folder
 
@@ -2659,7 +2734,7 @@ class LogikPortal(object):
 
     def check_archive_flame_version(self, tree, tree_index):
 
-        print ('\n>>> checking archive version <<<')
+        print ('>>> checking archive version <<<\n')
 
         # Get selected script date
 
@@ -2672,7 +2747,7 @@ class LogikPortal(object):
         # print ('archive_flame_version:', archive_flame_version, '\n')
 
         if float(archive_flame_version) > float(self.flame_version):
-            print ('\n>>> %s requires newer version of flame <<<\n' % archive_name)
+            print ('>>> %s requires newer version of flame <<<\n' % archive_name)
             self.archives_download_btn.setEnabled(False)
         else:
             self.archives_download_btn.setEnabled(True)
@@ -2695,7 +2770,7 @@ class LogikPortal(object):
 
     def get_archives(self, tree):
 
-        print ('\n>>> downloading archive list <<<')
+        print ('>>> downloading archive list <<<\n')
 
         # Download xml to temp folder
 
@@ -2755,7 +2830,7 @@ class LogikPortal(object):
 
         try:
             shutil.rmtree(self.temp_folder)
-            print ('\n>>> clearing temp files <<<\n')
+            print ('>>> clearing temp files <<<\n')
         except:
             pass
 
@@ -2778,9 +2853,9 @@ def message_box(message):
     code_list = ['<br>', '<dd>', '<center>', '</center>']
 
     for code in code_list:
-        message = message.replace(code, '\n')
+        message = message.replace(code, ' ')
 
-    print ('\n>>> %s <<<\n' % message)
+    print ('>>> %s <<<\n' % message)
 
 def message_box_confirm(message):
 
@@ -2802,7 +2877,7 @@ def message_box_confirm(message):
     for code in code_list:
         message = message.replace(code, '\n')
 
-    print ('\n>>> %s <<<\n' % message)
+    print ('>>> %s <<<\n' % message)
 
     if msg_box.exec_() == QtWidgets.QMessageBox.Yes:
         return True
