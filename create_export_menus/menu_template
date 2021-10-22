@@ -1,10 +1,10 @@
 '''
 Script Name: <PresetName> Export Preset Menu Script
-Script Version: 3.4
+Script Version: 3.5
 Flame Version: 2020.1
-Written by: Michael Vaglienty - michael@slaytan.net
+Written by: Michael Vaglienty
 Creation Date: 04.27.20
-Update Date: 05.21.21
+Update Date: 10.16.21
 
 Custom Action Type: Media Panel
 
@@ -14,28 +14,27 @@ Description:
 '''
 
 from __future__ import print_function
+import os, re, datetime, platform, subprocess
 
 SCRIPT_PROJECT = '<ScriptProject>'
 
 def export_clips(selection):
     import flame
-    import os
 
     def translate_token_path(clip, export_path):
         import flame
-        import datetime
-        import re
 
         def get_shot_name(name):
 
             shot_name_split = filter(None, re.split(r'(\d+)', name))
 
-            if shot_name_split[1].isalnum():
-                shot_name = shot_name_split[0] + shot_name_split[1]
+            if len(shot_name_split) > 1:
+                if shot_name_split[1].isalnum():
+                    shot_name = shot_name_split[0] + shot_name_split[1]
+                else:
+                    shot_name = shot_name_split[0] + shot_name_split[1] + shot_name_split[2]
             else:
-                shot_name = shot_name_split[0] + shot_name_split[1] + shot_name_split[2]
-
-            print ('shot_name:', shot_name)
+                shot_name = name
 
             return shot_name
 
@@ -54,67 +53,62 @@ def export_clips(selection):
 
         clip_name = str(clip.name)[1:-1]
 
+        # Get shot name
+
         try:
-            shot_name = get_shot_name(clip_name)
+            if clip.versions[0].tracks[0].segments[0].shot_name != '':
+                shot_name = str(clip.versions[0].tracks[0].segments[0].shot_name)[1:-1]
+            else:
+                shot_name = get_shot_name(clip_name)
         except:
             shot_name = ''
 
-        try:
-            # Get batch group name
+        # Get Seq Name
 
-            clip_parent = clip.parent
-            reel_parent = clip_parent.parent
-            batch_iteration_parent = reel_parent.parent
-
-            batch_group_name = str(batch_iteration_parent.name)[1:-1]
-
-            batch_group_shot_name = get_shot_name(batch_group_name)
-
-            seq_name = get_seq_name(batch_group_shot_name)
-
-        except:
-            print ('batch group not found')
-            seq_name = False
-
-            # Give error if <BatchGroupName> or <BatchGroupShotName> tokens are in preset
-
-            if '<BatchGroupName>' in export_path:
-                return message_box('Clip should be in batch group reel to use this preset')
-            if '<BatchGroupShotName>' in export_path:
-                return message_box('Clip should be in batch group reel to use this preset')
-
-        # If sequence name not gotten from batch group name get seq name from clip shot name
-
-        if not seq_name:
-            seq_name = get_seq_name(shot_name)
-            batch_group_name = ''
-            batch_group_shot_name = ''
+        seq_name = get_seq_name(shot_name)
 
         # Replace tokens in path
 
         new_export_path = re.sub('<ProjectName>', flame.project.current_project.name, export_path)
+        new_export_path = re.sub('<ProjectNickName>', flame.project.current_project.nickname, new_export_path)
         new_export_path = re.sub('<ShotName>',shot_name, new_export_path)
-        new_export_path = re.sub('<BatchGroupName>', batch_group_name, new_export_path)
-        new_export_path = re.sub('<BatchGroupShotName>', batch_group_shot_name, new_export_path)
         new_export_path = re.sub('<SeqName>', seq_name, new_export_path)
+        new_export_path = re.sub('<SEQNAME>', seq_name.upper(), new_export_path)
         new_export_path = re.sub('<UserName>', flame.users.current_user.name, new_export_path)
+        new_export_path = re.sub('<UserNickName>', flame.users.current_user.nickname, new_export_path)
         new_export_path = re.sub('<ClipName>', str(clip.name)[1:-1], new_export_path)
         new_export_path = re.sub('<Resolution>', str(clip.width) + 'x' + str(clip.height), new_export_path)
         new_export_path = re.sub('<ClipHeight>', str(clip.height), new_export_path)
         new_export_path = re.sub('<ClipWidth>', str(clip.width), new_export_path)
-        new_export_path = re.sub('<YYYY>', date.strftime('%Y'), new_export_path)
-        new_export_path = re.sub('<YY>', date.strftime('%y'), new_export_path)
-        new_export_path = re.sub('<MM>', date.strftime('%m'), new_export_path)
-        new_export_path = re.sub('<DD>', date.strftime('%d'), new_export_path)
-        new_export_path = re.sub('<Hour>', date.strftime('%I'), new_export_path)
-        new_export_path = re.sub('<Minute>', date.strftime('%M'), new_export_path)
-        new_export_path = re.sub('<AMPM>', date.strftime('%p'), new_export_path)
+        new_export_path = re.sub('<YYYY>', yyyy, new_export_path)
+        new_export_path = re.sub('<YY>', yy, new_export_path)
+        new_export_path = re.sub('<MM>', mm, new_export_path)
+        new_export_path = re.sub('<DD>', dd, new_export_path)
+        new_export_path = re.sub('<Hour>', hour, new_export_path)
+        new_export_path = re.sub('<Minute>', minute, new_export_path)
+        new_export_path = re.sub('<AMPM>', ampm_caps, new_export_path)
+        new_export_path = re.sub('<ampm>', ampm, new_export_path)
 
         print ('new_export_path:', new_export_path)
 
         return new_export_path
 
     print ('\n', '>' * 20, ' Exporting with: %s preset' % '<PresetName>', '<' * 20, '\n')
+
+    # Get time values for token conversion
+
+    date = datetime.datetime.now()
+
+    yyyy = date.strftime('%Y')
+    yy = date.strftime('%y')
+    mm = date.strftime('%m')
+    dd = date.strftime('%d')
+    hour = date.strftime('%I')
+    if hour.startswith('0'):
+        hour = hour[1:]
+    minute = date.strftime('%M')
+    ampm_caps = date.strftime('%p')
+    ampm = str(date.strftime('%p')).lower()
 
     # Initialize Exporter
 
@@ -123,9 +117,28 @@ def export_clips(selection):
     # Export selected clips
 
     for clip in selection:
-        print ('\n>>> Exported: %s <<<\n' % str(clip.name)[1:-1])
+        print ('>>> Exported: %s <<<\n' % str(clip.name)[1:-1])
 
-    print ('\n>>> Done exporting clips <<<\n\n')
+    # Reveal in MediaHub
+
+    reveal_in_mediahub = <RevealInMediaHub>
+
+    if reveal_in_mediahub:
+        flame.go_to('MediaHub')
+        flame.mediahub.files.set_path(new_export_path)
+        print ('>>> MediaHub opened to export path <<<\n')
+
+    # Reveal in Finder
+
+    reveal_in_finder = <RevealInFinder>
+
+    if reveal_in_finder:
+        if platform.system() == 'Darwin':
+            subprocess.Popen(['open', new_export_path])
+        else:
+            subprocess.Popen(['xdg-open', new_export_path])
+
+    print ('Done.\n')
 
 def message_box(message):
     from PySide2 import QtWidgets, QtCore
@@ -142,7 +155,7 @@ def message_box(message):
 
     message = message.replace('<br>', '-')
 
-    print ('\n>>> %s <<<\n' % message)
+    print ('>>> %s <<<\n' % message)
 
 #-------------------------------------#
 
@@ -171,7 +184,7 @@ def get_media_panel_custom_ui_actions():
                     'name': '<PresetName>',
                     'isVisible': scope_clip,
                     'execute': export_clips,
-                    'minimumVersion': '2020'
+                    'minimumVersion': '2021.2'
                 }
             ]
         }
