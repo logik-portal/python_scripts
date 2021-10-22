@@ -1,10 +1,10 @@
 '''
 Script Name: Export Frame
-Script Version: 1.0
+Script Version: 1.1
 Flame Version: 2021.2
 Written by: Michael Vaglienty
 Creation Date: 10.11.21
-Update Date: 10.11.21
+Update Date: 10.12.21
 
 Custom Action Type: Media Panel/Player
 
@@ -40,6 +40,12 @@ Description:
 To install:
 
     Copy script into /opt/Autodesk/shared/python/export_frame
+
+Updates:
+
+    v1.1 10.12.21
+
+        Fixed SEQNAME token
 '''
 
 from __future__ import print_function
@@ -47,7 +53,7 @@ from PySide2 import QtWidgets, QtCore
 import xml.etree.ElementTree as ET
 import re, os, ast, datetime, platform, subprocess
 
-VERSION = 'v1.0'
+VERSION = 'v1.1'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/export_frame'
 
@@ -675,7 +681,7 @@ class ExportCurrentFrame(object):
         new_export_path = re.sub('<ProjectName>', flame.project.current_project.name, self.custom_export_path)
         new_export_path = re.sub('<ProjectNickName>', flame.project.current_project.nickname, new_export_path)
         new_export_path = re.sub('<ShotName>',shot_name, new_export_path)
-        new_export_path = re.sub('<SEQNAME>', seq_name, new_export_path)
+        new_export_path = re.sub('<SEQNAME>', seq_name.upper(), new_export_path)
         new_export_path = re.sub('<SeqName>', seq_name, new_export_path)
         new_export_path = re.sub('<UserName>', flame.users.current_user.name, new_export_path)
         new_export_path = re.sub('<UserNickName>', flame.users.current_user.nickname, new_export_path)
