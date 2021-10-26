@@ -1,10 +1,10 @@
 '''
 Script Name: Neat Freak
-Script Version: 1.0
+Script Version: 1.1
 Flame Version: 2021.2
 Written by: Michael Vaglienty
 Creation Date: 10.22.21
-Update Date: 10.22.21
+Update Date: 10.26.21
 
 Custom Action Type: Batch
 
@@ -16,16 +16,25 @@ Description:
 
     Render node outputs are set to match each clip(name, duration, timecode, fps, bit-depth).
 
-    Right-click on any clip in media panel -> Neat... -> Degrain Clips
+    Menu:
+
+        Right-click on any clip in media panel -> Neat... -> Degrain Clips
 
 To install:
 
     Copy script into /opt/Autodesk/shared/python/pyFlame/neat_freak
+
+Updates:
+
+    v1.1 10.26.21
+
+        Script now attempts to add shot name to render node
 '''
 
 from __future__ import print_function
+import re
 
-VERSION = 'v1.0'
+VERSION = 'v1.1'
 
 class NeatFreak(object):
 
@@ -52,7 +61,6 @@ class NeatFreak(object):
         self.batch_duration = 1
 
         self.neat_clips()
-
 
     def neat_clips(self):
         import flame
@@ -105,7 +113,9 @@ class NeatFreak(object):
         self.clip_frame_rate = self.clip.frame_rate
         self.clip_timecode = self.clip.start_time
         self.clip_bit_depth = self.clip.bit_depth
-        self.clip_shot_name = self.clip.shot_name
+        # self.clip_shot_name = self.clip.shot_name
+
+        self.get_shot_name()
 
         if self.clip_bit_depth < 16:
             self.clip_bit_depth = str(self.clip_bit_depth) + '-bit'
@@ -153,6 +163,32 @@ class NeatFreak(object):
         flame.batch.connect_nodes(self.neat_node, 'Default', self.render_node, 'Default')
 
         self.y_position = self.y_position - 200
+
+    def get_shot_name(self):
+
+            # Get shot name from assigned clip shot name
+
+            if self.clip.versions[0].tracks[0].segments[0].shot_name != '':
+                self.clip_shot_name = str(self.clip.versions[0].tracks[0].segments[0].shot_name)[1:-1]
+            else:
+                # If shot name not assigned to clip, guess at shot name from clip name
+
+                clip_name = str(self.clip.name)[1:-1]
+                # print ('clip_name:', clip_name)
+
+                # Split clip name into list by numbers in clip name
+
+                shot_name_split = re.split(r'(\d+)', clip_name)
+                shot_name_split = [s for s in shot_name_split if s != '']
+                # print ('shot_name_split:', shot_name_split)
+
+                # Recombine shot name split list into new batch group name
+                # Else statement is used if clip name starts with number
+
+                if shot_name_split[1].isalnum():
+                    self.clip_shot_name = shot_name_split[0] + shot_name_split[1]
+                else:
+                    self.clip_shot_name = shot_name_split[0] + shot_name_split[1] + shot_name_split[2]
 
 # ---------------------------------------- #
 
