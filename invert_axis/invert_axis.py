@@ -1,19 +1,23 @@
 '''
 Script Name: Invert Axis
-Script Version: 2.0
+Script Version: 2.1
 Flame Version: 2021.1
-Written by: Michael Vaglienty - michael@slaytan.net
+Written by: Michael Vaglienty
 Creation Date: 07.26.19
-Update Date: 05.23.21
+Update Date: 10.26.21
 
 Custom Action Type: Action
 
 Description:
 
-    Create inverted axis at current frame or copy parent axis and invert at current frame
+    Create inverted axis at current frame or copy parent axis and invert at current frame.
 
-    Right-click on axis node -> Invert Axis... -> Create Inverted Axis
-    Right-click on axis node -> Invert Axis... -> Copy Parent Axis Values and Invert
+    Does not work with Gmask Tracer.
+
+    Menus:
+
+        Right-click on axis node -> Invert Axis... -> Create Inverted Axis
+        Right-click on axis node -> Invert Axis... -> Copy Parent Axis Values and Invert
 
 To install:
 
@@ -21,25 +25,31 @@ To install:
 
 Updates:
 
-v2.0 05.23.21
+    v2.1 10.26.21
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Script now works when media layer is selected instead of action node.
 
-    Fixed inverting axis not working when multiple axis parented to same axis
+    v2.0 05.23.21
 
-v1.5 05.10.20
+        Updated to be compatible with Flame 2022/Python 3.7
 
-    Inverted axis is now added as child of selected axis
+        Fixed inverting axis not working when multiple axis parented to same axis
 
-v1.3 10.24.19
+    v1.5 05.10.20
 
-    Menu's now show up under Invert Axis... when right-clicking on axis node in action schematic
-    Removed menu's from showing up in GMask Tracer. Action python commands do not work in GMask Tracer.
+        Inverted axis is now added as child of selected axis
+
+    v1.3 10.24.19
+
+        Menu's now show up under Invert Axis... when right-clicking on axis node in action schematic
+
+        Removed menu's from showing up in GMask Tracer. Action python commands do not work in GMask Tracer.
 '''
 
 from __future__ import print_function
+import os, shutil
 
-VERSION = 'v2.0'
+VERSION = 'v2.1'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/invert_axis'
 
@@ -47,7 +57,15 @@ class InvertAxis(object):
 
     def __init__(self, selection):
         import flame
-        import os
+
+        print ('''
+      _____                     _                  _
+     |_   _|                   | |     /\         (_)
+       | |  _ ____   _____ _ __| |_   /  \   __  ___ ___
+       | | | '_ \ \ / / _ \ '__| __| / /\ \  \ \/ / / __|
+      _| |_| | | \ V /  __/ |  | |_ / ____ \  >  <| \__ \\
+     |_____|_| |_|\_/ \___|_|   \__/_/    \_\/_/\_\_|___/
+        ''')
 
         self.current_frame = flame.batch.current_frame
 
@@ -63,7 +81,8 @@ class InvertAxis(object):
 
         # Action variables
 
-        self.action_node = flame.batch.current_node.get_value()
+        self.action_node = self.get_action_node()
+
         self.action_node_name = str(self.action_node.name)[1:-1]
         self.save_action_path = os.path.join(self.temp_folder, self.action_node_name)
         self.action_filename = self.save_action_path + '.action'
@@ -76,7 +95,7 @@ class InvertAxis(object):
     def create_inverted_axis(self):
         import flame
 
-        print ('\n', '>' * 20, 'invert axis %s - create inverted axis' % VERSION, '<' * 20, '\n')
+        print ('\n', '>' * 10, 'invert axis %s - create inverted axis' % VERSION, '<' * 10, '\n')
 
         # Create new axis node
 
@@ -190,7 +209,7 @@ class InvertAxis(object):
 
         contents[selected_axis_pos_y_line] = '        PosY %s\n' % selected_axis_new_pos_y
 
-        ## Remove child connections from Selected Axis
+        # Remove child connections from Selected Axis
 
         for line_number in self.axis_child_list:
 
@@ -216,12 +235,14 @@ class InvertAxis(object):
 
         self.remove_temp_folder()
 
-        print ('>>> inverted axis created <<<')
+        print ('>>> inverted axis created <<<\n')
+
+        print ('done.\n')
 
     def invert_parent_axis(self):
         import flame
 
-        print ('\n', '>' * 20, 'invert axis %s - invert parent axis' % VERSION, '<' * 20, '\n')
+        print ('\n', '>' * 10, 'invert axis %s - invert parent axis' % VERSION, '<' * 10, '\n')
 
         # Save action node
 
@@ -267,7 +288,7 @@ class InvertAxis(object):
 
             action_node_list = []
 
-            action_node = flame.batch.current_node.get_value()
+            action_node = self.get_action_node()
 
             for item in action_node.nodes:
                 action_node_list.append(item)
@@ -313,14 +334,16 @@ class InvertAxis(object):
 
             self.remove_temp_folder()
 
-            print ('\n', '>>> inverted axis created <<<', '\n')
+            print ('>>> inverted axis created <<<', '\n')
 
         else:
             # If no parent axis, remove temp action file
 
             self.remove_temp_folder()
 
-            print ('\n', '>>> no parent axis to invert <<<', '\n')
+            print ('>>> no parent axis to invert <<<', '\n')
+
+        print ('done.\n')
 
     #-------------------------------------#
 
@@ -387,9 +410,7 @@ class InvertAxis(object):
                     return item_value
 
     def save_action_node(self):
-        import shutil
         import flame
-        import os
 
         # Create temp action save dir
 
@@ -401,7 +422,7 @@ class InvertAxis(object):
 
         # Save action node
 
-        action_node = flame.batch.get_node(self.action_node_name)
+        action_node = self.get_action_node()
         action_node.save_node_setup(self.save_action_path)
 
     def reload_action_node(self):
@@ -411,7 +432,6 @@ class InvertAxis(object):
         self.action_node.load_node_setup(self.save_action_path)
 
     def remove_temp_folder(self):
-        import shutil
 
         # Remove temp action folder
 
@@ -422,7 +442,9 @@ class InvertAxis(object):
 
         existing_nodes = []
 
-        for node in flame.batch.current_node.get_value().nodes:
+        action_node = self.get_action_node()
+
+        for node in action_node.nodes:
             node_name = str(node.name)[1:-1]
             existing_nodes.append(node_name)
 
@@ -432,6 +454,7 @@ class InvertAxis(object):
             inverted_axis_name = axis_name
             return inverted_axis_name
         axis_num = axis_num + 1
+
         return self.name_axis(axis_num)
 
     def copy_axis_values(self, axis_to_invert, axis_node):
@@ -441,6 +464,25 @@ class InvertAxis(object):
         axis_to_invert.scale = axis_node.scale.get_value()
         axis_to_invert.shear = axis_node.shear.get_value()
         axis_to_invert.center = axis_node.center.get_value()
+
+    def get_action_node(self):
+        import flame
+
+        # Get action node from selected action node or selected media node
+
+        node_type = str(flame.batch.current_node.get_value().type)[1:-1]
+
+        if node_type == 'Action Media':
+            node_value = flame.batch.current_node.get_value()
+            node_sockets = node_value.sockets
+            output_dict = node_sockets.get('output')
+            action_node_name = output_dict.get('Result')[0]
+            action_node = flame.batch.get_node(action_node_name)
+        else:
+            action_node_name = str(flame.batch.current_node.get_value().name)[1:-1]
+            action_node = flame.batch.get_node(action_node_name)
+
+        return action_node
 
 #-------------------------------------#
 
@@ -458,9 +500,6 @@ def scope_axis(selection):
     import flame
 
     for item in selection:
-        print (item)
-        print (item.type)
-        # if flame.batch.current_node.get_value().type == 'Action':
         if item.type == 'Axis':
             return True
     return False
