@@ -1,10 +1,10 @@
 '''
 Script Name: Export Frame
-Script Version: 1.1
+Script Version: 1.2
 Flame Version: 2021.2
 Written by: Michael Vaglienty
 Creation Date: 10.11.21
-Update Date: 10.12.21
+Update Date: 10.24.21
 
 Custom Action Type: Media Panel/Player
 
@@ -34,14 +34,17 @@ Description:
         Right-click on clip, sequence, or player view -> Export... -> Export Current Frame
         Right-click on clip, sequence, or player view -> Export... -> Export Marker Frames
 
-        Right-click on clip, sequence, or player view -> Export... -> Export Current Frame - Custom Path
-        Right-click on clip, sequence, or player view -> Export... -> Export Marker Frames - Custom Path
-
 To install:
 
     Copy script into /opt/Autodesk/shared/python/export_frame
 
 Updates:
+
+    v1.2 10.24.21
+
+        Removed custom path menus. Custom export paths can be turned on in Setup.
+
+        Known bug - right clicking on clip in schematic reel will cause flame to crash.
 
     v1.1 10.12.21
 
@@ -50,10 +53,11 @@ Updates:
 
 from __future__ import print_function
 from PySide2 import QtWidgets, QtCore
+from functools import partial
 import xml.etree.ElementTree as ET
 import re, os, ast, datetime, platform, subprocess
 
-VERSION = 'v1.1'
+VERSION = 'v1.2'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/export_frame'
 
@@ -79,10 +83,12 @@ class FlameLabel(QtWidgets.QLabel):
                                'QLabel:disabled {color: #6a6a6a}')
         elif label_type == 'background':
             self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
+            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #393939; font: 14px "Discreet"}'
+                               'QLabel:disabled {color: #6a6a6a}')
         elif label_type == 'outline':
             # self.setAlignment(QtCore.Qt.AlignLeft)
-            self.setStyleSheet('color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"')
+            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"}'
+                               'QLabel:disabled {color: #6a6a6a}')
 
 class FlameButton(QtWidgets.QPushButton):
     """
@@ -238,7 +244,7 @@ class FlameTokenPushButton(QtWidgets.QPushButton):
 
 #-------------------------------------#
 
-class ExportCurrentFrame(object):
+class ExportFrame(object):
 
     def __init__(self, selection):
         import flame
@@ -254,7 +260,7 @@ class ExportCurrentFrame(object):
             |_|
         ''')
 
-        print ('>' * 20, 'export frame %s' % VERSION, '<' * 20, '\n')
+        print ('>' * 24, 'export frame %s' % VERSION, '<' * 24, '\n')
 
         self.selection = selection
 
@@ -291,8 +297,9 @@ class ExportCurrentFrame(object):
                 self.saved_browse_path = setting.find('saved_browse_path').text
                 self.custom_export_path = setting.find('custom_export_path').text
                 self.export_preset = setting.find('export_preset').text
-                self.open_in_finder = ast.literal_eval(setting.find('open_in_finder').text)
-                self.open_in_mediahub = ast.literal_eval(setting.find('open_in_mediahub').text)
+                self.reveal_in_finder = ast.literal_eval(setting.find('reveal_in_finder').text)
+                self.reveal_in_mediahub = ast.literal_eval(setting.find('reveal_in_mediahub').text)
+                self.export_destination = setting.find('export_destination').text
 
             print ('>>> config loaded <<<\n')
 
@@ -313,8 +320,9 @@ class ExportCurrentFrame(object):
         <saved_browse_path>/</saved_browse_path>
         <custom_export_path>/</custom_export_path>
         <export_preset>Default Jpeg</export_preset>
-        <open_in_finder>False</open_in_finder>
-        <open_in_mediahub>False</open_in_mediahub>
+        <reveal_in_finder>False</reveal_in_finder>
+        <reveal_in_mediahub>False</reveal_in_mediahub>
+        <export_destination>Browse to Path</export_destination>
     </export_frame_settings>
 </settings>"""
 
@@ -333,6 +341,23 @@ class ExportCurrentFrame(object):
 
     def setup(self):
 
+        def export_dest_toggle(dest):
+
+            self.export_dest_menu_push_button.setText(dest)
+
+            if dest == 'Browse to Path':
+                self.custom_path_settings_label.setEnabled(False)
+                self.custom_export_path_label.setEnabled(False)
+                self.custom_export_path_lineedit.setEnabled(False)
+                self.custom_token_push_btn.setEnabled(False)
+                self.browse_btn.setEnabled(False)
+            else:
+                self.custom_path_settings_label.setEnabled(True)
+                self.custom_export_path_label.setEnabled(True)
+                self.custom_export_path_lineedit.setEnabled(True)
+                self.custom_token_push_btn.setEnabled(True)
+                self.browse_btn.setEnabled(True)
+
         def custom_path_browse():
 
             file_path = str(QtWidgets.QFileDialog.getExistingDirectory(self.setup_window, 'Select Directory', self.custom_export_path_lineedit.text(), QtWidgets.QFileDialog.ShowDirsOnly))
@@ -343,7 +368,6 @@ class ExportCurrentFrame(object):
         def save_config():
 
             if self.custom_export_path_lineedit.text() == '':
-                # message_box('Enter Export Path')
                 self.custom_export_path_lineedit.setText('/')
             else:
 
@@ -358,11 +382,14 @@ class ExportCurrentFrame(object):
                 export_preset = root.find('.//export_preset')
                 export_preset.text = self.export_preset_menu_push_button.text()
 
-                open_in_finder = root.find('.//open_in_finder')
-                open_in_finder.text = str(self.open_finder_push_button.isChecked())
+                reveal_in_finder = root.find('.//reveal_in_finder')
+                reveal_in_finder.text = str(self.reveal_finder_push_button.isChecked())
 
-                open_in_mediahub = root.find('.//open_in_mediahub')
-                open_in_mediahub.text = str(self.open_mediahub_push_button.isChecked())
+                reveal_in_mediahub = root.find('.//reveal_in_mediahub')
+                reveal_in_mediahub.text = str(self.reveal_mediahub_push_button.isChecked())
+
+                export_destination = root.find('.//export_destination')
+                export_destination.text = self.export_dest_menu_push_button.text()
 
                 xml_tree.write(self.config_xml)
 
@@ -373,8 +400,8 @@ class ExportCurrentFrame(object):
                 print ('Done.\n')
 
         self.setup_window = QtWidgets.QWidget()
-        self.setup_window.setMinimumSize(QtCore.QSize(900, 400))
-        self.setup_window.setMaximumSize(QtCore.QSize(900, 400))
+        self.setup_window.setMinimumSize(QtCore.QSize(900, 420))
+        self.setup_window.setMaximumSize(QtCore.QSize(900, 420))
         self.setup_window.setWindowTitle('Export Frame Setup %s' % VERSION)
         self.setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
@@ -388,11 +415,10 @@ class ExportCurrentFrame(object):
 
         # Labels
 
-        self.global_settings_label = FlameLabel('Global Settings', self.setup_window, label_type='background')
+        self.export_settings_label = FlameLabel('Export Settings', self.setup_window, label_type='background')
         self.after_export_label = FlameLabel('After Export', self.setup_window, label_type='normal')
-
+        self.export_dest_label = FlameLabel('Export Destination', self.setup_window, label_type='normal')
         self.custom_path_settings_label = FlameLabel('Custom Path Settings', self.setup_window, label_type='background')
-
         self.custom_export_path_label = FlameLabel('Custom Export Path', self.setup_window, label_type='normal')
         self.export_preset_label = FlameLabel('Export Preset', self.setup_window, label_type='normal')
 
@@ -415,10 +441,25 @@ class ExportCurrentFrame(object):
 
         self.export_preset_menu_push_button = FlamePushButtonMenu(self.export_preset, self.shared_presets, self.setup_window)
 
+        # Export Destination Menu Push Button
+
+        self.export_dest_menu = QtWidgets.QMenu(self.setup_window)
+        self.export_dest_menu.addAction('Browse to Path', partial(export_dest_toggle, 'Browse to Path'))
+        self.export_dest_menu.addAction('Use Custom Path', partial(export_dest_toggle, 'Use Custom Path'))
+        self.export_dest_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
+                                            'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+
+        self.export_dest_menu_push_button = QtWidgets.QPushButton(self.export_destination, self.setup_window)
+        self.export_dest_menu_push_button.setMenu(self.export_dest_menu)
+        self.export_dest_menu_push_button.setMinimumSize(QtCore.QSize(150, 28))
+        self.export_dest_menu_push_button.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.export_dest_menu_push_button.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
+                                                        'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
+
         # Push buttons
 
-        self.open_finder_push_button = FlamePushButton(' Open in Finder', self.open_in_finder, self.setup_window)
-        self.open_mediahub_push_button = FlamePushButton(' Open in MediaHub', self.open_in_mediahub, self.setup_window)
+        self.reveal_finder_push_button = FlamePushButton(' Reveal in Finder', self.reveal_in_finder, self.setup_window)
+        self.reveal_mediahub_push_button = FlamePushButton(' Reveal in MediaHub', self.reveal_in_mediahub, self.setup_window)
 
         #  Buttons
 
@@ -426,35 +467,41 @@ class ExportCurrentFrame(object):
         self.save_btn = FlameButton('Save', save_config, self.setup_window)
         self.cancel_btn = FlameButton('Cancel', self.setup_window.close, self.setup_window)
 
+        export_dest_toggle(self.export_destination)
+
         # Setup window layout
 
         gridbox = QtWidgets.QGridLayout()
         gridbox.setMargin(20)
 
-        gridbox.addWidget(self.global_settings_label, 0 ,0, 1, 8)
-
-        gridbox.addWidget(self.export_preset_label, 1 ,0)
-        gridbox.addWidget(self.export_preset_menu_push_button, 1, 1, 1, 6)
-
-        gridbox.addWidget(self.after_export_label, 3 ,0)
-        gridbox.addWidget(self.open_finder_push_button, 3 ,1)
-        gridbox.addWidget(self.open_mediahub_push_button, 4 ,1)
-
-        gridbox.setRowMinimumHeight(2, 30)
-        gridbox.setRowMinimumHeight(5, 30)
+        gridbox.setRowMinimumHeight(1, 30)
+        gridbox.setRowMinimumHeight(4, 30)
         gridbox.setRowMinimumHeight(8, 30)
+        gridbox.setRowMinimumHeight(11, 30)
 
         gridbox.setColumnMinimumWidth(2, 75)
 
-        gridbox.addWidget(self.custom_path_settings_label, 6 ,0, 1, 8)
+        gridbox.addWidget(self.export_settings_label, 0 ,0, 1, 6)
 
-        gridbox.addWidget(self.custom_export_path_label, 7 ,0)
-        gridbox.addWidget(self.custom_export_path_lineedit, 7 ,1, 1, 5)
-        gridbox.addWidget(self.custom_token_push_btn, 7 ,6)
-        gridbox.addWidget(self.browse_btn, 7 ,7)
+        gridbox.addWidget(self.export_preset_label, 3 ,0)
+        gridbox.addWidget(self.export_preset_menu_push_button, 3, 1, 1, 3)
 
-        gridbox.addWidget(self.save_btn, 9, 7)
-        gridbox.addWidget(self.cancel_btn, 10, 7)
+        gridbox.addWidget(self.export_dest_label, 5 ,0)
+        gridbox.addWidget(self.export_dest_menu_push_button, 5 ,1)
+
+        gridbox.addWidget(self.after_export_label, 5 ,3)
+        gridbox.addWidget(self.reveal_finder_push_button, 5 ,4)
+        gridbox.addWidget(self.reveal_mediahub_push_button, 6 ,4)
+
+        gridbox.addWidget(self.custom_path_settings_label, 9 ,0, 1, 6)
+
+        gridbox.addWidget(self.custom_export_path_label, 10 ,0)
+        gridbox.addWidget(self.custom_export_path_lineedit, 10 ,1, 1, 3)
+        gridbox.addWidget(self.custom_token_push_btn, 10 ,4)
+        gridbox.addWidget(self.browse_btn, 10 ,5)
+
+        gridbox.addWidget(self.save_btn, 12, 5)
+        gridbox.addWidget(self.cancel_btn, 13, 5)
 
         self.setup_window.setLayout(gridbox)
 
@@ -462,75 +509,34 @@ class ExportCurrentFrame(object):
 
         return self.setup_window
 
-    def export_current_frame_browse_path(self):
-        import flame
+    def export_current_frame(self):
+        # import flame
 
         marker = ''
 
-        export_path = self.folder_browser()
+        if self.export_destination == 'Browse to Path':
 
-        # Export current frame from selected clips
+            export_path = self.folder_browser()
 
-        if os.path.isdir(export_path):
-            for clip in self.selection:
+            # Export current frame from selected clips
 
-                self.export_current_frame(export_path, marker, clip)
-            print ('\n')
-            self.post_export(export_path)
+            if os.path.isdir(export_path):
+                for clip in self.selection:
+                    self.export(export_path, marker, clip)
+                print ('\n')
+                self.post_export(export_path)
+            else:
+                print ('>>> Export cancelled <<<\n')
+
         else:
-            print ('>>> Export cancelled <<<\n')
+            # Check path in config file
 
-    def export_marker_frame_browse_path(self):
+            if self.custom_export_path == '/':
+                return message_box('<center>Add custom path in script setup. <br><br>Flame Main Menu -> pyFlame -> <br>Export Frame Setup')
 
-        export_path = self.folder_browser()
+            # Export frames
 
-        # Export current frame from selected clips
-
-        if os.path.isdir(export_path):
             for clip in self.selection:
-                for marker in clip.markers:
-                    self.export_current_frame(export_path, marker, clip)
-            print ('\n')
-            self.post_export(export_path)
-        else:
-            print ('>>> Export cancelled <<<\n')
-
-    def export_current_frame_custom_path(self):
-        import flame
-
-        marker = ''
-
-        # Check path in config file
-
-        if self.custom_export_path == '/':
-            return message_box('<center>Add custom path in script setup. <br><br>Flame Main Menu -> pyFlame -> <br>Export Frame Setup')
-
-        # Export frames
-
-        for clip in self.selection:
-
-            # Translate custom path
-
-            export_path = self.translate_path(clip)
-
-            # Export
-
-            self.export_current_frame(export_path, marker, clip)
-
-        print ('\n')
-
-        self.post_export(export_path)
-
-    def export_marker_frame_custom_path(self):
-        import flame
-
-        # Check saved settings
-
-        if self.custom_export_path == '/':
-            return message_box('<center>Add custom path in script setup. <br><br>Flame Main Menu -> pyFlame -> <br>Export Frame Setup')
-
-        for clip in self.selection:
-            for marker in clip.markers:
 
                 # Translate custom path
 
@@ -538,17 +544,55 @@ class ExportCurrentFrame(object):
 
                 # Export
 
-                self.export_current_frame(export_path, marker, clip)
+                self.export(export_path, marker, clip)
 
+            print ('\n')
+
+            self.post_export(export_path)
+
+    def export_marker_frame(self):
+
+        if self.export_destination == 'Browse to Path':
+
+            export_path = self.folder_browser()
+
+            # Export current frame from selected clips
+
+            if os.path.isdir(export_path):
+                for clip in self.selection:
+                    for marker in clip.markers:
+                        self.export(export_path, marker, clip)
                 print ('\n')
+                self.post_export(export_path)
+            else:
+                print ('>>> Export cancelled <<<\n')
 
-        print ('\n')
+        else:
+            # Check saved settings
 
-        self.post_export(export_path)
+            if self.custom_export_path == '/':
+                return message_box('<center>Add custom path in script setup. <br><br>Flame Main Menu -> pyFlame -> <br>Export Frame Setup')
+
+            for clip in self.selection:
+                for marker in clip.markers:
+
+                    # Translate custom path
+
+                    export_path = self.translate_path(clip)
+
+                    # Export
+
+                    self.export(export_path, marker, clip)
+
+                    print ('\n')
+
+            print ('\n')
+
+            self.post_export(export_path)
 
 #-------------------------------------#
 
-    def export_current_frame(self, export_path, marker, clip):
+    def export(self, export_path, marker, clip):
         import flame
 
         # Set exporter
@@ -708,10 +752,10 @@ class ExportCurrentFrame(object):
 
     def post_export(self, export_path):
 
-        if self.open_in_finder:
+        if self.reveal_in_finder:
             self.open_finder(export_path)
 
-        if self.open_in_mediahub:
+        if self.reveal_in_mediahub:
             self.open_mediahub(export_path)
 
         message_box('Export done.')
@@ -734,28 +778,20 @@ class ExportCurrentFrame(object):
 
 def export_select_path(selection):
 
-    export = ExportCurrentFrame(selection)
-    return export.export_current_frame_browse_path()
+    export = ExportFrame(selection)
+    return export.export_current_frame()
 
 def export_marker_select_path(selection):
 
-    export = ExportCurrentFrame(selection)
-    return export.export_marker_frame_browse_path()
-
-def export_custom_path(selection):
-
-    export = ExportCurrentFrame(selection)
-    return export.export_current_frame_custom_path()
-
-def export_marker_custom_path(selection):
-
-    export = ExportCurrentFrame(selection)
-    return export.export_marker_frame_custom_path()
+    export = ExportFrame(selection)
+    return export.export_marker_frame()
 
 def script_setup(selection):
 
-    open_setup = ExportCurrentFrame(selection)
+    open_setup = ExportFrame(selection)
     return open_setup.setup()
+
+#-------------------------------------#
 
 def message_box(message):
 
@@ -780,7 +816,8 @@ def scope_clip(selection):
     import flame
 
     for item in selection:
-        if isinstance(item, (flame.PySequence, flame.PyClip)):
+        if isinstance(item, (flame.PyClip, flame.PySequence)):
+            # if item.parent.type == "Schematic":
             return True
     return False
 
@@ -789,8 +826,9 @@ def scope_markers(selection):
 
     for item in selection:
         if isinstance(item, (flame.PySequence, flame.PyClip)):
-            if item.markers:
-                return True
+            if not isinstance(item.parent, flame.PyReel):
+                if item.markers:
+                    return True
     return False
 
 #-------------------------------------#
@@ -811,18 +849,6 @@ def get_media_panel_custom_ui_actions():
                     'name': 'Export Marker Frames',
                     'isVisible': scope_markers,
                     'execute': export_marker_select_path,
-                    'minimumVersion': '2021.2'
-                },
-                {
-                    'name': 'Export Current Frame - Custom Path',
-                    'isVisible': scope_clip,
-                    'execute': export_custom_path,
-                    'minimumVersion': '2021.2'
-                },
-                {
-                    'name': 'Export Marker Frames - Custom Path',
-                    'isVisible': scope_markers,
-                    'execute': export_marker_custom_path,
                     'minimumVersion': '2021.2'
                 }
             ]
