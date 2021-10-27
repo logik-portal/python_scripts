@@ -1,10 +1,10 @@
 '''
 Script Name: Add Batch Nodes
-Script Version: 3.0
+Script Version: 3.1
 Flame Version: 2021
-Written by: Michael Vaglienty - michael@slaytan.net
+Written by: Michael Vaglienty
 Creation Date: 04.18.20
-Update Date: 05.20.21
+Update Date: 10.26.21
 
 Custom Action Type: Batch / Flame Main Menu
 
@@ -16,20 +16,22 @@ Description:
 
     All created node menu scripts are saved in /opt/Autodesk/user/YOURUSER/python/batch_node_menus
 
-    To create/rename/delete menus from node lists:
-    Flame Main Menu -> pyFlame -> Add Batch Nodes Setup
+    Menus:
 
-    To create menus for nodes with settings applied in batch:
-    Right-click on node in batch -> Add Batch Node Menu... -> Create Menu For Selected Node
+        To create/rename/delete menus from node lists:
+        Flame Main Menu -> pyFlame -> Add Batch Nodes Setup
 
-    To create menus for ofx nodes:
-    Right-click on node in batch -> Add Batch Node Menu... -> Create Menu Dor Selected Node
+        To create menus for nodes with settings applied in batch:
+        Right-click on node in batch -> Add Batch Node Menu... -> Create Menu For Selected Node
 
-    To add node from menu to batch:
-    Right-click in batch -> Add Batch Nodes... -> Select Node
+        To create menus for ofx nodes:
+        Right-click on node in batch -> Add Batch Node Menu... -> Create Menu Dor Selected Node
 
-    To add node from menu to batch connected to selected node:
-    Right-click on node in batch -> Add Batch Nodes... -> Select Node
+        To add node from menu to batch:
+        Right-click in batch -> Add Batch Nodes... -> Select Node
+
+        To add node from menu to batch connected to selected node:
+        Right-click on node in batch -> Add Batch Nodes... -> Select Node
 
 To install:
 
@@ -37,29 +39,32 @@ To install:
 
 Updates:
 
-v3.0 05.20.21
+    v3.1 10.26.21
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Updated config to xml
 
-v2.5 01.27.21:
+    v3.0 05.20.21
 
-    Updated UI
+        Updated to be compatible with Flame 2022/Python 3.7
 
-    Menus/Nodes can be renamed after they've been added
+    v2.5 01.27.21:
 
-v2.1 05.17.20:
+        Updated UI
 
-    Misc code updates
+        Menus/Nodes can be renamed after they've been added
+
+    v2.1 05.17.20:
+
+        Misc code updates
 '''
 
 from __future__ import print_function
+import xml.etree.ElementTree as ET
 from functools import partial
-import shutil
-import os
+import os, shutil
 from PySide2 import QtWidgets, QtCore
-import flame
 
-VERSION = 'v3.0'
+VERSION = 'v3.1'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/add_batch_nodes'
 
@@ -168,21 +173,32 @@ class FlameListWidget(QtWidgets.QListWidget):
 class BatchNodes(object):
 
     def __init__(self, selection):
+        import flame
 
-        print ('\n', '>' * 20, 'batch node menus %s' % VERSION, '<' * 20, '\n')
+        print ('''
+             _     _   ____        _       _       _   _           _
+    /\      | |   | | |  _ \      | |     | |     | \ | |         | |
+   /  \   __| | __| | | |_) | __ _| |_ ___| |__   |  \| | ___   __| | ___  ___
+  / /\ \ / _` |/ _` | |  _ < / _` | __/ __| '_ \  | . ` |/ _ \ / _` |/ _ \/ __|
+ / ____ \ (_| | (_| | | |_) | (_| | || (__| | | | | |\  | (_) | (_| |  __/\__ \\
+/_/    \_\__,_|\__,_| |____/ \__,_|\__\___|_| |_| |_| \_|\___/ \__,_|\___||___/
+        ''')
+
+        print ('\n')
+        print ('>' * 29, 'add batch nodes %s' % VERSION, '<' * 28, '\n')
 
         # Set paths
 
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
-        self.config_file = os.path.join(self.config_path, 'config')
+        self.config_xml = os.path.join(self.config_path, 'config.xml')
 
         self.save_selected_template = os.path.join(SCRIPT_PATH, 'save_selected')
         print ('save_selected_template:', self.save_selected_template)
 
-        self.create_node_template = os.path.join(SCRIPT_PATH, 'create_node')
+        self.create_node_template = os.path.join(SCRIPT_PATH, 'create_node', '\n')
         print ('create_node:', self.create_node_template)
 
-        self.check_config_file()
+        self.config()
 
         # Get flame variables
 
@@ -195,21 +211,14 @@ class BatchNodes(object):
         print ('current_user:', self.current_user)
 
         self.matchbox_path = '/opt/Autodesk/presets/%s/matchbox/shaders' % self.flame_version
-        print ('matchbox_path:', self.matchbox_path)
+        print ('matchbox_path:', self.matchbox_path, '\n')
 
         # Check/create folder to store node scripts in user python folder
 
         self.node_dir = os.path.join('/opt/Autodesk/user', self.current_user, 'python/batch_node_menus/nodes')
         if not os.path.isdir(self.node_dir):
             os.makedirs(self.node_dir)
-            print ('>>> created user node folder <<<')
-
-        # Load config file values
-
-        get_config_values = open(self.config_file, 'r')
-        values = get_config_values.read().splitlines()
-        self.logik_path = values[2]
-        get_config_values.close()
+            print ('>>> created user node folder <<<\n')
 
         if not os.path.isdir(self.logik_path):
             print ('\n>>> logik matchbox path no longer exists - set new path in setup <<<\n')
@@ -219,30 +228,48 @@ class BatchNodes(object):
 
         self.create_node_line = ''
 
-    def check_config_file(self):
+    def config(self):
 
-        # Check for and load config file
-        #-------------------------------
+        def get_config_values():
 
-        if not os.path.isdir(self.config_path):
-            try:
-                os.makedirs(self.config_path)
-            except:
-                message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
 
-        if not os.path.isfile(self.config_file):
-            print ('>>> config file does not exist, creating new config file <<<')
+            # Get Settings
 
-            config_text = []
+            for setting in root.iter('add_batch_nodes_settings'):
+                self.logik_path = setting.find('logik_path').text
 
-            config_text.insert(0, 'Setup values for pyFlame add batch nodes script.')
-            config_text.insert(1, 'Logik Path:')
-            config_text.insert(2, '/')
+            print ('>>> config loaded <<<\n')
 
-            out_file = open(self.config_file, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
+        def create_config_file():
+
+            if not os.path.isdir(self.config_path):
+                try:
+                    os.makedirs(self.config_path)
+                except:
+                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+
+            if not os.path.isfile(self.config_xml):
+                print ('>>> config file does not exist, creating new config file <<<')
+
+                config = """
+<settings>
+    <add_batch_nodes_settings>
+        <logik_path>/</logik_path>
+    </add_batch_nodes_settings>
+</settings>"""
+
+                with open(self.config_xml, 'a') as config_file:
+                    config_file.write(config)
+                    config_file.close()
+
+        if os.path.isfile(self.config_xml):
+            get_config_values()
+        else:
+            create_config_file()
+            if os.path.isfile(self.config_xml):
+                get_config_values()
 
     def main_window(self):
 
@@ -539,33 +566,27 @@ class BatchNodes(object):
     def setup_window(self):
 
         def logik_browse():
-            global logik_path
 
-            logik_path_saved = logik_path_entry.text()
+            logik_path = str(QtWidgets.QFileDialog.getExistingDirectory(setup_window, "Select Directory", logik_path_entry.text(), QtWidgets.QFileDialog.ShowDirsOnly))
 
-            logik_path = str(QtWidgets.QFileDialog.getExistingDirectory(setup_window, "Select Directory", logik_path_saved, QtWidgets.QFileDialog.ShowDirsOnly))
-
-            if logik_path != '':
+            if logik_path:
                 logik_path_entry.setText(logik_path)
-            else:
-                logik_path_entry.setText(logik_path_saved)
 
-        def setup_save():
+        def save_config():
 
             self.logik_path = logik_path_entry.text()
 
-            config_text = []
+            # Save settings to config file
 
-            config_text.insert(0, 'Setup values for pyFlame batch nodes script.')
-            config_text.insert(1, 'Logik Path:')
-            config_text.insert(2, self.logik_path)
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
 
-            out_file = open(self.config_file, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
+            logik_path = root.find('.//logik_path')
+            logik_path.text = self.logik_path
 
-            print ('\n>>> config file saved <<<\n')
+            xml_tree.write(self.config_xml)
+
+            print ('>>> config saved <<<\n')
 
             setup_window.close()
 
@@ -598,7 +619,7 @@ class BatchNodes(object):
         # Buttons
 
         logik_browse_btn = FlameButton('Browse', logik_browse, setup_window)
-        setup_save_btn = FlameButton('Save', setup_save, setup_window)
+        setup_save_btn = FlameButton('Save', save_config, setup_window)
         setup_cancel_btn = FlameButton('Cancel', cancel, setup_window)
 
         #------------------------------------#
@@ -663,6 +684,7 @@ class BatchNodes(object):
                 self.logik_list.addItem(l)
 
     def done_button(self):
+        import flame
 
         # Close window and refresh hooks
 
@@ -710,7 +732,7 @@ class BatchNodes(object):
                         os.remove(os.path.join(self.node_dir, f))
                     except:
                         shutil.rmtree(os.path.join(self.node_dir, f))
-                    print ('\n>>> %s deleted <<<\n' % f)
+                    print ('>>> %s deleted <<<\n' % f)
 
         self.get_node_scripts_lists(self.node_menu_list, self.node_dir)
         self.get_node_scripts_lists(self.matchbox_node_menu_list, self.node_dir)
@@ -721,6 +743,7 @@ class BatchNodes(object):
     def rename_menu(self, menu_list, folder):
 
         def rename():
+            import flame
 
             def edit_menu_file(new_menu_name):
 
@@ -795,9 +818,9 @@ class BatchNodes(object):
 
             flame.execute_shortcut('Rescan Python Hooks')
 
-            print ('\n>>> python hooks refreshed <<<\n')
+            print ('>>> python hooks refreshed <<<\n')
 
-            print ('\n>>> menu renamed <<<\n')
+            print ('>>> menu renamed <<<\n')
 
             rename_window.close()
 
@@ -939,40 +962,54 @@ class BatchNodes(object):
         selected_node = self.selection[0]
 
         node_name = str(selected_node.name)[1:-1]
-        print ('node_name:', node_name)
+        print ('node_name:', node_name, '\n')
+
+        # Check user python folder for existing node script
+
+        create_node = True
 
         for n in os.listdir(self.node_dir):
             if n == node_name:
-                return message_box('<center>Menu with selected nodes name already exists. Rename node or rename/delete existing menu')
+                # return message_box('<center>Menu with selected nodes name already exists. Rename node or rename/delete existing menu')
+                create_node = message_box_confirm('Menu already exists for node with same name. <br>Overwrite?')
 
-        node_type = str(selected_node.type)[1:-1]
-        print ('node_type:', node_type)
+        if create_node:
 
-        # Create folder to save node setup
+            node_type = str(selected_node.type)[1:-1]
+            print ('node_type:', node_type)
 
-        node_setup_path = os.path.join(self.node_dir, node_name)
-        print ('node_setup_path:', node_setup_path)
+            # Create folder to save node setup
 
-        try:
-            os.makedirs(node_setup_path)
-            print ('\n>>> %s node folder created <<<\n' % node_name)
-        except:
-            print ('\n>>> %s node folder already exists - overwriting setup <<<\n' % node_name)
+            node_setup_path = os.path.join(self.node_dir, node_name)
+            print ('node_setup_path:', node_setup_path, '\n')
 
-        # Save node setup
+            try:
+                os.makedirs(node_setup_path)
+                print ('>>> %s node folder created <<<\n' % node_name)
+            except:
+                print ('>>> %s node folder already exists - overwriting setup <<<\n' % node_name)
 
-        node_setup_path_name = os.path.join(node_setup_path, node_name)
-        selected_node.save_node_setup(node_setup_path_name)
+            # Save node setup
 
-        # Set script path
+            node_setup_path_name = os.path.join(node_setup_path, node_name)
+            selected_node.save_node_setup(node_setup_path_name)
 
-        node_script = os.path.join(self.node_dir, node_name) + '.py'
+            # Set script path
 
-        # Create script for new node
+            node_script = os.path.join(self.node_dir, node_name) + '.py'
 
-        create_node_script()
+            # Create script for new node
 
-        print ('>>> node script for %s saved <<<' % node_name, '\n')
+            create_node_script()
+
+            message_box('Menu created for %s' % node_name)
+
+            # print ('>>> Node script for %s saved <<<' % node_name, '\n')
+
+        else:
+            print ('>>> Node already exists - Nothing saved <<<.\n')
+
+        print ('done.\n')
 
 # ----------------------- #
 
@@ -995,7 +1032,33 @@ def message_box(message):
     for code in code_list:
         message = message.replace(code, '')
 
-    print ('\n>>> %s <<<\n' % message)
+    print ('>>> %s <<<\n' % message)
+
+def message_box_confirm(message):
+
+    msg_box = QtWidgets.QMessageBox()
+    msg_box.setText('<b><center>%s' % message)
+    msg_box_yes_button = msg_box.addButton(QtWidgets.QMessageBox.Yes)
+    msg_box_yes_button.setFocusPolicy(QtCore.Qt.NoFocus)
+    msg_box_yes_button.setMinimumSize(QtCore.QSize(80, 28))
+    msg_box_no_button = msg_box.addButton(QtWidgets.QMessageBox.No)
+    msg_box_no_button.setFocusPolicy(QtCore.Qt.NoFocus)
+    msg_box_no_button.setMinimumSize(QtCore.QSize(80, 28))
+    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
+                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
+                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
+                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
+
+    code_list = ['<br>']
+
+    for code in code_list:
+        message = message.replace(code, '')
+
+    print ('>>> %s <<<\n' % message)
+
+    if msg_box.exec_() == QtWidgets.QMessageBox.Yes:
+        return True
+    return False
 
 # ----------------------- #
 
