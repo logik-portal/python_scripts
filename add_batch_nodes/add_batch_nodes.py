@@ -1075,6 +1075,7 @@ def save_node(selection):
 # ----------------------- #
 
 def scope_node(selection):
+    import flame
 
     for item in selection:
         if isinstance(item, flame.PyNode):
