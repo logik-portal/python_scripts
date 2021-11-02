@@ -1,10 +1,10 @@
 '''
 Script Name: Create Export Menus
-Script Version: 3.5
+Script Version: 3.6
 Flame Version: 2021.2
 Written by: Michael Vaglienty
 Creation Date: 03.29.20
-Update Date: 10.16.21
+Update Date: 11.02.21
 
 Custom Action Type: Media Panel
 
@@ -26,6 +26,10 @@ To install:
     Copy script into /opt/Autodesk/shared/python/create_export_menus
 
 Updates:
+
+    v3.6 11.02.21
+
+        Fixed shot name token translation to work with python 3.7 in menu_template
 
     v3.5 10.13.21
 
@@ -110,7 +114,7 @@ import xml.etree.ElementTree as ET
 from functools import partial
 import os, re, ast
 
-VERSION = 'v3.5'
+VERSION = 'v3.6'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/create_export_menus'
 

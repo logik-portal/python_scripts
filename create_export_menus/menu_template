@@ -26,7 +26,7 @@ def export_clips(selection):
 
         def get_shot_name(name):
 
-            shot_name_split = filter(None, re.split(r'(\d+)', name))
+            shot_name_split = re.split(r'(\d+)', name)
 
             if len(shot_name_split) > 1:
                 if shot_name_split[1].isalnum():
