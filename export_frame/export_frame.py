@@ -1,10 +1,10 @@
 '''
 Script Name: Export Frame
-Script Version: 1.2
+Script Version: 1.3
 Flame Version: 2021.2
 Written by: Michael Vaglienty
 Creation Date: 10.11.21
-Update Date: 10.24.21
+Update Date: 11.02.21
 
 Custom Action Type: Media Panel/Player
 
@@ -40,6 +40,10 @@ To install:
 
 Updates:
 
+    v1.3 11.02.21
+
+        Fixed shot name token compatibility to work with python 3.7
+
     v1.2 10.24.21
 
         Removed custom path menus. Custom export paths can be turned on in Setup.
@@ -57,7 +61,7 @@ from functools import partial
 import xml.etree.ElementTree as ET
 import re, os, ast, datetime, platform, subprocess
 
-VERSION = 'v1.2'
+VERSION = 'v1.3'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/export_frame'
 
@@ -671,7 +675,7 @@ class ExportFrame(object):
 
         def get_shot_name(name):
 
-            shot_name_split = filter(None, re.split(r'(\d+)', name))
+            shot_name_split = re.split(r'(\d+)', name)
 
             if len(shot_name_split) > 1:
                 if shot_name_split[1].isalnum():
