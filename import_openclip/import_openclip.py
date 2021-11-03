@@ -1,10 +1,10 @@
 '''
-Script Name: Import Open Clip
-Script Version: 2.1
+Script Name: Import Openclip
+Script Version: 2.2
 Flame Version: 2020.3
 Written by: Michael Vaglienty
 Creation Date: 05.26.19
-Update Date: 09.24.21
+Update Date: 11.02.21
 
 Custom Action Type: Batch
 
@@ -18,7 +18,7 @@ Description:
 
     Menus:
 
-        Script Setup:
+        Setup:
 
             Flame Main Menu -> pyFlame -> Import Openclip Setup
 
@@ -33,10 +33,12 @@ To install:
 
 Updates:
 
-v2.2
+v2.2 11.02.21
 
-    Added settings for...
+    Write file image sequence can now be automatically be imported when render is completed. Options
+    to turn this off and on can be found in Setup.
 
+    Openclip/Image sequence destination reels can be set in Setup.
 
 v2.1 09.24.21
 
@@ -48,7 +50,7 @@ v2.0 05.25.21
 
 v1.5 09.19.20
 
-    Pops up message box when open clip doesn't exist
+    Pops up message box when openclip doesn't exist
 
 v1.4 07.01.20
 
@@ -641,7 +643,6 @@ def get_main_menu_custom_ui_actions():
             ]
         }
     ]
-
 
 def get_batch_custom_ui_actions():
 
