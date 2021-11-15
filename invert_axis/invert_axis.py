@@ -1,10 +1,10 @@
 '''
 Script Name: Invert Axis
-Script Version: 2.1
+Script Version: 2.2
 Flame Version: 2021.1
 Written by: Michael Vaglienty
 Creation Date: 07.26.19
-Update Date: 10.26.21
+Update Date: 11.12.21
 
 Custom Action Type: Action
 
@@ -16,14 +16,18 @@ Description:
 
     Menus:
 
-        Right-click on axis node -> Invert Axis... -> Create Inverted Axis
-        Right-click on axis node -> Invert Axis... -> Copy Parent Axis Values and Invert
+        Right-click on axis node -> Axis... -> Create Inverted Axis
+        Right-click on axis node -> Axis... -> Copy Parent Axis Values and Invert
 
 To install:
 
     Copy script into /opt/Autodesk/shared/python/invert_axis
 
 Updates:
+
+    v2.2 11.12.21
+
+        Changed menu name to Axis...
 
     v2.1 10.26.21
 
@@ -49,7 +53,7 @@ Updates:
 from __future__ import print_function
 import os, shutil
 
-VERSION = 'v2.1'
+VERSION = 'v2.2'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/invert_axis'
 
@@ -510,7 +514,7 @@ def get_action_custom_ui_actions():
 
     return [
         {
-            'name': 'Invert Axis...',
+            'name': 'Axis...',
             'actions': [
                 {
                     'name': 'Create Inverted Axis At Current Frame',
