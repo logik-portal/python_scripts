@@ -1,10 +1,10 @@
 '''
 Script Name: Create Projection
-Script Version: 2.0
-Flame Version: 2020.2
+Script Version: 2.1
+Flame Version: 2021.2
 Written by: Michael Vaglienty - michael@slaytan.net
 Creation Date: 07.09.19
-Update Date: 05.22.21
+Update Date: 11.15.21
 
 Custom Action Type: Flame Main Menu
 
@@ -14,9 +14,11 @@ Description:
 
     Scene must have another camera added other than just the default camera
 
-    Right-click on Action surface or geo  -> Create Projection... -> Projector Projection
-    Right-click on Action surface or geo  -> Create Projection... -> Projector Light-Linked Projection
-    Right-click on Action surface or geo  -> Create Projection... -> Diffuse Projection
+    Menus:
+
+        Right-click on Action surface or geo  -> Create Projection... -> Projector Projection
+        Right-click on Action surface or geo  -> Create Projection... -> Projector Light-Linked Projection
+        Right-click on Action surface or geo  -> Create Projection... -> Diffuse Projection
 
 To install:
 
@@ -24,30 +26,34 @@ To install:
 
 Updates:
 
-v2.0 05.22.21
+    v2.1 11.15.21
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Fixed problem creating projections when Media Layer is selected instead of Action Node
 
-v1.6 05.16.21
+    v2.0 05.22.21
 
-    Error when creating projection while not having action node selected fixed
+        Updated to be compatible with Flame 2022/Python 3.7
 
-v1.5 05.10.20
+    v1.6 05.16.21
 
-    Fixed problem with diffuse not switching to new frame camera in Flame 2020.2 and up.
+        Error when creating projection while not having action node selected fixed
 
-v1.4 10.21.19
+    v1.5 05.10.20
 
-    Changed menu to Create Projection...
+        Fixed problem with diffuse not switching to new frame camera in Flame 2020.2 and up.
 
-v1.3 09.15.19
+    v1.4 10.21.19
 
-    Code Cleanup
+        Changed menu to Create Projection...
+
+    v1.3 09.15.19
+
+        Code Cleanup
 '''
 
 from __future__ import print_function
 
-VERSION = 'v2.0'
+VERSION = 'v2.1'
 
 def find_line(action_filename, item):
 
@@ -217,9 +223,9 @@ def create_cur_frame_camera(projection_type):
 
             # Get list of all 3d camera names in action node
 
-            action_node_values = flame.batch.current_node.get_value()
+            action_node, action_node_name = get_action_node()
 
-            for item in action_node_values.nodes:
+            for item in action_node.nodes:
                 if 'Camera' in item.type:
                     new_action_camera_list.append(item)
             # print ('new_action_camera_list:', new_action_camera_list, '\n')
@@ -257,9 +263,11 @@ def create_cur_frame_camera(projection_type):
 
         # Get list of all 3d camera names in action node
 
-        action_node_values = flame.batch.current_node.get_value()
+        # action_node_values = flame.batch.current_node.get_value()
 
-        for item in action_node_values.nodes:
+        action_node, action_node_name = get_action_node()
+
+        for item in action_node.nodes:
             if 'Camera' in item.type:
                 new_action_camera_list.append(item)
         # print ('new_action_camera_list:', new_action_camera_list)
@@ -378,8 +386,6 @@ def create_projector_projection(selection):
     # Create camera at current frame
 
     new_camera, new_camera_name, camera_exists, new_camera_index = create_cur_frame_camera(projection_type)
-
-    #    new_camera, new_camera_name = create_cur_frame_camera(projection_type)
 
     # If result camera has parent, connect new camera to parent
 
