@@ -601,7 +601,7 @@ class BatchNodes(object):
         setup_window = QtWidgets.QWidget()
         setup_window.setMinimumSize(QtCore.QSize(700, 150))
         setup_window.setMaximumSize(QtCore.QSize(700, 150))
-        setup_window.setWindowTitle('pyFlame Add Batch Nodes Path Setup')
+        setup_window.setWindowTitle('Add Batch Nodes Path Setup')
         setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         setup_window.setStyleSheet('background-color: #313131')
@@ -652,6 +652,7 @@ class BatchNodes(object):
     # ----------------------- #
 
     def get_batch_node_list(self):
+        import flame
 
         for node in flame.batch.node_types:
 
