@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 '''
 Script Name: Logik Portal
-Script Version: 2.7
+Script Version: 2.8
 Flame Version: 2021
 Written by: Michael Vaglienty
 Crying Croc Design by: Enid Dalkoff
 Creation Date: 10.31.20
-Update Date: 10.16.21
+Update Date: 11.17.21
 
 Custom Action Type: Flame Main Menu
 
@@ -14,7 +14,9 @@ Description:
 
     Share/install python scripts, batch setups, archives, and download matchboxes
 
-    Flame Main Menu -> Logik -> Logik Portal
+    Menu:
+
+        Flame Main Menu -> Logik -> Logik Portal
 
 To install:
 
@@ -22,83 +24,87 @@ To install:
 
 Updates:
 
-v2.7 10.16.21
+    v2.8 11.17.21
 
-    Install Local button added to python tab to install python scripts from local drive
+        Login info for uploading scripts only needs to be entered first time something is uploaded.
 
-    Improved Flame version detection
+    v2.7 10.16.21
 
-    Script will now attempt to download matchbox collection from website. If website is down, it will download from portal ftp.
+        Install Local button added to python tab to install python scripts from local drive
 
-v2.6 09.06.21
+        Improved Flame version detection
 
-    Misc bug fixes / fixed problem with not being able to enter system password to load matchboxes to write protected folder
+        Script will now attempt to download matchbox collection from website. If website is down, it will download from portal ftp.
 
-v2.5 07.30.21
+    v2.6 09.06.21
 
-    Added ability to upload/download archives - Archive size limit is 200MB
+        Misc bug fixes / fixed problem with not being able to enter system password to load matchboxes to write protected folder
 
-    Config is now XML
+    v2.5 07.30.21
 
-v2.4 07.23.21
+        Added ability to upload/download archives - Archive size limit is 200MB
 
-    Added python submit button back. User name and password now required to submit scripts.
+        Config is now XML
 
-    Fixed bug - files starting with . sometimes caused script to not work
+    v2.4 07.23.21
 
-v2.3 07.06.21
+        Added python submit button back. User name and password now required to submit scripts.
 
-    Added Logik Matchbox archive to Portal FTP. Matchbox archive now stored on FTP instead of pulling directly from logik-matchbook.org
+        Fixed bug - files starting with . sometimes caused script to not work
 
-v2.2 06.03.21
+    v2.3 07.06.21
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Added Logik Matchbox archive to Portal FTP. Matchbox archive now stored on FTP instead of pulling directly from logik-matchbook.org
 
-    Removed python script submission ability. Scripts can now be added through github submissions only.
+    v2.2 06.03.21
 
-v1.6 03.14.21
+        Updated to be compatible with Flame 2022/Python 3.7
 
-    UI improvements/updates - UI elements to classes
+        Removed python script submission ability. Scripts can now be added through github submissions only.
 
-    Added contextual menus to python tab to install and delete scripts and to batch tab to download batch setups
+    v1.6 03.14.21
 
-    User will be prompted for system password when trying to download matchboxes to protected folders such as /opt/Autodesk/presets/2021.1/matchbox/shaders
+        UI improvements/updates - UI elements to classes
 
-    If newer version of installed script is available on portal it will be highlighted in portal list
+        Added contextual menus to python tab to install and delete scripts and to batch tab to download batch setups
 
-    If newer version of flame is required for a script, script entry will be greyed out
+        User will be prompted for system password when trying to download matchboxes to protected folders such as /opt/Autodesk/presets/2021.1/matchbox/shaders
 
-    If newer version of flame is required for a batch setup, batch setup entry will be greyed out
+        If newer version of installed script is available on portal it will be highlighted in portal list
 
-    Batch setups now properly download into paths with spaces in folder names
+        If newer version of flame is required for a script, script entry will be greyed out
 
-    User will get message if script folder needs permissions changed to create temp folders/files
+        If newer version of flame is required for a batch setup, batch setup entry will be greyed out
 
-    File browse buttons removed - browser now opens when clicking lineedit field
+        Batch setups now properly download into paths with spaces in folder names
 
-    If new version of a python script is submitted old script will be removed
+        User will get message if script folder needs permissions changed to create temp folders/files
 
-v1.5 02.27.21
+        File browse buttons removed - browser now opens when clicking lineedit field
 
-    UI code updates
+        If new version of a python script is submitted old script will be removed
 
-    Fixed bug causing script to hang when reading descriptions on certain scripts
+    v1.5 02.27.21
 
-    Fixed batch submit button
+        UI code updates
 
-v1.4 01.25.21
+        Fixed bug causing script to hang when reading descriptions on certain scripts
 
-    Fixed temp path for logik matchbox install
+        Fixed batch submit button
 
-v1.3 01.14.21
+    v1.4 01.25.21
 
-    Script description info can now be entered in Portal UI instead of being in script header.
+        Fixed temp path for logik matchbox install
 
-    Fixed font size for linux
+    v1.3 01.14.21
 
-v1.2 12.29.20
+        Script description info can now be entered in Portal UI instead of being in script header.
 
-    Fixed problems with script running on Flame with extra .x in Flame version
+        Fixed font size for linux
+
+    v1.2 12.29.20
+
+        Fixed problems with script running on Flame with extra .x in Flame version
 '''
 
 from __future__ import print_function
@@ -109,7 +115,7 @@ from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 
-VERSION = 'v2.7'
+VERSION = 'v2.8'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/logik_portal'
 
@@ -311,22 +317,18 @@ class LogikPortal(object):
         import flame
 
         print ('''
-                 _                 _ _
-                | |               (_) |
-                | |     ___   __ _ _| | __
-                | |    / _ \ / _` | | |/ /
-                | |___| (_) | (_| | |   <
-                |______\___/ \__, |_|_|\_\\
-                              __/ |
-                 _____       |___/        _
-                |  __ \         | |      | |
-                | |__) |__  _ __| |_ __ _| |
-                |  ___/ _ \| '__| __/ _` | |
-                | |  | (_) | |  | || (_| | |
-                |_|   \___/|_|   \__\__,_|_|
-                             ''')
+ _                 _ _      _____           _        _
+| |               (_) |    |  __ \         | |      | |
+| |     ___   __ _ _| | __ | |__) |__  _ __| |_ __ _| |
+| |    / _ \ / _` | | |/ / |  ___/ _ \| '__| __/ _` | |
+| |___| (_) | (_| | |   <  | |  | (_) | |  | || (_| | |
+|______\___/ \__, |_|_|\_\ |_|   \___/|_|   \__\__,_|_|
+              __/ |
+             |___/
+        ''')
 
-        print ('\n', '>' * 20, 'logik portal %s' % VERSION, '<' * 20)
+        # print ('\n')
+        print ('>' * 18, 'logik portal %s' % VERSION, '<' * 18)
 
         # Define paths
 
@@ -420,6 +422,8 @@ class LogikPortal(object):
                 self.open_batch = ast.literal_eval(setting.find('open_batch').text)
                 self.archive_download_path = setting.find('archive_download_path').text
                 self.archive_submit_path = setting.find('archive_submit_path').text
+                self.upload_user = setting.find('upload_user').text
+                self.upload_pass = setting.find('upload_pass').text
 
             print ('\n>>> config loaded <<<\n')
 
@@ -444,6 +448,8 @@ class LogikPortal(object):
         <open_batch>False</open_batch>
         <archive_download_path>/</archive_download_path>
         <archive_submit_path>/</archive_submit_path>
+        <upload_user></upload_user>
+        <upload_pass></upload_pass>
     </logik_portal_settings>
 </settings>"""
 
@@ -549,7 +555,7 @@ class LogikPortal(object):
 
         def login_check():
 
-            if self.password:
+            if self.upload_user and self.upload_pass:
                 submit_script()
             else:
                 submit_ftp_login()
@@ -558,26 +564,53 @@ class LogikPortal(object):
 
             def check_password():
 
-                # Try connecting to ftp
+                def save_config():
 
-                self.username = str(username_lineedit.text())
-                self.password = str(password_lineedit.text())
+                    # Save path to config file
 
-                if self.username and self.password:
-                    try:
-                        ftp = FTP('logik.hostedftp.com')
-                        ftp.login(self.username, self.password)
-                        ftp.cwd('/')
-                        submit_script()
-                        self.password_window.close()
-                    except:
+                    xml_tree = ET.parse(self.config_xml)
+                    root = xml_tree.getroot()
+
+                    upload_user = root.find('.//upload_user')
+                    upload_user.text = self.username
+
+                    upload_pass = root.find('.//upload_pass')
+                    upload_pass.text = self.password
+
+                    xml_tree.write(self.config_xml)
+
+                    print ('>>> config saved <<<\n')
+
+                if not self.upload_user or not self.upload_pass:
+
+                    # Try connecting to ftp
+
+                    self.username = str(username_lineedit.text())
+                    self.password = str(password_lineedit.text())
+
+                    if self.username and self.password:
+                        try:
+                            ftp = FTP('logik.hostedftp.com')
+                            ftp.login(self.username, self.password)
+                            ftp.cwd('/')
+                            save_config()
+                            self.upload_user = self.username
+                            self.upload_pass = self.password
+                            submit_script()
+                            self.password_window.close()
+                        except:
+                            self.username = ''
+                            self.password = ''
+                            return message_box('login incorrect')
+                    else:
                         self.username = ''
                         self.password = ''
-                        return message_box('login incorrect')
+                        return message_box('Enter username and password')
+
                 else:
-                    self.username = ''
-                    self.password = ''
-                    return message_box('Enter username and password')
+                    self.username = self.upload_user
+                    self.password = self.upload_pass
+                    submit_script()
 
             self.password_window = QtWidgets.QWidget()
             self.password_window.setMinimumSize(QtCore.QSize(500, 130))
