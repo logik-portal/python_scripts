@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 '''
 Script Name: Logik Portal
-Script Version: 2.8
+Script Version: 2.9
 Flame Version: 2021
 Written by: Michael Vaglienty
 Crying Croc Design by: Enid Dalkoff
 Creation Date: 10.31.20
-Update Date: 11.17.21
+Update Date: 12.02.21
 
 Custom Action Type: Flame Main Menu
 
@@ -23,6 +23,10 @@ To install:
     Copy script into /opt/Autodesk/shared/python/logik_portal
 
 Updates:
+
+    v2.9 12.02.21
+
+        Login bug fix
 
     v2.8 11.17.21
 
@@ -115,7 +119,7 @@ from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 
-VERSION = 'v2.8'
+VERSION = 'v2.9'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/logik_portal'
 
@@ -378,8 +382,6 @@ class LogikPortal(object):
         self.batch_setups_xml_path = ''
         self.python_scripts_xml_path = ''
         self.sudo_password = ''
-        self.username = ''
-        self.password = ''
 
         self.main_window()
 
@@ -422,8 +424,8 @@ class LogikPortal(object):
                 self.open_batch = ast.literal_eval(setting.find('open_batch').text)
                 self.archive_download_path = setting.find('archive_download_path').text
                 self.archive_submit_path = setting.find('archive_submit_path').text
-                self.upload_user = setting.find('upload_user').text
-                self.upload_pass = setting.find('upload_pass').text
+                self.username = setting.find('username').text
+                self.password = setting.find('password').text
 
             print ('\n>>> config loaded <<<\n')
 
@@ -448,8 +450,8 @@ class LogikPortal(object):
         <open_batch>False</open_batch>
         <archive_download_path>/</archive_download_path>
         <archive_submit_path>/</archive_submit_path>
-        <upload_user></upload_user>
-        <upload_pass></upload_pass>
+        <username></username>
+        <password></password>
     </logik_portal_settings>
 </settings>"""
 
@@ -555,7 +557,7 @@ class LogikPortal(object):
 
         def login_check():
 
-            if self.upload_user and self.upload_pass:
+            if self.username and self.password:
                 submit_script()
             else:
                 submit_ftp_login()
@@ -571,17 +573,17 @@ class LogikPortal(object):
                     xml_tree = ET.parse(self.config_xml)
                     root = xml_tree.getroot()
 
-                    upload_user = root.find('.//upload_user')
-                    upload_user.text = self.username
+                    username = root.find('.//username')
+                    username.text = self.username
 
-                    upload_pass = root.find('.//upload_pass')
-                    upload_pass.text = self.password
+                    password = root.find('.//password')
+                    password.text = self.password
 
                     xml_tree.write(self.config_xml)
 
                     print ('>>> config saved <<<\n')
 
-                if not self.upload_user or not self.upload_pass:
+                if not self.username or not self.password:
 
                     # Try connecting to ftp
 
@@ -594,8 +596,8 @@ class LogikPortal(object):
                             ftp.login(self.username, self.password)
                             ftp.cwd('/')
                             save_config()
-                            self.upload_user = self.username
-                            self.upload_pass = self.password
+                            # self.upload_user = self.username
+                            # self.upload_pass = self.password
                             submit_script()
                             self.password_window.close()
                         except:
@@ -608,8 +610,6 @@ class LogikPortal(object):
                         return message_box('Enter username and password')
 
                 else:
-                    self.username = self.upload_user
-                    self.password = self.upload_pass
                     submit_script()
 
             self.password_window = QtWidgets.QWidget()
@@ -1351,7 +1351,6 @@ class LogikPortal(object):
 
                 for f in os.listdir(self.batch_setup_download_path):
                     if f.split('.', 1)[0] == batch_name and f.endswith('.batch'):
-
                         setup_path = os.path.join(self.batch_setup_download_path, f)
                         # print ('setup_path:', setup_path)
 
