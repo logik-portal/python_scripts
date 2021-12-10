@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 '''
 Script Name: Logik Portal
-Script Version: 2.9
+Script Version: 3.0
 Flame Version: 2021
 Written by: Michael Vaglienty
 Crying Croc Design by: Enid Dalkoff
 Creation Date: 10.31.20
-Update Date: 12.02.21
+Update Date: 12.09.21
 
 Custom Action Type: Flame Main Menu
 
@@ -24,9 +24,15 @@ To install:
 
 Updates:
 
+    v3.0 12.09.21
+
+        Getting Flame version is updated to work with new PR versioning
+
+        Moved a few buttons around
+
     v2.9 12.02.21
 
-        Login bug fix
+        Python script upload login bug fix
 
     v2.8 11.17.21
 
@@ -119,7 +125,7 @@ from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 
-VERSION = 'v2.9'
+VERSION = 'v3.0'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/logik_portal'
 
@@ -331,7 +337,6 @@ class LogikPortal(object):
              |___/
         ''')
 
-        # print ('\n')
         print ('>' * 18, 'logik portal %s' % VERSION, '<' * 18)
 
         # Define paths
@@ -359,6 +364,8 @@ class LogikPortal(object):
 
         self.flame_version = flame.get_version()
 
+        if 'pr' in self.flame_version:
+            self.flame_version = self.flame_version.rsplit('.', 1)[0]
         if len(self.flame_version) > 6:
             self.flame_version = self.flame_version[:6]
         self.flame_version = float(self.flame_version)
@@ -1064,10 +1071,10 @@ class LogikPortal(object):
         self.window.tab1.layout.addWidget(self.installed_scripts_tree, 1, 0, 1, 5)
         self.window.tab1.layout.addWidget(self.portal_scripts_tree, 1, 7, 1, 5)
 
-        self.window.tab1.layout.addWidget(self.delete_script_btn, 2, 3)
+        self.window.tab1.layout.addWidget(self.delete_script_btn, 2, 0)
         self.window.tab1.layout.addWidget(self.install_local_script_btn, 2, 4)
 
-        self.window.tab1.layout.addWidget(self.script_submit_btn, 2, 10)
+        self.window.tab1.layout.addWidget(self.script_submit_btn, 2, 7)
         self.window.tab1.layout.addWidget(self.install_script_btn, 2, 11)
 
         self.window.tab1.layout.addWidget(self.script_description_label, 4, 0, 1, 12)
@@ -1754,10 +1761,11 @@ class LogikPortal(object):
 
         self.window.tab4.layout.addWidget(self.batch_setups_tree, 1, 0, 1, 5)
 
-        self.window.tab4.layout.addWidget(self.batch_setups_submit_btn, 2, 3)
+        self.window.tab4.layout.addWidget(self.batch_setups_submit_btn, 2, 0)
+
+        self.window.tab4.layout.addWidget(self.open_batch_btn, 2, 3)
         self.window.tab4.layout.addWidget(self.batch_setups_download_btn, 2, 4)
 
-        self.window.tab4.layout.addWidget(self.open_batch_btn, 2, 0)
 
         self.window.tab4.layout.addWidget(self.batch_setups_desciption_label, 4, 0, 1, 5)
         self.window.tab4.layout.addWidget(self.batch_setups_text_edit, 5, 0, 1, 5)
@@ -2202,7 +2210,7 @@ class LogikPortal(object):
 
         self.window.tab5.layout.addWidget(self.archives_tree, 1, 0, 1, 5)
 
-        self.window.tab5.layout.addWidget(self.archives_submit_btn, 2, 3)
+        self.window.tab5.layout.addWidget(self.archives_submit_btn, 2, 0)
         self.window.tab5.layout.addWidget(self.archives_download_btn, 2, 4)
 
         self.window.tab5.layout.addWidget(self.archives_desciption_label, 4, 0, 1, 5)
