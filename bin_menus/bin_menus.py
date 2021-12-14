@@ -1,10 +1,10 @@
 '''
 Script Name: Bin Menus
-Script Version: 1.0
-Flame Version: 2021.2
+Script Version: 1.1
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 11.29.21
-Update Date: 11.29.21
+Update Date: 12.13.21
 
 Custom Action Type: Batch
 
@@ -30,13 +30,25 @@ Description:
 To install:
 
     Copy script into /opt/Autodesk/shared/python/bin_menus
+
+Updates:
+
+    v1.1 12.13.21
+
+        Only works with 2022 and newer now. 2021.2 had problems properly appending bin node setups.
+
+        Menus auto refresh when Flame is launched.
+
+        Fixed bin menu version number.
+
+        Fixed menus not deleting.
 '''
 
 from __future__ import print_function
 from PySide2 import QtWidgets, QtCore
-import os, re
+import os, re, shutil
 
-VERSION = 'v1.0'
+VERSION = 'v1.1'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/bin_menus'
 
@@ -64,13 +76,7 @@ class BinMenus(object):
         self.project_menu_path = os.path.join(SCRIPT_PATH, 'project_bin_menus')
         self.node_template_path = os.path.join(SCRIPT_PATH, 'node_menu_template')
 
-        # Create menu folders if they don't exist
-
-        try:
-            os.makedirs(self.user_menu_path)
-            os.makedirs(self.project_menu_path)
-        except:
-            pass
+        self.create_menu_folders()
 
         self.current_user = flame.users.current_user.name
         print ('current_user:', self.current_user)
@@ -86,7 +92,18 @@ class BinMenus(object):
 
         self.refresh_bin_menus()
 
+    def create_menu_folders(self):
+
+        # Create menu folders
+
+        try:
+            os.makedirs(self.user_menu_path)
+            os.makedirs(self.project_menu_path)
+        except:
+            pass
+
     def refresh_bin_menus(self):
+        import flame
 
         # Delete all existing node menus
 
@@ -95,10 +112,16 @@ class BinMenus(object):
 
         print ('>>> Existing menus deleted <<<\n')
 
+        self.create_menu_folders()
+
         # Create menus for bin nodes
 
         self.create_bin_menus(self.user_bin_path, 'user', self.user_menu_path)
         self.create_bin_menus(self.project_bin_path, 'project', self.project_menu_path)
+
+        # Refresh python hooks
+
+        flame.execute_shortcut('Rescan Python Hooks')
 
         print ('>>> Menus updated <<<\n')
 
@@ -106,9 +129,7 @@ class BinMenus(object):
 
     def delete_existing_menus(self, menu_path):
 
-        for menu in os.listdir(menu_path):
-            path_to_delete = os.path.join(menu_path, menu)
-            os.remove(path_to_delete)
+        shutil.rmtree(menu_path)
 
     def create_bin_menus(self, bin_path, bin_type, menu_path):
 
@@ -129,7 +150,7 @@ class BinMenus(object):
             token_dict = {}
 
             token_dict['<BinNode>'] = node_name
-            token_dict['<ScriptVersion>'] = VERSION
+            token_dict['<ScriptVersion>'] = VERSION[1:]
             token_dict['<BinNodeSetupPath>'] = bin_path + '/_' + bin_type + '.' + node_name + '.batch'
             token_dict['<ScriptPath>'] = menu_path
             token_dict['<BinType>'] = bin_type[0].upper() + bin_type[1:]
@@ -151,6 +172,11 @@ class BinMenus(object):
             for line in template_lines:
                 print(line, file=out_file)
             out_file.close()
+
+def refresh_on_launch(project_name):
+
+    script = BinMenus(project_name)
+    script.refresh_bin_menus()
 
 def message_box(message):
 
@@ -202,7 +228,7 @@ def get_batch_custom_ui_actions():
                     'name': 'Create/Refresh Bin Menus',
                     'isVisible': user_bin_scope,
                     'execute': BinMenus,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 }
             ]
         },
@@ -213,11 +239,12 @@ def get_batch_custom_ui_actions():
                     'name': 'Create/Refresh Bin Menus',
                     'isVisible': project_bin_scope,
                     'execute': BinMenus,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 }
             ]
         }
     ]
 
-
+def app_initialized(project_name):
+    refresh_on_launch(project_name)
 
