@@ -1,10 +1,9 @@
 '''
 Script Name: Find and Replace
-Script Version: 1.0
+Script Version: 1.1
 Flame Version: 2019
-Written by: John Geehreng
 Creation Date: 01.01.19
-Update Date: 01.01.19
+Update Date: 12.07.21
 
 Description:
 
@@ -12,11 +11,32 @@ Description:
 '''
 
 from __future__ import print_function
+import re
 
 folder_name = "Renamers"
 action_name = "Find and Replace"
 
 # from PySide2 import QtWidgets, QtCore
+
+def replaceWildcards(string, pattern, replacement):
+    """major influence from the below:
+    https://stackoverflow.com/questions/65801340/wildcard-match-replace-and-or-multiple-string-wildcard-matching
+    """
+    
+    splitPattern = re.split(r'([*?])', pattern)
+
+    regex = ""
+
+    for regexPiece in splitPattern:
+        if regexPiece == "*":
+            regex += "\\S*"
+        elif regexPiece == "?":
+            regex += "\\S"
+        else:
+            regex += "{}".format(re.escape(regexPiece))
+
+    return re.sub(regex, replacement, string)
+
 
 def main_window(selection):
     from PySide2 import QtWidgets, QtCore
@@ -38,7 +58,7 @@ def main_window(selection):
             replace_with_me = str(replace_entry.text())
             print ('Replace With Me: ' + str(replace_with_me))
 
-            new_name = seq_name.replace(find_me,replace_with_me)
+            new_name = replaceWildcards(seq_name, find_me, replace_with_me)
             item.name = new_name
             print ('New Name: ' + str(new_name))
 
