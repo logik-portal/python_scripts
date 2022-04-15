@@ -1,10 +1,10 @@
 '''
 Script Name: SynthEyes Export
-Script Version: 2.2
-Flame Version: 2021.1
+Script Version: 2.4
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 10.27.19
-Update Date: 10.11.21
+Update Date: 03.21.22
 
 Custom Action Type: Flame Main Menu
 
@@ -14,6 +14,8 @@ Description:
 
     SynthEyes will open behind the Flame window
 
+Menu:
+
     Right-click on clip in Media Panel -> SynthEyes... -> Export to SynthEyes
 
 To install:
@@ -22,123 +24,53 @@ To install:
 
 Updates:
 
-v2.2 10.11.21
+    v2.4 03.21.22
 
-    Improved Flame version detection
+        Updated SyPy install path for Flame 2023/Python 3.9
 
-v2.1 09.05.21
+        Updated UI for Flame 2023
 
-    Script will now copy SyPy/SyPy3 into current Flame python folder if not already there first time script is run with new version of Flame.
-    For Flame 2022 and newer SyPy3 will be copied. For earlier versions SyPy will be copied along with a fix for sylevel.py which is contained
-    in sylevel.tar.
+        Updated jpeg export for Flame 2023
 
-    Version number in jpeg export preset is updated to match flame version. Prevents export preset version warning.
+        UI widgets moved to separate file
 
-    Updated config to xml
+    v2.3 03.15.22
 
-v2.0 06.01.21
+        Added path to install sypy on linux systems
 
-    Updated to be compatible with Flame 2022/Python 3.7
+    v2.2 10.11.21
 
-v1.1 06.08.20
+        Improved Flame version detection
 
-    Simplified clip exporting
+    v2.1 09.05.21
+
+        Script will now copy SyPy/SyPy3 into current Flame python folder if not already there first time script is run with new version of Flame.
+        For Flame 2022 and newer SyPy3 will be copied. For earlier versions SyPy will be copied along with a fix for sylevel.py which is contained
+        in sylevel.tar.
+
+        Version number in jpeg export preset is updated to match flame version. Prevents export preset version warning.
+
+        Updated config to xml
+
+    v2.0 06.01.21
+
+        Updated to be compatible with Flame 2022/Python 3.7
+
+    v1.1 06.08.20
+
+        Simplified clip exporting
 '''
 
-from __future__ import print_function
 from random import randint
 from subprocess import Popen, PIPE
 import xml.etree.ElementTree as ET
-import os, shutil, platform
-from PySide2 import QtWidgets, QtCore
+import os, platform
+from PySide2 import QtWidgets
+from flame_widgets_syntheyes_export import FlameMessageWindow, FlamePasswordWindow
 
-VERSION = 'v2.2'
+VERSION = 'v2.4'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/syntheyes_export'
-
-# UI Classes
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-
-    For different label looks set label_type as: 'normal', 'background', or 'outline'
-
-    To use:
-
-    label = FlameLabel('Label Name', 'normal', window)
-    """
-
-    def __init__(self, label_name, label_type, parent_window, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(110, 28)
-        self.setMaximumSize(110, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #393939; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'outline':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-
-class FlameLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Line Edit Widget
-
-    Main window should include this: window.setFocusPolicy(QtCore.Qt.StrongFocus)
-
-    To use:
-
-    line_edit = FlameLineEdit('Some text here', window)
-    """
-
-    def __init__(self, text, parent_window, *args, **kwargs):
-        super(FlameLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        # self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:focus {background-color: #474e58}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-
-    To use:
-
-    button = FlameButton('Button Name', do_when_pressed, window)
-    """
-
-    def __init__(self, button_name, do_when_pressed, parent_window, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(QtCore.QSize(110, 28))
-        self.setMaximumSize(QtCore.QSize(110, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(do_when_pressed)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
 
 # --------------------- #
 
@@ -163,7 +95,7 @@ class FlameToSynthEyes(object):
                            | |
                            |_|
  ''')
-        print ('>' * 20, 'syntheyes export %s' % VERSION, '<' * 20, '\n')
+        print ('>' * 20, f'syntheyes export {VERSION}', '<' * 20, '\n')
 
         self.clip = selection[0]
 
@@ -173,6 +105,10 @@ class FlameToSynthEyes(object):
         self.config_xml = os.path.join(self.config_path, 'config.xml')
 
         self.config()
+
+        # Check for sylevel file
+
+        self.sylevel_check()
 
         # Match export preset version with version of flame
 
@@ -213,7 +149,7 @@ class FlameToSynthEyes(object):
             for setting in root.iter('config'):
                 self.last_export_path = setting.find('last_export_path').text
 
-            print ('>>> config loaded <<<\n')
+            print ('--> config loaded\n')
 
         def create_config_file():
 
@@ -221,10 +157,10 @@ class FlameToSynthEyes(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder:<br>{self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('>>> config file does not exist, creating new config file <<<\n')
+                print ('--> config file does not exist, creating new config file\n')
 
                 config = """
 <settings>
@@ -251,10 +187,21 @@ class FlameToSynthEyes(object):
 
         self.flame_version = flame.get_version()
 
+        if 'pr' in self.flame_version:
+            self.flame_version = self.flame_version.rsplit('.pr', 1)[0]
+
         if len(self.flame_version) > 6:
             self.flame_version = self.flame_version[:6]
         self.flame_version = float(self.flame_version)
         print ('flame version:', self.flame_version, '\n')
+
+    def sylevel_check(self):
+
+        # Make sure sylevel.py file doesn't exist in script folder from interupted install
+
+        if 'sylevel.py' in os.listdir(SCRIPT_PATH):
+            os.remove(os.path.join(SCRIPT_PATH, 'sylevel.py'))
+            print ('--> sylevel file removed\n')
 
     def syntheyes_check(self):
         '''
@@ -264,166 +211,64 @@ class FlameToSynthEyes(object):
         '''
 
         if not os.path.isdir('/Applications/SynthEyes'):
-            return message_box('SynthEyes not found. Install SynthEyes before using this script.')
+            return FlameMessageWindow('Error', 'error', 'SynthEyes not found. Install SynthEyes before using this script.')
+
+        version = int(str(self.flame_version)[:4])
 
         try:
-            if self.flame_version >= 2022.0:
+            if version >= 2022:
                 import SyPy3
-                print ('>>> SyPy3 Found! <<<\n')
+                print ('--> SyPy3 Found!\n')
                 return True
             else:
                 import SyPy
-                print ('>>> SyPy Found! <<<\n')
+                print ('--> SyPy Found!\n')
                 return True
         except:
+            print ('--> SyPy not found\n')
             if platform.system() == 'Darwin':
-                print ('>>> SyPy not found <<<\n')
-                self.copy_sypy()
+                syntheyes_path = '/Applications/SynthEyes'
+                self.copy_sypy(syntheyes_path)
             else:
-                if self.flame_version >= 2022.0:
-                    message_box('Linux users must copy SynthEyes SyPy3 folder into:<br>/opt/Autodesk/python/FLAME_VERSION/lib/python3.7/site-packages')
-                else:
-                    message_box('Linux users must copy SynthEyes SyPy folder into:<br>/opt/Autodesk/python/FLAME_VERSION/lib/python2.7/site-packages')
+                syntheyes_path = '/opt/SynthEyes'
+                self.copy_sypy(syntheyes_path)
 
-    def copy_sypy(self):
+    def copy_sypy(self, syntheyes_path):
+        import flame
 
-        def ok():
-            import flame
+        system_password = str(FlamePasswordWindow('SynthEyes Export - Enter System Password', 'System password needed to install SynthEyes SyPY into Flame python folder.'))
 
-            temp_folder = '/opt/Autodesk/password_test_folder'
+        if system_password:
+            version = int(str(self.flame_version)[:4])
+            if version == 2023:
 
-            self.sudo_password = self.password_lineedit.text()
+                # Copy SyPy3 from SynthEyes folder to Flame python folder
 
-            p = Popen(['sudo', '-S', 'mkdir', temp_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
-            p.communicate(self.sudo_password + '\n')[1]
+                sypy_folder = os.path.join(syntheyes_path, 'SyPy3')
+                flame_sypy_folder = f'/opt/Autodesk/python/{flame.get_version()}/lib/python3.9/site-packages'
+                # print ('flame_sypy_folder:', flame_sypy_folder, '\n')
 
-            if os.path.isdir(temp_folder):
+                p = Popen(['sudo', '-S', 'cp', '-r', sypy_folder, flame_sypy_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
+                p.communicate(system_password + '\n')[1]
 
-                # Remove temp folder
+                print ('--> SyPy3 copied to Flame python folder\n')
 
-                p = Popen(['sudo', '-S', 'rmdir', temp_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
-                p.communicate(self.sudo_password + '\n')[1]
+            elif version == 2022:
 
-                self.password_window.close()
+                # Copy SyPy3 from SynthEyes folder to Flame python folder
 
-                # For versions of Flame 2022 and higher, copy SyPy3 to current Flame python folder.
-                # For earlier versions, copy SyPy to current Flame folder, then untar and move sylevel.py fix file
+                sypy_folder = os.path.join(syntheyes_path, 'SyPy3')
+                flame_sypy_folder = f'/opt/Autodesk/python/{flame.get_version()}/lib/python3.7/site-packages'
+                # print ('flame_sypy_folder:', flame_sypy_folder, '\n')
 
-                if self.flame_version >= 2022.0:
+                p = Popen(['sudo', '-S', 'cp', '-r', sypy_folder, flame_sypy_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
+                p.communicate(system_password + '\n')[1]
 
-                    # Copy SyPy3 from SynthEyes folder to Flame python folder
+                print ('--> SyPy3 copied to Flame python folder\n')
 
-                    sypy_folder = '/Applications/SynthEyes/SyPy3'
-                    flame_sypy_folder = '/opt/Autodesk/python/%s/lib/python3.7/site-packages' % flame.get_version()
-                    # print ('flame_sypy_folder:', flame_sypy_folder, '\n')
+            self.syntheyes_export()
 
-                    p = Popen(['sudo', '-S', 'cp', '-r', sypy_folder, flame_sypy_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
-                    p.communicate(self.sudo_password + '\n')[1]
-
-                    print ('>>> SyPy3 copied to Flame python folder <<<\n')
-
-                else:
-
-                    # Copy SyPy from SynthEyes folder to Flame python folder
-
-                    sypy_folder = '/Applications/SynthEyes/SyPy'
-                    flame_sypy_folder = '/opt/Autodesk/python/%s/lib/python2.7/site-packages' % flame.get_version()
-                    # print ('flame_sypy_folder:', flame_sypy_folder, '\n')
-
-                    p = Popen(['sudo', '-S', 'cp', '-r', sypy_folder, flame_sypy_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
-                    p.communicate(self.sudo_password + '\n')[1]
-
-                    # Uncompress sylevel tar file
-
-                    untar_command = 'tar -xf %s -C %s' % (os.path.join(SCRIPT_PATH, 'sylevel.tar'), SCRIPT_PATH)
-                    # print ('untar command:', untar_command)
-
-                    os.system(untar_command)
-
-                    # Replace sylevel.py in new Flame SyPy folder
-
-                    sylevel_source_path = os.path.join(SCRIPT_PATH, 'sylevel.py')
-                    sylevel_dest_path = os.path.join(flame_sypy_folder, 'SyPy', 'sylevel.py')
-
-                    p = Popen(['sudo', '-S', 'mv', sylevel_source_path, sylevel_dest_path], stdin=PIPE, stderr=PIPE, universal_newlines=True)
-                    p.communicate(self.sudo_password + '\n')[1]
-
-                    print ('>>> SyPy copied to Flame python folder <<<\n')
-
-                # Continue to export selected clip to SynthEyes
-
-                self.syntheyes_export()
-
-            else:
-                message_box('System Password Incorrect')
-                return
-
-        def cancel():
-
-            self.password_window.close()
-
-            print ('SyPy3 copy cancelled.\n')
-
-        self.password_window = QtWidgets.QWidget()
-        self.password_window.setMinimumSize(QtCore.QSize(300, 120))
-        self.password_window.setMaximumSize(QtCore.QSize(300, 120))
-        self.password_window.setWindowTitle('Enter System Password')
-        self.password_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.password_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.password_window.setFocusPolicy(QtCore.Qt.StrongFocus)
-        self.password_window.setStyleSheet('background-color: #272727')
-        self.password_window.setWindowModality(QtCore.Qt.WindowModal)
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.password_window.move((resolution.width() / 2) - (self.password_window.frameSize().width() / 2),
-                                  (resolution.height() / 2) - (self.password_window.frameSize().height() / 2))
-
-        #  Labels
-
-        self.password_label = FlameLabel('System Password', 'normal', self.password_window)
-        self.password_label.setMinimumWidth(150)
-
-        # LineEdits
-
-        self.password_lineedit = FlameLineEdit('', self.password_window)
-        self.password_lineedit.setMaximumWidth(150)
-        self.password_lineedit.setEchoMode(QtWidgets.QLineEdit.Password)
-
-        #  Buttons
-
-        self.password_ok_btn = FlameButton('Ok', ok, self.password_window)
-        self.password_cancel_btn = FlameButton('Cancel', cancel, self.password_window)
-
-        #------------------------------------#
-
-        #  Window Layout
-
-        hbox = QtWidgets.QHBoxLayout()
-
-        hbox.addWidget(self.password_cancel_btn)
-        hbox.addWidget(self.password_ok_btn)
-
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setVerticalSpacing(20)
-        gridbox.setHorizontalSpacing(20)
-
-        gridbox.addWidget(self.password_label, 1, 0)
-        gridbox.addWidget(self.password_lineedit, 1, 1)
-
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.addLayout(gridbox)
-        vbox.addLayout(hbox)
-
-        self.password_window.setLayout(vbox)
-
-        self.password_window.show()
-
-        if self.flame_version >= 2022.0:
-            message_box('<center>System password needed to copy SyPy3 from SynthEyes folder to Flame python folder')
-        else:
-            message_box('<center>System password needed to copy SyPy from SynthEyes folder to Flame python folder')
+        system_password = ''
 
     def update_export_preset(self):
         '''
@@ -443,9 +288,17 @@ class FlameToSynthEyes(object):
 
         flame_version = str(self.flame_version)[:4]
 
-        # Get export version for verion of flame being used. 2021 is version 10.
+        # Set export version for verion of flame being used
 
-        export_version = str(int(flame_version) - 2021 + 10)
+        if flame_version == '2021':
+            export_version = '10'
+        elif flame_version == '2022':
+            export_version = '11'
+        elif flame_version == '2023':
+            export_version = '11'
+        elif flame_version >= '2024':
+            FlameMessageWindow('Error', 'error', 'Newer version of script required for this version of Flame')
+            shit
 
         # If preset version if different than current export version then update xml
 
@@ -455,7 +308,7 @@ class FlameToSynthEyes(object):
 
             export_preset_xml_tree.write(self.export_preset)
 
-            print ('>>> export preset version updated <<<')
+            print ('--> export preset version updated')
 
     def syntheyes_export(self):
         import flame
@@ -476,17 +329,16 @@ class FlameToSynthEyes(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('>>> config file saved <<<\n')
+            print ('--> config file saved\n')
 
         def get_clip_info():
 
-            print ('>>> exporting clip:')
+            print ('--> exporting clip:')
 
             self.clip_name = str(self.clip.name)[1:-1]
             print ('    clip name:', self.clip_name)
 
-            self.clip_framerate = str(self.clip.frame_rate)[:-4]
-            self.clip_framerate = float(self.clip_framerate)
+            self.clip_framerate = str(self.clip.frame_rate).split(' ')[0]
             print ('    clip framerate:', self.clip_framerate)
 
             self.clip_ratio = float(self.clip.ratio)
@@ -557,12 +409,12 @@ class FlameToSynthEyes(object):
 
         # Select export folder
 
-        message_box('Select path to export plate for tracking')
+        FlameMessageWindow('Select Path', 'message', 'Select path to export plate for tracking in Syntheyes.')
 
         export_browse()
 
         if not os.path.isdir(self.export_path):
-            print ('>>> Export Cancelled - No folder selected <<<\n')
+            print ('--> Export Cancelled - No folder selected\n')
             print ('done.')
         else:
             # Save export path
@@ -585,30 +437,9 @@ class FlameToSynthEyes(object):
 
             open_syntheyes()
 
-            message_box('Shot exported - SynthEyes open behind Flame window')
+            FlameMessageWindow('Export Complete', 'message', 'SynthEyes open behind Flame window.')
 
             print ('done.\n')
-
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>', '<center>']
-
-    for code in code_list:
-        message = message.replace(code, '')
-
-    print ('>>> %s <<<\n' % message)
 
 def scope_clip(selection):
     import flame
@@ -628,7 +459,7 @@ def get_media_panel_custom_ui_actions():
                     'name': 'Export to SynthEyes',
                     'isVisible': scope_clip,
                     'execute': FlameToSynthEyes,
-                    'minimumVersion': '2021.1'
+                    'minimumVersion': '2022'
                 }
             ]
         }

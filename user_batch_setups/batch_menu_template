@@ -1,0 +1,98 @@
+'''
+Script Name: User Batch Setups - <BatchName>
+Script Version: <ScriptVersion>
+Flame Version: <MinFlameVersion>
+Written by: Michael Vaglienty
+Creation Date: 03.29.22
+Update Date: 04.13.22
+
+Custom Action Type: Batch
+
+Description:
+
+    Menu created by User Batch Setups script. Adds menu for batch setup to batch right-click menu.
+'''
+
+from flame_widgets_user_setups import FlameMessageWindow
+import os
+
+def add_batch(selection):
+    import flame
+
+    print ('>' * 20, 'user setup - <BatchName> - <ScriptVersion>', '<' * 20, '\n')
+
+    setup_path = '<SetupPath>'
+
+    if not os.path.exists(setup_path):
+        return FlameMessageWindow('User Batch Setups - Error','error', f'Batch setup not found: <BatchName><br><br>Batch path: {setup_path}')
+
+    # Get list of existing nodes in batch
+
+    batch_node_list = flame.batch.nodes
+
+    # Append bin node setup to batch
+
+    flame.batch.append_setup(setup_path)
+
+    # Create list of new nodes added to batch from bin node setup
+
+    nodes_to_move = [node for node in flame.batch.nodes if node not in batch_node_list]
+
+    return nodes_to_move
+
+def node_under_cursor(nodes_to_move):
+    import flame
+
+    # Get cursor position
+
+    drop_position = flame.batch.cursor_position
+
+    repo_node(nodes_to_move, drop_position)
+
+    print ('--> added batch setup: <BatchName>\n')
+
+    print ('done.\n')
+
+def repo_node(nodes_to_move, drop_position):
+
+    # Get position of first node from bin node setup
+
+    first_node = nodes_to_move[0]
+    first_node_pos_x = int(str(first_node.pos_x))
+    first_node_pos_y = int(str(first_node.pos_y))
+
+    # Repo first node to cursor position
+
+    first_node.pos_x = drop_position[0]
+    first_node.pos_y = drop_position[1]
+
+    # Reposition remainng nodes to cursor position relative to original position with first node
+
+    for node in nodes_to_move[1:]:
+        node.pos_x = int(str(first_node.pos_x)) - (first_node_pos_x - int(str(node.pos_x)))
+        node.pos_y = int(str(first_node.pos_y)) - (first_node_pos_y - int(str(node.pos_y)))
+
+    return first_node
+
+def scope_node(selection):
+    import flame
+
+    nodes_to_move = add_batch(selection)
+    node_under_cursor(nodes_to_move)
+
+
+def get_batch_custom_ui_actions():
+
+    return [
+        {
+            'name': 'User Batch Setups',
+            'actions': [
+                {
+                    'name': '<BatchName>',
+                    'execute': scope_node,
+                    'minimumVersion': '<MinFlameVersion>'
+                }
+            ]
+        }
+    ]
+

@@ -1,10 +1,10 @@
 '''
 Script Name: Menu Created by Create Media Panel Templates script
-Script Version: 3.0
+Script Version: 3.1
 Flame Version: 2021
-Written by: Michael Vaglienty - michael@slaytan.net
+Written by: Michael Vaglienty
 Creation Date: 05.01.19
-Update Date: 05.23.21
+Update Date: 03.07.22
 
 Custom Action Type: Media Panel
 '''
@@ -14,7 +14,7 @@ from __future__ import print_function
 def create_template(selection):
     import flame
 
-    print ('\n', '>' * 20, '<TemplateName> created', '<' * 20, '\n')
+    print ('\n>>> <TemplateName> created', '<<<\n')
 
     folder_dict = <FolderDict>
 

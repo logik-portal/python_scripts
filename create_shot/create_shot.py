@@ -1,48 +1,85 @@
 '''
 Script Name: Create Shot
-Script Version: 4.1
-Flame Version: 2021.2
+Script Version: 4.6
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 06.09.18
-Update Date: 08.28.21
+Update Date: 03.24.22
 
-Custom Action Type: Media Panel / Media Hub
+Custom Action Type: Media Panel / Media Hub / Timeline
 
 Description:
 
-    Create shot folders, batch groups, desktops, and system folders.
+    Create custom shot folders, batch groups, desktops, and system folders.
 
-    Structures of the shot folders, batch groups, desktops, and system folders can all be customized
-    in Create Shot Setup.
+    Structures of the shot folders, batch groups, reel groups, desktops, and system folders can all be customized
+    in Create Shot Setup. These can be saved as a preset that can either be applied globally across all
+    Flame projects or Flame projects individually.
 
-    Menus:
+Menus:
 
-        Flame Main Menu
+    Flame Main Menu:
 
-            Flame Main Menu -> pyFlame -> Create Shot Setup
+        Flame Main Menu -> pyFlame -> Create Shot Setup
 
-        Media Panel:
+    Media Panel:
 
-            Right-click anywhere in Media Panel -> Create Shot... -> Folders
-            Right-click on selected clips in Media Panel -> Create Shot... -> Custom Shots
-            Right-click on selected clips in Media Panel -> Create Shot... -> Clips to Shot - Shot Name
-            Right-click on selected clips in Media Panel -> Create Shot... -> Clips to Shot - Shot Name - All Clips / One Shot
-            Right-click on selected clips in Media Panel -> Create Shot... -> Clips to Shot - Clip Name
-            Right-click on selected clips in Media Panel -> Create Shot... -> Clips to Shot - Clip Name - All Clips / One Shot
+        Right-click anywhere in Media Panel -> Create Shot... -> Folders
+        Right-click on selected clips in Media Panel -> Create Shot... -> Clips to Shot
+        Right-click on selected clips in Media Panel -> Create Shot... -> Clips to Shot - All Clips / One Shot
+        Right-click on selected clips in Media Panel -> Create Shot... -> Custom Shots
 
-        Media Hub Files:
+    Media Hub Files:
 
-            Right-click anywhere in Media Hub Files -> Create Shot... -> Folders
-            Right-click on selected files in Media Hub Files -> Create Shot... -> Import to Shot - Shot Name
-            Right-click on selected files in Media Hub Files -> Create Shot... -> Import to Shot - Shot Name - All Clips / One Batch
-            Right-click on selected files in Media Hub Files -> Create Shot... -> Import to Shot - Clip Name
-            Right-click on selected files in Media Hub Files -> Create Shot... -> Import to Shot - Clip Name - All Clips / One Batch
+        Right-click anywhere in Media Hub Files -> Create Shot... -> Folders
+        Right-click on selected files in Media Hub Files -> Create Shot... -> Import to Shot
+        Right-click on selected files in Media Hub Files -> Create Shot... -> Import to Shot - All Clips / One Batch
+
+    Timeline:
+
+        Right-click on selected clips -> Create Shot... -> Clips to Shot
+        Right-click on selected clips -> Create Shot... -> Clips to Shot w/Timeline FX
+        Right-click on selected clips -> Create Shot... -> Custom Shots
 
 To install:
 
     Copy script into /opt/Autodesk/shared/python/create_shot
 
 Updates:
+
+    v4.6 03.24.22
+
+        Moved UI widgets to external file
+
+    v4.5 02.27.22
+
+        Updated UI for Flame 2023
+
+    v4.4 02.09.22
+
+        Shots can be created from timeline - clips will be extracted with or without timeline fx
+
+    v4.3 02.05.22
+
+        Added ability to export plates when creating file system shot folders
+
+        Fixed issues with render/write nodes not rendering properly when batch start frame was set to anything other than 1
+
+        Removed menus to create shots from either shot name or clip name. This can now be set in the preset options.
+
+    v4.2 01.06.22
+
+        Added new window to create, duplicate, edit, delete presets
+
+        Render/Write file nodes added from batch templates now get render range, timecode, and shot name from shot clip
+
+        Render nodes now get Tape Name from clip
+
+        Updated getting Flame version
+
+        Added project nickname token to write node setup token menus
+
+        Write file compression button properly updates now when reloading write node setup window
 
     v4.1 08.19.21
 
@@ -102,666 +139,15 @@ Updates:
         Code cleanup
 '''
 
-from __future__ import print_function
-import os, re, ast, webbrowser
+import os, re, ast, shutil, webbrowser, platform, subprocess
 from functools import partial
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
+from flame_widgets_create_shot import FlameButton, FlameLabel, FlameLineEdit, FlamePushButton, FlamePushButtonMenu, FlameTokenPushButton, FlameSlider, FlameWindow, FlameMessageWindow
 
-VERSION = 'v4.1'
+VERSION = 'v4.6'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/create_shot'
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-
-    For different label looks set label_type as: 'normal', 'background', or 'outline'
-
-    To use:
-
-    label = FlameLabel('Label Name', 'normal', window)
-    """
-
-    def __init__(self, label_name, label_type, parent_window, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(155, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #393939; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'outline':
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-
-class FlameLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Line Edit Widget
-
-    Main window should include this: window.setFocusPolicy(QtCore.Qt.StrongFocus)
-
-    To use:
-
-    line_edit = FlameLineEdit('Some text here', window)
-    """
-
-    def __init__(self, text, parent_window, *args, **kwargs):
-        super(FlameLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        # self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:focus {background-color: #474e58}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlameLineEditFileBrowse(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Clickable Line Edit Widget with File Browser
-
-    To use:
-
-    lineedit = FlameLineEditFileBrowse('some_path', 'Python (*.py)', window)
-
-    file_path: Path browser will open to. If set to root folder (/), browser will open to user home directory
-    filter_type: Type of file browser will filter_type for. If set to 'dir', browser will select directory
-    """
-
-    clicked = QtCore.Signal()
-
-    def __init__(self, file_path, filter_type, parent, *args, **kwargs):
-        super(FlameLineEditFileBrowse, self).__init__(*args, **kwargs)
-
-        self.filter_type = filter_type
-        self.file_path = file_path
-
-        self.setText(file_path)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setReadOnly(True)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(self.file_browse)
-        self.setStyleSheet('QLineEdit {color: #898989; background-color: #373e47; font: 14px "Discreet"}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-
-    def mousePressEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            self.setStyleSheet('QLineEdit {color: #bbbbbb; background-color: #474e58; font: 14px "Discreet"}'
-                               'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-            self.clicked.emit()
-            self.setStyleSheet('QLineEdit {color: #898989; background-color: #373e47; font: 14px "Discreet"}'
-                               'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-        else:
-            super().mousePressEvent(event)
-
-    def file_browse(self):
-        from PySide2 import QtWidgets
-
-        file_browser = QtWidgets.QFileDialog()
-
-        # If no path go to user home directory
-
-        if self.file_path == '/':
-            self.file_path = os.path.expanduser("~")
-        if os.path.isfile(self.file_path):
-            self.file_path = self.file_path.rsplit('/', 1)[0]
-
-        file_browser.setDirectory(self.file_path)
-
-        # If filter_type set to dir, open Directory Browser, if anything else, open File Browser
-
-        if self.filter_type == 'dir':
-            file_browser.setFileMode(QtWidgets.QFileDialog.Directory)
-            if file_browser.exec_():
-                self.setText(file_browser.selectedFiles()[0])
-        else:
-            file_browser.setFileMode(QtWidgets.QFileDialog.ExistingFile) # Change to ExistingFiles to capture many files
-            file_browser.setNameFilter(self.filter_type)
-            if file_browser.exec_():
-                self.setText(file_browser.selectedFiles()[0])
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-
-    To use:
-
-    button = FlameButton('Button Name', do_this_when_pressed, window)
-    """
-
-    def __init__(self, button_name, do_when_pressed, parent_window, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(QtCore.QSize(155, 28))
-        self.setMaximumSize(QtCore.QSize(155, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(do_when_pressed)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-
-    To use:
-
-    pushbutton = FlamePushButton(' Button Name', bool, window)
-    """
-
-    def __init__(self, button_name, button_checked, parent_window, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setCheckable(True)
-        self.setChecked(button_checked)
-        self.setMinimumSize(155, 28)
-        self.setMaximumSize(155, 28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlameTokenPushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Token Push Button Widget
-
-    To use:
-
-    token_dict = {'Token 1': '<Token1>', 'Token2': '<Token2>'}
-    token_push_button = FlameTokenPushButton('Add Token', token_dict, token_dest, window)
-
-    token_dict: Key in dictionary is what will show in button menu.
-                Value in dictionary is what will be applied to the button destination
-    token_dest: Where the Value of the item selected will be applied such as a LineEdit
-    """
-
-    def __init__(self, button_name, token_dict, token_dest, parent, *args, **kwargs):
-        super(FlameTokenPushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(150)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #6a6a6a}')
-
-        def token_action_menu():
-
-            def insert_token(token):
-                for key, value in token_dict.items():
-                    if key == token:
-                        token_name = value
-                        token_dest.insert(token_name)
-
-            for key, value in token_dict.items():
-                token_menu.addAction(key, partial(insert_token, key))
-
-        token_menu = QtWidgets.QMenu(parent)
-        token_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        token_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-        self.setMenu(token_menu)
-
-        token_action_menu()
-
-class FlamePushButtonMenu(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Menu Push Button Widget
-
-    To use:
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu('push_button_name', push_button_menu_options, window)
-
-    or
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu(push_button_menu_options[0], push_button_menu_options, window)
-    """
-
-    def __init__(self, button_name, menu_options, parent_window, *args, **kwargs):
-        super(FlamePushButtonMenu, self).__init__(*args, **kwargs)
-        from functools import partial
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        def create_menu(option):
-            self.setText(option)
-
-        pushbutton_menu = QtWidgets.QMenu(parent_window)
-        pushbutton_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        pushbutton_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-        for option in menu_options:
-            pushbutton_menu.addAction(option, partial(create_menu, option))
-
-        self.setMenu(pushbutton_menu)
-
-class CustomSpinBox(QtWidgets.QLineEdit):
-
-    IntSpinBox = 0
-    DoubleSpinBox = 1
-
-    def __init__(self, spinbox_type, value, parent=None):
-
-        super(CustomSpinBox, self).__init__(parent)
-
-        if spinbox_type == CustomSpinBox.IntSpinBox:
-            self.setValidator(QtGui.QIntValidator(parent=self))
-        else:
-            self.setValidator(QtGui.QDoubleValidator(parent=self))
-
-        self.spinbox_type = spinbox_type
-        self.min = None
-        self.max = None
-        self.steps = 1
-        self.value_at_press = None
-        self.pos_at_press = None
-
-        self.setValue(value)
-        self.setReadOnly(True)
-        self.textChanged.connect(self.value_changed)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-        self.clearFocus()
-
-    def calculator(self):
-        from PySide2 import QtCore, QtWidgets, QtGui
-        from functools import partial
-
-        def clear():
-            calc_lineedit.setText('')
-
-        def button_press(key):
-
-            if self.clean_line == True:
-                calc_lineedit.setText('')
-
-            calc_lineedit.insert(key)
-
-            self.clean_line = False
-
-        def plus_minus():
-
-            if calc_lineedit.text():
-                calc_lineedit.setText(str(float(calc_lineedit.text()) * -1))
-
-        def add_sub(key):
-
-            if calc_lineedit.text() == '':
-                calc_lineedit.setText('0')
-
-            if '**' not in calc_lineedit.text():
-                try:
-                    calc_num = eval(calc_lineedit.text().lstrip('0'))
-
-                    calc_lineedit.setText(str(calc_num))
-
-                    calc_num = float(calc_lineedit.text())
-
-                    if calc_num == 0:
-                        calc_num = 1
-                    if key == 'add':
-                        self.setValue(float(self.text()) + float(calc_num))
-                    else:
-                        self.setValue(float(self.text()) - float(calc_num))
-
-                    self.clean_line = True
-                except:
-                    pass
-
-        def enter():
-
-            if self.clean_line == True:
-                return calc_window.close()
-
-            if calc_lineedit.text():
-                try:
-
-                    # If only single number set slider value to that number
-
-                    self.setValue(float(calc_lineedit.text()))
-                except:
-
-                    # Do math
-
-                    new_value = calculate_entry()
-                    self.setValue(float(new_value))
-
-            close_calc()
-
-        def equals():
-
-            if calc_lineedit.text() == '':
-                calc_lineedit.setText('0')
-
-            if calc_lineedit.text() != '0':
-
-                calc_line = calc_lineedit.text().lstrip('0')
-            else:
-                calc_line = calc_lineedit.text()
-
-            if '**' not in calc_lineedit.text():
-                try:
-                    calc = eval(calc_line)
-                except:
-                    calc = 0
-
-                calc_lineedit.setText(str(calc))
-            else:
-                calc_lineedit.setText('1')
-
-        def calculate_entry():
-
-            calc_line = calc_lineedit.text().lstrip('0')
-
-            if '**' not in calc_lineedit.text():
-                try:
-                    if calc_line.startswith('+'):
-                        calc = float(self.text()) + eval(calc_line[-1:])
-                    elif calc_line.startswith('-'):
-                        calc = float(self.text()) - eval(calc_line[-1:])
-                    elif calc_line.startswith('*'):
-                        calc = float(self.text()) * eval(calc_line[-1:])
-                    elif calc_line.startswith('/'):
-                        calc = float(self.text()) / eval(calc_line[-1:])
-                    else:
-                        calc = eval(calc_line)
-                except:
-                    calc = 0
-            else:
-                calc = 1
-
-            calc_lineedit.setText(str(float(calc)))
-
-            return calc
-
-        def close_calc():
-            calc_window.close()
-            self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-        def revert_color():
-            self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-        calc_version = '1.1'
-        self.clean_line = False
-
-        calc_window = QtWidgets.QWidget()
-        calc_window.setMinimumSize(QtCore.QSize(210, 280))
-        calc_window.setMaximumSize(QtCore.QSize(210, 280))
-        calc_window.setWindowTitle('pyFlame Calc %s' % calc_version)
-        calc_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.Popup)
-        calc_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        calc_window.destroyed.connect(revert_color)
-        calc_window.move(QtGui.QCursor.pos().x() - 110, QtGui.QCursor.pos().y() - 290)
-        calc_window.setStyleSheet('background-color: #282828')
-
-        # Labels
-
-        calc_label = QtWidgets.QLabel('Calculator', calc_window)
-        calc_label.setAlignment(QtCore.Qt.AlignCenter)
-        calc_label.setMinimumHeight(28)
-        calc_label.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-
-        #  LineEdit
-
-        calc_lineedit = QtWidgets.QLineEdit('', calc_window)
-        calc_lineedit.setMinimumHeight(28)
-        calc_lineedit.setFocus()
-        calc_lineedit.returnPressed.connect(enter)
-        calc_lineedit.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}')
-
-        # Limit characters that can be entered into lineedit
-
-        regex = QtCore.QRegExp('[0-9_,=,/,*,+,\-,.]+')
-        validator = QtGui.QRegExpValidator(regex)
-        calc_lineedit.setValidator(validator)
-
-        # Buttons
-
-        def calc_null():
-            # For blank button - this does nothing
-            pass
-
-        class FlameButton(QtWidgets.QPushButton):
-            """
-            Custom Qt Flame Button Widget
-            """
-
-            def __init__(self, button_name, size_x, size_y, connect, parent, *args, **kwargs):
-                super(FlameButton, self).__init__(*args, **kwargs)
-
-                self.setText(button_name)
-                self.setParent(parent)
-                self.setMinimumSize(size_x, size_y)
-                self.setMaximumSize(size_x, size_y)
-                self.setFocusPolicy(QtCore.Qt.NoFocus)
-                self.clicked.connect(connect)
-                self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                   'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                                   'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        blank_btn = FlameButton('', 40, 28, calc_null, calc_window)
-        blank_btn.setDisabled(True)
-        plus_minus_btn = FlameButton('+/-', 40, 28, plus_minus, calc_window)
-        plus_minus_btn.setStyleSheet('color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"')
-        add_btn = FlameButton('Add', 40, 28, (partial(add_sub, 'add')), calc_window)
-        sub_btn = FlameButton('Sub', 40, 28, (partial(add_sub, 'sub')), calc_window)
-
-        #  --------------------------------------- #
-
-        clear_btn = FlameButton('C', 40, 28, clear, calc_window)
-        equal_btn = FlameButton('=', 40, 28, equals, calc_window)
-        div_btn = FlameButton('/', 40, 28, (partial(button_press, '/')), calc_window)
-        mult_btn = FlameButton('/', 40, 28, (partial(button_press, '*')), calc_window)
-
-        #  --------------------------------------- #
-
-        _7_btn = FlameButton('7', 40, 28, (partial(button_press, '7')), calc_window)
-        _8_btn = FlameButton('8', 40, 28, (partial(button_press, '8')), calc_window)
-        _9_btn = FlameButton('9', 40, 28, (partial(button_press, '9')), calc_window)
-        minus_btn = FlameButton('-', 40, 28, (partial(button_press, '-')), calc_window)
-
-        #  --------------------------------------- #
-
-        _4_btn = FlameButton('4', 40, 28, (partial(button_press, '4')), calc_window)
-        _5_btn = FlameButton('5', 40, 28, (partial(button_press, '5')), calc_window)
-        _6_btn = FlameButton('6', 40, 28, (partial(button_press, '6')), calc_window)
-        plus_btn = FlameButton('+', 40, 28, (partial(button_press, '+')), calc_window)
-
-        #  --------------------------------------- #
-
-        _1_btn = FlameButton('1', 40, 28, (partial(button_press, '1')), calc_window)
-        _2_btn = FlameButton('2', 40, 28, (partial(button_press, '2')), calc_window)
-        _3_btn = FlameButton('3', 40, 28, (partial(button_press, '3')), calc_window)
-        enter_btn = FlameButton('Enter', 40, 61, enter, calc_window)
-
-        #  --------------------------------------- #
-
-        _0_btn = FlameButton('0', 80, 28, (partial(button_press, '0')), calc_window)
-        point_btn = FlameButton('.', 40, 28, (partial(button_press, '.')), calc_window)
-
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setVerticalSpacing(5)
-        gridbox.setHorizontalSpacing(5)
-
-        gridbox.addWidget(calc_label, 0, 0, 1, 4)
-
-        gridbox.addWidget(calc_lineedit, 1, 0, 1, 4)
-
-        gridbox.addWidget(blank_btn, 2, 0)
-        gridbox.addWidget(plus_minus_btn, 2, 1)
-        gridbox.addWidget(add_btn, 2, 2)
-        gridbox.addWidget(sub_btn, 2, 3)
-
-        gridbox.addWidget(clear_btn, 3, 0)
-        gridbox.addWidget(equal_btn, 3, 1)
-        gridbox.addWidget(div_btn, 3, 2)
-        gridbox.addWidget(mult_btn, 3, 3)
-
-        gridbox.addWidget(_7_btn, 4, 0)
-        gridbox.addWidget(_8_btn, 4, 1)
-        gridbox.addWidget(_9_btn, 4, 2)
-        gridbox.addWidget(minus_btn, 4, 3)
-
-        gridbox.addWidget(_4_btn, 5, 0)
-        gridbox.addWidget(_5_btn, 5, 1)
-        gridbox.addWidget(_6_btn, 5, 2)
-        gridbox.addWidget(plus_btn, 5, 3)
-
-        gridbox.addWidget(_1_btn, 6, 0)
-        gridbox.addWidget(_2_btn, 6, 1)
-        gridbox.addWidget(_3_btn, 6, 2)
-        gridbox.addWidget(enter_btn, 6, 3, 2, 1)
-
-        gridbox.addWidget(_0_btn, 7, 0, 1, 2)
-        gridbox.addWidget(point_btn, 7, 2)
-
-        calc_window.setLayout(gridbox)
-
-        calc_window.show()
-
-    def value_changed(self):
-
-        # If value is greater or less than min/max values set values to min/max
-
-        if int(self.value()) < self.min:
-            self.setText(str(self.min))
-        if int(self.value()) > self.max:
-            self.setText(str(self.max))
-
-    def mousePressEvent(self, event):
-        from PySide2 import QtGui
-
-        if event.buttons() == QtCore.Qt.LeftButton:
-            self.value_at_press = self.value()
-            self.pos_at_press = event.pos()
-            self.setCursor(QtGui.QCursor(QtCore.Qt.SizeHorCursor))
-            self.setStyleSheet('color: #d9d9d9; background-color: #474e58; selection-color: #d9d9d9; selection-background-color: #474e58; font: 14pt "Discreet"')
-
-    def mouseReleaseEvent(self, event):
-        from PySide2 import QtGui
-
-        if event.button() == QtCore.Qt.LeftButton:
-
-            # Open calculator if button is released within 10 pixels of button click
-
-            if event.pos().x() in range((self.pos_at_press.x() - 10), (self.pos_at_press.x() + 10)) and event.pos().y() in range((self.pos_at_press.y() - 10), (self.pos_at_press.y() + 10)):
-                self.calculator()
-            else:
-                self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14pt "Discreet"')
-
-            self.value_at_press = None
-            self.pos_at_press = None
-            self.setCursor(QtGui.QCursor(QtCore.Qt.IBeamCursor))
-            return
-
-        super(CustomSpinBox, self).mouseReleaseEvent(event)
-
-    def mouseMoveEvent(self, event):
-
-        if event.buttons() != QtCore.Qt.LeftButton:
-            return
-
-        if self.pos_at_press is None:
-            return
-
-        steps_mult = self.getStepsMultiplier(event)
-
-        delta = event.pos().x() - self.pos_at_press.x()
-        delta /= 20  # Make movement less sensitive.
-        delta *= self.steps * steps_mult
-
-        value = self.value_at_press + delta
-        self.setValue(value)
-
-        super(CustomSpinBox, self).mouseMoveEvent(event)
-
-    def getStepsMultiplier(self, event):
-
-        steps_mult = 1
-
-        if event.modifiers() == QtCore.Qt.CTRL:
-            steps_mult = 10
-        elif event.modifiers() == QtCore.Qt.SHIFT:
-            steps_mult = 0.10
-
-        return steps_mult
-
-    def setMinimum(self, value):
-
-        self.min = value
-
-    def setMaximum(self, value):
-
-        self.max = value
-
-    def setSteps(self, steps):
-
-        if self.spinbox_type == CustomSpinBox.IntSpinBox:
-            self.steps = max(steps, 1)
-        else:
-            self.steps = steps
-
-    def value(self):
-
-        if self.spinbox_type == CustomSpinBox.IntSpinBox:
-            return int(self.text())
-        else:
-            return float(self.text())
-
-    def setValue(self, value):
-
-        if self.min is not None:
-            value = max(value, self.min)
-
-        if self.max is not None:
-            value = min(value, self.max)
-
-        if self.spinbox_type == CustomSpinBox.IntSpinBox:
-            self.setText(str(int(value)))
-        else:
-            # Keep float values to two decimal places
-
-            value_string = str(float(value))
-
-            if len(value_string.rsplit('.', 1)[1]) < 2:
-                value_string = value_string + '0'
-
-            if len(value_string.rsplit('.', 1)[1]) > 2:
-                value_string = value_string[:-1]
-
-            self.setText(value_string)
 
 # ------------------------------------- #
 
@@ -771,15 +157,15 @@ class CreateShotFolders(object):
         import flame
 
         print ('''
-   _____                _          _____ _           _
-  / ____|              | |        / ____| |         | |
- | |     _ __ ___  __ _| |_ ___  | (___ | |__   ___ | |_
- | |    | '__/ _ \/ _` | __/ _ \  \___ \| '_ \ / _ \| __|
- | |____| | |  __/ (_| | ||  __/  ____) | | | | (_) | |_
-  \_____|_|  \___|\__,_|\__\___| |_____/|_| |_|\___/ \__|
- ''')
+  _____                _         _____ _           _
+ / ____|              | |       / ____| |         | |
+| |     _ __ ___  __ _| |_ ___ | (___ | |__   ___ | |_
+| |    | '__/ _ \/ _` | __/ _ \ \___ \| '_ \ / _ \| __|
+| |____| | |  __/ (_| | ||  __/ ____) | | | | (_) | |_
+ \_____|_|  \___|\__,_|\__\___||_____/|_| |_|\___/ \__|
+        ''')
 
-        print ('>' * 20, 'create shot %s' % VERSION, '<' * 20, '\n')
+        print ('>' * 19, f'create shot {VERSION}', '<' * 19, '\n')
 
         self.selection = selection
 
@@ -787,10 +173,14 @@ class CreateShotFolders(object):
 
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
         self.config_xml = os.path.join(self.config_path, 'config.xml')
+        self.preset_path = os.path.join(self.config_path, 'preset')
+        self.project_config_path = os.path.join(self.config_path, 'project')
 
         # Load config file
 
         self.config()
+
+        print ('--> config loaded \n')
 
         # Get flame variables
 
@@ -800,6 +190,7 @@ class CreateShotFolders(object):
 
         self.project_name = flame.projects.current_project.name
         self.project_nick_name = flame.projects.current_project.nickname
+        self.flame_prj_name = self.project_name # Needed for preset selector window
 
         # Get flame version
 
@@ -807,8 +198,9 @@ class CreateShotFolders(object):
 
         if 'pr' in self.flame_version:
             self.flame_version = self.flame_version.rsplit('.pr', 1)[0]
-        if self.flame_version.count('.') > 1:
-            self.flame_version = self.flame_version.rsplit('.', 1)[0]
+
+        if len(self.flame_version) > 6:
+            self.flame_version = self.flame_version[:6]
         self.flame_version = float(self.flame_version)
         print ('flame_version:', self.flame_version, '\n')
 
@@ -824,6 +216,11 @@ class CreateShotFolders(object):
             xml_tree = ET.parse(self.config_xml)
             root = xml_tree.getroot()
 
+            # Get global setting
+
+            for setting in root.iter('global_setting'):
+                self.global_default = setting.find('global_default').text
+
             # Get UI settings
 
             for setting in root.iter('create_shot_ui_settings'):
@@ -836,43 +233,7 @@ class CreateShotFolders(object):
                 self.create_custom_batch_groups = ast.literal_eval(setting.find('create_batch_groups').text)
                 self.create_custom_desktops = ast.literal_eval(setting.find('create_desktops').text)
                 self.create_custom_system_folders = ast.literal_eval(setting.find('create_system_folders').text)
-
-            # Get Setup settings
-
-            for setup_setting in root.iter('setup'):
-                self.folder_dict = ast.literal_eval(setup_setting.find('shot_folders').text)
-                self.file_system_folder_dict = ast.literal_eval(setup_setting.find('file_system_folders').text)
-                self.schematic_reel_dict = ast.literal_eval(setup_setting.find('schematic_reels').text)
-                self.shelf_reel_dict = ast.literal_eval(setup_setting.find('shelf_reels').text)
-                self.reel_group_dict = ast.literal_eval(setup_setting.find('reel_group_reels').text)
-
-                self.add_reel_group = ast.literal_eval(setup_setting.find('add_reel_group').text)
-                self.add_render_node = ast.literal_eval(setup_setting.find('add_render_node').text)
-                self.add_write_file_node = ast.literal_eval(setup_setting.find('add_write_node').text)
-
-                self.write_file_media_path = setup_setting.find('write_file_media_path').text
-                self.write_file_pattern = setup_setting.find('write_file_pattern').text
-                self.write_file_create_open_clip = ast.literal_eval(setup_setting.find('write_file_create_open_clip').text)
-                self.write_file_include_setup = ast.literal_eval(setup_setting.find('write_file_include_setup').text)
-                self.write_file_create_open_clip_value = setup_setting.find('write_file_create_open_clip_value').text
-                self.write_file_include_setup_value = setup_setting.find('write_file_include_setup_value').text
-                self.write_file_image_format = setup_setting.find('write_file_image_format').text
-                self.write_file_compression = setup_setting.find('write_file_compression').text
-                self.write_file_padding = setup_setting.find('write_file_padding').text
-                self.write_file_frame_index = setup_setting.find('write_file_frame_index').text
-
-                self.create_shot_type_folders = ast.literal_eval(setup_setting.find('create_shot_type_folders').text)
-                self.create_shot_type_batch_group = ast.literal_eval(setup_setting.find('create_shot_type_batch_group').text)
-                self.create_shot_type_desktop = ast.literal_eval(setup_setting.find('create_shot_type_desktop').text)
-                self.create_shot_type_system_folders = ast.literal_eval(setup_setting.find('create_shot_type_system_folders').text)
-                self.system_shot_folders_path = setup_setting.find('system_shot_folders_path').text
-                self.clip_dest_folder = setup_setting.find('clip_destination_folder').text
-                self.clip_dest_reel = setup_setting.find('clip_destination_reel').text
-                self.apply_batch_template = ast.literal_eval(setup_setting.find('setup_batch_template').text)
-                self.batch_template_path = setup_setting.find('setup_batch_template_path').text
-                self.batch_group_dest = setup_setting.find('setup_batch_group_dest').text
-                self.batch_start_frame = int(setup_setting.find('setup_batch_start_frame').text)
-                self.batch_additional_naming = setup_setting.find('setup_batch_additional_naming').text
+                self.reveal_in_finder = ast.literal_eval(setting.find('reveal_in_finder').text)
 
             # Settings for Custom Shot from Selected clips UI
 
@@ -884,6 +245,9 @@ class CreateShotFolders(object):
                 self.custom_batch_group = ast.literal_eval(setup_setting.find('custom_batch_group').text)
                 self.custom_desktop = ast.literal_eval(setup_setting.find('custom_desktop').text)
                 self.custom_system_folders = ast.literal_eval(setup_setting.find('custom_system_folders').text)
+                self.custom_export_plates = ast.literal_eval(setup_setting.find('custom_export_plates').text)
+                self.custom_export_preset = setup_setting.find('custom_export_preset').text
+                self.custom_foreground_export = ast.literal_eval(setup_setting.find('custom_foreground_export').text)
                 self.custom_system_folders_path = setup_setting.find('custom_system_folders_path').text
                 self.custom_apply_batch_template = ast.literal_eval(setup_setting.find('custom_apply_batch_template').text)
                 self.custom_batch_template_path = setup_setting.find('custom_batch_template_path').text
@@ -891,27 +255,23 @@ class CreateShotFolders(object):
                 self.custom_batch_start_frame = int(setup_setting.find('custom_batch_start_frame').text)
                 self.custom_batch_additional_naming = setup_setting.find('custom_batch_additional_naming').text
 
-            # Convert reel dictionaries to lists
-
-            self.schematic_reels = self.convert_reel_dict(self.schematic_reel_dict)
-            self.shelf_reels = self.convert_reel_dict(self.shelf_reel_dict)
-            self.reel_group = self.convert_reel_dict(self.reel_group_dict)
-
-            print ('>>> config loaded <<<\n')
-
         def create_config_file():
 
             if not os.path.isdir(self.config_path):
                 try:
-                    os.makedirs(self.config_path)
+                    os.makedirs(self.preset_path)
+                    os.makedirs(self.project_config_path)
                 except:
-                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder:<br>{self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('>>> config file does not exist, creating new config file <<<')
+                print ('--> config file does not exist, creating new config file \n')
 
                 config = """
 <settings>
+    <global_setting>
+        <global_default></global_default>
+    </global_setting>
     <create_shot_ui_settings>
         <shot_naming>PYT_&lt;ShotNum####&gt;</shot_naming>
         <number_of_shots>10</number_of_shots>
@@ -921,39 +281,8 @@ class CreateShotFolders(object):
         <create_batch_groups>False</create_batch_groups>
         <create_desktops>False</create_desktops>
         <create_system_folders>False</create_system_folders>
+        <reveal_in_finder>False</reveal_in_finder>
     </create_shot_ui_settings>
-    <setup>
-        <shot_folders>{'Shot_Folder': {'Elements': {}, 'Plates': {}, 'Ref': {}, 'Renders': {}}}</shot_folders>
-        <file_system_folders>{'Shot_Folder': {'Elements': {}, 'Plates': {}, 'Ref': {}, 'Renders': {}}}</file_system_folders>
-        <schematic_reels>{'Schematic Reels': {'Plates': {}, 'PreRenders': {}, 'Elements': {}, 'Ref': {}}}</schematic_reels>
-        <shelf_reels>{'Shelf Reels': {'Batch Renders': {}}}</shelf_reels>
-        <reel_group_reels>{'Reels': {'Reel 1': {}, 'Reel 2': {}, 'Reel 3': {}, 'Reel 4': {}}}</reel_group_reels>
-        <add_reel_group>True</add_reel_group>
-        <add_render_node>True</add_render_node>
-        <add_write_node>False</add_write_node>
-        <write_file_media_path>/opt/Autodesk</write_file_media_path>
-        <write_file_pattern>&lt;name&gt;</write_file_pattern>
-        <write_file_create_open_clip>True</write_file_create_open_clip>
-        <write_file_include_setup>True</write_file_include_setup>
-        <write_file_create_open_clip_value>&lt;name&gt;</write_file_create_open_clip_value>
-        <write_file_include_setup_value>&lt;name&gt;</write_file_include_setup_value>
-        <write_file_image_format>Dpx 10-bit</write_file_image_format>
-        <write_file_compression>Uncompressed</write_file_compression>
-        <write_file_padding>4</write_file_padding>
-        <write_file_frame_index>Use Start Frame</write_file_frame_index>
-        <create_shot_type_folders>True</create_shot_type_folders>
-        <create_shot_type_batch_group>False</create_shot_type_batch_group>
-        <create_shot_type_desktop>False</create_shot_type_desktop>
-        <create_shot_type_system_folders>False</create_shot_type_system_folders>
-        <system_shot_folders_path>/opt/Autodesk</system_shot_folders_path>
-        <clip_destination_folder>Plates</clip_destination_folder>
-        <clip_destination_reel>Plates</clip_destination_reel>
-        <setup_batch_template>False</setup_batch_template>
-        <setup_batch_template_path>/opt/Autodesk</setup_batch_template_path>
-        <setup_batch_group_dest>Desktop</setup_batch_group_dest>
-        <setup_batch_start_frame>1</setup_batch_start_frame>
-        <setup_batch_additional_naming>_comp</setup_batch_additional_naming>
-    </setup>
     <custom_ui>
         <all_clips>False</all_clips>
         <shot_name>True</shot_name>
@@ -962,6 +291,9 @@ class CreateShotFolders(object):
         <custom_batch_group>False</custom_batch_group>
         <custom_desktop>False</custom_desktop>
         <custom_system_folders>False</custom_system_folders>
+        <custom_export_plates>False</custom_export_plates>
+        <custom_export_preset>Select Preset</custom_export_preset>
+        <custom_foreground_export>False</custom_foreground_export>
         <custom_system_folders_path>/opt/Autodesk</custom_system_folders_path>
         <custom_apply_batch_template>False</custom_apply_batch_template>
         <custom_batch_template_path>/opt/Autodesk</custom_batch_template_path>
@@ -983,6 +315,441 @@ class CreateShotFolders(object):
                 get_config_values()
 
     # ------------------------------------- #
+    # Preset Selector
+
+    def load_preset(self, preset_path):
+
+        print ('Loading preset:\n')
+
+        print ('    preset_path:', preset_path, '\n')
+
+        # Load settings from preset file
+
+        xml_tree = ET.parse(preset_path)
+        root = xml_tree.getroot()
+
+        # Assign values from preset file to variables
+
+        for setting in root.iter('create_shot_preset'):
+            self.preset_name = setting.find('preset_name').text
+            self.shot_name_from = setting.find('shot_name_from').text
+
+            self.folder_dict = ast.literal_eval(setting.find('shot_folders').text)
+            self.file_system_folder_dict = ast.literal_eval(setting.find('file_system_folders').text)
+            self.schematic_reel_dict = ast.literal_eval(setting.find('schematic_reels').text)
+            self.shelf_reel_dict = ast.literal_eval(setting.find('shelf_reels').text)
+            self.reel_group_dict = ast.literal_eval(setting.find('reel_group_reels').text)
+
+            self.add_reel_group = ast.literal_eval(setting.find('add_reel_group').text)
+            self.add_render_node = ast.literal_eval(setting.find('add_render_node').text)
+            self.add_write_file_node = ast.literal_eval(setting.find('add_write_node').text)
+
+            self.export_dest_folder = setting.find('export_dest_folder').text
+
+            self.write_file_media_path = setting.find('write_file_media_path').text
+            self.write_file_pattern = setting.find('write_file_pattern').text
+            self.write_file_create_open_clip = ast.literal_eval(setting.find('write_file_create_open_clip').text)
+            self.write_file_include_setup = ast.literal_eval(setting.find('write_file_include_setup').text)
+            self.write_file_create_open_clip_value = setting.find('write_file_create_open_clip_value').text
+            self.write_file_include_setup_value = setting.find('write_file_include_setup_value').text
+            self.write_file_image_format = setting.find('write_file_image_format').text
+            self.write_file_compression = setting.find('write_file_compression').text
+            self.write_file_padding = setting.find('write_file_padding').text
+            self.write_file_frame_index = setting.find('write_file_frame_index').text
+            self.write_file_iteration_padding = setting.find('write_file_iteration_padding').text
+            self.write_file_version_name = setting.find('write_file_version_name').text
+
+            self.create_shot_type_folders = ast.literal_eval(setting.find('create_shot_type_folders').text)
+            self.create_shot_type_batch_group = ast.literal_eval(setting.find('create_shot_type_batch_group').text)
+            self.create_shot_type_desktop = ast.literal_eval(setting.find('create_shot_type_desktop').text)
+            self.create_shot_type_system_folders = ast.literal_eval(setting.find('create_shot_type_system_folders').text)
+            # self.create_shot_cache_on_import = ast.literal_eval(setting.find('create_shot_cache_on_import').text)
+            self.create_shot_export_plates = ast.literal_eval(setting.find('create_shot_export_plates').text)
+            self.create_shot_export_plate_preset = setting.find('create_shot_export_plate_preset').text
+            if not self.create_shot_export_plate_preset:
+                self.create_shot_export_plate_preset = 'Select Preset'
+            self.create_shot_fg_export = ast.literal_eval(setting.find('create_shot_fg_export').text)
+
+            self.system_shot_folders_path = setting.find('system_shot_folders_path').text
+            self.clip_dest_folder = setting.find('clip_destination_folder').text
+            self.clip_dest_reel = setting.find('clip_destination_reel').text
+            self.apply_batch_template = ast.literal_eval(setting.find('setup_batch_template').text)
+            self.batch_template_path = setting.find('setup_batch_template_path').text
+            self.batch_group_dest = setting.find('setup_batch_group_dest').text
+            self.batch_start_frame = int(setting.find('setup_batch_start_frame').text)
+            self.batch_additional_naming = setting.find('setup_batch_additional_naming').text
+
+        # Convert reel dictionaries to lists
+
+        self.schematic_reels = self.convert_reel_dict(self.schematic_reel_dict)
+        self.shelf_reels = self.convert_reel_dict(self.shelf_reel_dict)
+        self.reel_group = self.convert_reel_dict(self.reel_group_dict)
+
+        print (f'    preset loaded: {self.preset_name}\n')
+
+    def load_preset_values(self):
+
+        presets_exist = os.listdir(self.preset_path)
+        if not presets_exist:
+            FlameMessageWindow('Create Preset', 'message', 'No Create Shot presets exist.<br><br>Hit Ok to open script setup.<br><br>Once a preset is saved, try again.')
+            self.preset_selector()
+            return False
+
+        # Check for existing project preset
+
+        try:
+            project_preset = [f[:-4] for f in os.listdir(self.project_config_path) if f[:-4] == self.flame_prj_name][0]
+        except:
+            project_preset = False
+
+        if project_preset:
+            preset_name = self.load_project_preset(os.path.join(self.project_config_path, project_preset + '.xml'))
+            preset_path = os.path.join(self.preset_path, preset_name + '.xml')
+            self.load_preset(preset_path)
+        else:
+            preset_path = os.path.join(self.preset_path, self.global_default + '.xml')
+            self.load_preset(preset_path)
+
+        return True
+
+    def load_project_preset(self, project_preset_path):
+
+        # Load settings from project file
+
+        xml_tree = ET.parse(project_preset_path)
+        root = xml_tree.getroot()
+
+        # Assign values from config file to variables
+
+        for setting in root.iter('global_setting'):
+            preset_name = setting.find('preset_name').text
+
+        return preset_name
+
+    def preset_selector(self):
+
+        def build_preset_list():
+
+            self.config()
+
+            preset_list = []
+
+            for f in os.listdir(self.preset_path):
+                f = f[:-4]
+                if f == self.global_default:
+                    f = f + '*'
+                preset_list.append(f)
+
+            return preset_list
+
+        def load_config():
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            # Get Settings
+
+            for setting in root.iter('global_setting'):
+                self.global_default = setting.find('global_default').text
+
+            # Check for existing project preset
+
+            try:
+                project_preset = [f[:-4] for f in os.listdir(self.project_config_path) if f[:-4] == self.flame_prj_name][0]
+            except:
+                project_preset = False
+
+            if project_preset:
+
+                # Get current project preset name from project file
+
+                preset_name = self.load_project_preset(os.path.join(self.project_config_path, project_preset + '.xml'))
+
+                if preset_name == self.global_default:
+                    preset_name = preset_name + '*'
+
+                self.current_preset_push_btn.setText(preset_name)
+            else:
+                if os.listdir(self.preset_path):
+                    self.current_preset_push_btn.setText(self.global_default + '*')
+                else:
+                    self.current_preset_push_btn.setText('')
+
+            print ('--> config loaded \n')
+
+        def new_preset():
+
+            # Assign default settings
+
+            self.preset_name = ''
+            self.shot_name_from = 'Shot Name'
+
+            self.folder_dict = {'Shot_Folder': {'Elements': {}, 'Plates': {}, 'Ref': {}, 'Renders': {}}}
+            self.file_system_folder_dict = {'Shot_Folder': {'Elements': {}, 'Plates': {}, 'Ref': {}, 'Renders': {}}}
+            self.schematic_reel_dict = {'Schematic Reels': {'Plates': {}, 'PreRenders': {}, 'Elements': {}, 'Ref': {}}}
+            self.shelf_reel_dict = {'Shelf Reels': {'Batch Renders': {}}}
+            self.reel_group_dict = {'Reels': {'Reel 1': {}, 'Reel 2': {}, 'Reel 3': {}, 'Reel 4': {}}}
+
+            self.export_dest_folder = 'Shot_Folder/Plates'
+
+            self.add_reel_group = True
+            self.add_render_node = True
+            self.add_write_file_node = False
+
+            self.write_file_media_path = '/opt/Autodesk'
+            self.write_file_pattern = '<name>'
+            self.write_file_create_open_clip = True
+            self.write_file_include_setup = True
+            self.write_file_create_open_clip_value = '<name>'
+            self.write_file_include_setup_value = '<name>'
+            self.write_file_image_format = 'Dpx 10-bit'
+            self.write_file_compression = 'Uncompressed'
+            self.write_file_padding = '4'
+            self.write_file_frame_index = 'Use Start Frame'
+            self.write_file_iteration_padding = '2'
+            self.write_file_version_name = 'v<version>'
+
+            self.create_shot_type_folders = True
+            self.create_shot_type_batch_group = False
+            self.create_shot_type_desktop = False
+            self.create_shot_type_system_folders = False
+            self.system_shot_folders_path = '/opt/Autodesk'
+
+            self.create_shot_export_plates = False
+            self.create_shot_export_plate_preset = 'Select Preset'
+            self.create_shot_fg_export = False
+
+            self.clip_dest_folder = 'Plates'
+            self.clip_dest_reel = 'Plates'
+            self.apply_batch_template = False
+            self.batch_template_path = '/opt/Autodesk'
+            self.batch_group_dest = 'Desktop'
+            self.batch_start_frame = 1
+            self.batch_additional_naming = '_comp'
+
+            # Convert reel dictionaries to lists
+
+            self.schematic_reels = self.convert_reel_dict(self.schematic_reel_dict)
+            self.shelf_reels = self.convert_reel_dict(self.shelf_reel_dict)
+            self.reel_group = self.convert_reel_dict(self.reel_group_dict)
+
+            self.setup()
+
+        def edit_preset():
+
+            preset_name_text = self.current_preset_push_btn.text()
+            if preset_name_text.endswith('*'):
+                preset_name_text = preset_name_text[:-1]
+
+            if self.current_preset_push_btn.text():
+
+                preset_path = os.path.join(self.preset_path, preset_name_text + '.xml')
+
+                self.load_preset(preset_path)
+
+                self.setup()
+
+            else:
+                FlameMessageWindow('Error', 'error', 'No presets exist to edit')
+
+        def duplicate_preset():
+
+            def add_copy_to_filename(preset_name):
+
+                preset_name = preset_name + ' copy'
+
+                return preset_name
+
+            if self.current_preset_push_btn.text():
+
+                current_preset = self.current_preset_push_btn.text()
+                if current_preset.endswith('*'):
+                    current_preset = current_preset[:-1]
+
+                # Add 'copy' to the end of the new file being created.
+
+                existing_presets = [f[:-4] for f in os.listdir(self.preset_path)]
+
+                new_preset_name = add_copy_to_filename(current_preset)
+
+                while new_preset_name in existing_presets:
+                    new_preset_name = add_copy_to_filename(new_preset_name)
+
+                # Duplicate preset
+
+                source_file = os.path.join(self.preset_path, current_preset + '.xml')
+                dest_file = os.path.join(self.preset_path, new_preset_name + '.xml')
+                shutil.copyfile(source_file, dest_file)
+
+                self.selector_window.close()
+
+                # Save new preset name to duplicate preset file
+
+                xml_tree = ET.parse(dest_file)
+                root = xml_tree.getroot()
+
+                preset_name = root.find('.//preset_name')
+                preset_name.text = new_preset_name
+
+                xml_tree.write(dest_file)
+
+                print (f'Preset duplicate created: {new_preset_name}\n')
+
+                self.preset_selector()
+
+                self.current_preset_push_btn.setText(new_preset_name)
+
+        def delete_preset():
+
+            def delete():
+
+                os.remove(preset_path)
+
+                self.selector_window.close()
+
+                print (f'--> Preset deleted: {preset_name} \n')
+
+                self.preset_selector()
+
+            preset_name = self.current_preset_push_btn.text()
+            preset_path = os.path.join(self.preset_path, preset_name + '.xml')
+
+            if preset_name.endswith('*'):
+                return FlameMessageWindow('Error', 'error', 'Can not delete preset set as Global Default.<br>Set another preset to Global Default and try again.')
+
+            # Check all project config files for current preset before deleting.
+            # If the preset exists in other project files, delete project files. Confirm first.
+
+            preset_names = []
+
+            if os.listdir(self.project_config_path):
+                for n in os.listdir(self.project_config_path):
+                    saved_preset_name = self.load_project_preset(os.path.join(self.project_config_path, n))
+                    preset_names.append(saved_preset_name)
+
+                # If preset exists in other project configs, confirm deletion
+
+                if preset_name in preset_names:
+                    if FlameMessageWindow('Confirm Operation', 'warning', 'Selected preset is used by other projects. Deleting this preset will delete it for the other projects. Continue?'):
+                        for preset in preset_names:
+                            os.remove(os.path.join(self.project_config_path, n))
+                        delete()
+                    else:
+                        return
+                else:
+                    # If preset is not found in any projects, delete. Confirm first.
+
+                    if FlameMessageWindow('Confirm Operation', 'warning', f'Delete preset: {preset_name}?'):
+                        delete()
+                    else:
+                        return
+            else:
+                # If no project configs exist, delete preset. Confirm first.
+
+                if FlameMessageWindow('Confirm Operation', 'warning', f'Delete preset: {preset_name}?'):
+                    delete()
+                else:
+                    return
+
+        def save():
+
+            preset_name_text = self.current_preset_push_btn.text()
+            if preset_name_text.endswith('*'):
+                preset_name_text = preset_name_text[:-1]
+
+            if not preset_name_text:
+                return FlameMessageWindow('Error', 'error', 'Preset must be created to save.')
+
+            preset_path = os.path.join(self.project_config_path, self.flame_prj_name + '.xml')
+
+            if preset_name_text != self.global_default:
+
+                if os.path.isfile(preset_path):
+                    os.remove(preset_path)
+
+                # Create project preset
+
+                preset = """
+<settings>
+    <global_setting>
+        <preset_name></preset_name>
+    </global_setting>
+</settings>"""
+
+                with open(preset_path, 'a') as xml_file:
+                    xml_file.write(preset)
+                    xml_file.close()
+
+                # Update config
+
+                xml_tree = ET.parse(preset_path)
+                root = xml_tree.getroot()
+
+                preset_name = root.find('.//preset_name')
+                preset_name.text = preset_name_text
+
+                xml_tree.write(preset_path)
+
+                print ('--> custom project uber save preset saved \n')
+
+                FlameMessageWindow('Create Shot - Preset Saved', 'message', f'<b>Project:</b> {self.project_name}<br><br><b>Preset:</b> {preset_name_text}')
+            else:
+                try:
+                    os.remove(preset_path)
+                except:
+                    pass
+
+            self.selector_window.close()
+
+            print ('done.\n')
+
+        gridbox = QtWidgets.QGridLayout()
+        self.selector_window = FlameWindow(f'Create Shot - Presets <small>{VERSION}', gridbox, 600, 260)
+
+        # Labels
+
+        self.preset_label = FlameLabel('Create Shot Current Project Preset', label_type='underline')
+
+        # Shot Name Type Pushbutton Menu
+
+        preset_list = build_preset_list()
+        self.current_preset_push_btn = FlamePushButtonMenu('', preset_list)
+        self.current_preset_push_btn.setMaximumSize(QtCore.QSize(450, 28))
+
+        #  Buttons
+
+        self.new_btn = FlameButton('New', new_preset, button_width=100)
+        self.edit_btn = FlameButton('Edit', edit_preset, button_width=100)
+        self.delete_btn = FlameButton('Delete', delete_preset, button_width=100)
+        self.duplicate_btn = FlameButton('Duplicate', duplicate_preset, button_width=100)
+        self.save_btn = FlameButton('Save', save, button_width=100)
+        self.exit_btn = FlameButton('Exit', self.selector_window.close, button_width=100)
+
+        load_config()
+
+        # Preset Selector Window layout
+
+        gridbox.setMargin(20)
+
+        gridbox.addWidget(self.preset_label, 1, 1, 1, 6)
+        gridbox.addWidget(self.current_preset_push_btn, 2, 1, 1, 4)
+        gridbox.addWidget(self.new_btn, 2, 5)
+        gridbox.addWidget(self.edit_btn, 3, 5)
+        gridbox.addWidget(self.delete_btn, 2, 6)
+        gridbox.addWidget(self.duplicate_btn, 3, 6)
+
+        gridbox.setRowMinimumHeight(5, 28)
+
+        gridbox.addWidget(self.exit_btn, 6, 5)
+        gridbox.addWidget(self.save_btn, 6, 6)
+
+        self.selector_window.setLayout(gridbox)
+
+        self.selector_window.show()
+
+        return self.selector_window
+
+    # ------------------------------------- #
     # Windows
 
     def create_shot_folder_window(self):
@@ -999,24 +766,26 @@ class CreateShotFolders(object):
                 shot_naming = root.find('.//shot_naming')
                 shot_naming.text = self.shot_name_entry.text()
                 num_of_shots = root.find('.//number_of_shots')
-                num_of_shots.text = self.num_of_shots_lineedit.text()
+                num_of_shots.text = self.num_of_shots_slider.text()
                 starting_shot = root.find('.//starting_shot')
-                starting_shot.text = self.start_shot_num_lineedit.text()
+                starting_shot.text = self.start_shot_num_slider.text()
                 shot_increments = root.find('.//shot_increments')
-                shot_increments.text = self.shot_increment_lineedit.text()
+                shot_increments.text = self.shot_increment_slider.text()
                 create_folders = root.find('.//create_folders')
-                create_folders.text = str(self.create_folders_btn.isChecked())
+                create_folders.text = str(self.create_folders_push_btn.isChecked())
                 create_system_folders = root.find('.//create_system_folders')
-                create_system_folders.text = str(self.create_system_folders_btn.isChecked())
+                create_system_folders.text = str(self.create_system_folders_push_btn.isChecked())
+                reveal_in_finder = root.find('.//reveal_in_finder')
+                reveal_in_finder.text = str(self.reveal_in_finder_push_btn.isChecked())
 
                 xml_tree.write(self.config_xml)
 
-                print ('>>> settings saved <<<\n')
+                print ('--> settings saved \n')
 
             # Check that at least on shot creation type is selection
 
-            if not any ([self.create_folders_btn.isChecked(), self.create_system_folders_btn.isChecked()]):
-                return message_box('Select shot type to create')
+            if not any ([self.create_folders_push_btn.isChecked(), self.create_system_folders_push_btn.isChecked()]):
+                return FlameMessageWindow('Error', 'error', 'Select shot type to create')
 
             # Clear selection
 
@@ -1029,15 +798,15 @@ class CreateShotFolders(object):
             # Warn if shot name field empty
 
             if self.shot_name_entry.text() == '':
-                return message_box('Enter shot naming')
+                return FlameMessageWindow('Error', 'error', 'Enter shot naming')
 
             # Get values from UI
 
             shot_name_string = str(self.shot_name_entry.text())
             shot_padding = re.search('<ShotNum#*>', shot_name_string)
-            num_of_shots = int(self.num_of_shots_lineedit.text())
-            starting_shot = int(self.start_shot_num_lineedit.text())
-            shot_increments = int(self.shot_increment_lineedit.text())
+            num_of_shots = int(self.num_of_shots_slider.text())
+            starting_shot = int(self.start_shot_num_slider.text())
+            shot_increments = int(self.shot_increment_slider.text())
             num_folders = num_of_shots * shot_increments + starting_shot
 
             # Create list of shot names
@@ -1102,329 +871,380 @@ class CreateShotFolders(object):
                     print (shot_name_list)
 
             except:
-                return message_box('Enter valid shot naming. PYT_<ShotNum####> or PYT[0010, 0020, 0050-0090] for shot lists or PYT_0010 for single shot.')
+                return FlameMessageWindow('Error', 'error', 'Enter valid shot naming. PYT_<ShotNum####> or PYT[0010, 0020, 0050-0090] for shot lists or PYT_0010 for single shot.')
 
             # print ('shot_name_list:', shot_name_list)
             # print ('selection:', self.selection)
 
             # Get button settings
 
-            self.create_shot_type_folders = self.create_folders_btn.isChecked()
+            self.create_shot_type_folders = self.create_folders_push_btn.isChecked()
             self.create_shot_type_desktop = False
             self.create_shot_type_batch_group = False
-            self.create_shot_type_system_folders = self.create_system_folders_btn.isChecked()
+            self.create_shot_type_system_folders = self.create_system_folders_push_btn.isChecked()
 
             self.batch_group_dest = 'Library'
+
+            # Turn off export plates. Plates can not be exported from this option.
+
+            self.create_shot_export_plates = False
 
             # Create shots from list
 
             self.create_shots(shot_name_list)
 
+            # If reveal in finder is selected open shot root path in finder
+
+            if self.reveal_in_finder_push_btn.isChecked():
+                self.reveal_path_in_finder(system_folder_path)
+
             self.window.close()
 
-        self.window = QtWidgets.QWidget()
-        self.window.setMinimumSize(QtCore.QSize(1100, 200))
-        self.window.setMaximumSize(QtCore.QSize(1100, 300))
-        self.window.setWindowTitle('Create Shot Folders %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setFocusPolicy(QtCore.Qt.StrongFocus)
-        self.window.setStyleSheet('background-color: #272727')
+        def reveal_in_finder_toggle():
 
-        # Center window in linux
+            if self.create_system_folders_push_btn.isChecked():
+                self.reveal_in_finder_push_btn.setEnabled(True)
+            else:
+                self.reveal_in_finder_push_btn.setEnabled(False)
 
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        grid = QtWidgets.QGridLayout()
+        self.window = FlameWindow(f'Create Shot Folders <small>{VERSION}', grid, 1100, 380)
 
         # Labels
 
-        self.shot_naming_label = FlameLabel('Shot Folder Settings', 'background', self.window)
-        self.create_label = FlameLabel('Create', 'background', self.window)
-        self.shot_name_label = FlameLabel('Shot Name', 'normal', self.window)
-        self.num_shots_label = FlameLabel('Number of Shots', 'normal', self.window)
-        self.start_shot_num_label = FlameLabel('Starting Shot', 'normal', self.window)
-        self.shot_increment_label = FlameLabel('Shot Increments', 'normal', self.window)
+        self.shot_naming_label = FlameLabel('Shot Folder Settings', label_type='underline')
+        self.create_label = FlameLabel('Create', 'underline')
+        self.shot_name_label = FlameLabel('Shot Name')
+        self.num_shots_label = FlameLabel('Number of Shots')
+        self.start_shot_num_label = FlameLabel('Starting Shot')
+        self.shot_increment_label = FlameLabel('Shot Increments')
 
-        self.system_folder_path_label = FlameLabel('System Folder Path', 'normal', self.window)
+        self.system_folder_path_label = FlameLabel('System Folder Path')
         system_folder_path = self.translate_system_shot_folder_path('PYT_0100')
-        self.system_folder_path_label2 = FlameLabel(system_folder_path, 'outline', self.window)
+        self.system_folder_path_label2 = FlameLabel(system_folder_path, label_type='background')
 
         # LineEdits
 
         def check_shot_name_entry():
 
             if re.search('<ShotNum#*>', self.shot_name_entry.text()):
-                self.num_of_shots_lineedit.setEnabled(True)
+                self.num_of_shots_slider.setEnabled(True)
                 self.num_shots_label.setEnabled(True)
-                self.start_shot_num_lineedit.setEnabled(True)
+                self.start_shot_num_slider.setEnabled(True)
                 self.start_shot_num_label.setEnabled(True)
                 self.shot_increment_label.setEnabled(True)
-                self.shot_increment_lineedit.setEnabled(True)
+                self.shot_increment_slider.setEnabled(True)
 
             elif '[' in self.shot_name_entry.text() and ']' in self.shot_name_entry.text() and re.search('\d-\d', self.shot_name_entry.text()):
-                self.num_of_shots_lineedit.setEnabled(False)
+                self.num_of_shots_slider.setEnabled(False)
                 self.num_shots_label.setEnabled(False)
-                self.start_shot_num_lineedit.setEnabled(False)
+                self.start_shot_num_slider.setEnabled(False)
                 self.start_shot_num_label.setEnabled(False)
                 self.shot_increment_label.setEnabled(True)
-                self.shot_increment_lineedit.setEnabled(True)
+                self.shot_increment_slider.setEnabled(True)
 
             else:
-                self.num_of_shots_lineedit.setEnabled(False)
+                self.num_of_shots_slider.setEnabled(False)
                 self.num_shots_label.setEnabled(False)
-                self.start_shot_num_lineedit.setEnabled(False)
+                self.start_shot_num_slider.setEnabled(False)
                 self.start_shot_num_label.setEnabled(False)
                 self.shot_increment_label.setEnabled(False)
-                self.shot_increment_lineedit.setEnabled(False)
+                self.shot_increment_slider.setEnabled(False)
 
-        self.shot_name_entry = FlameLineEdit(self.shot_naming, self.window)
+        self.shot_name_entry = FlameLineEdit(self.shot_naming)
         self.shot_name_entry.textChanged.connect(check_shot_name_entry)
-        self.shot_name_entry.setToolTip("Shot name must contain <ShotNum####> Token. Shot number padding can be changed by changing the number of #'s in the token")
 
-        # Number of Shots Slider
+        # Sliders
 
-        self.num_of_shots_min_value = 1
-        self.num_of_shots_max_value = 1000
-        self.num_of_shots_start_value = self.num_of_shots
-
-        def scale_spinbox_move_slider():
-            self.num_of_shots_slider.setValue(int(self.num_of_shots_lineedit.text()))
-
-        self.num_of_shots_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.num_of_shots_slider.setMaximumHeight(3)
-        self.num_of_shots_slider.setMaximumWidth(75)
-        self.num_of_shots_slider.setMinimum(self.num_of_shots_min_value)
-        self.num_of_shots_slider.setMaximum(self.num_of_shots_max_value)
-        self.num_of_shots_slider.setValue(self.num_of_shots_start_value)
-        self.num_of_shots_slider.setStyleSheet('QSlider {color: #111111}'
-                                               'QSlider::disabled {color: #6a6a6a; background-color: #373737}'
-                                               'QSlider::groove:horizontal {background-color: #111111}'
-                                               'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-        self.num_of_shots_slider.setDisabled(True)
-
-        self.num_of_shots_lineedit = CustomSpinBox(CustomSpinBox.IntSpinBox, self.num_of_shots_start_value, parent=self.window)
-        self.num_of_shots_lineedit.setMinimum(self.num_of_shots_min_value)
-        self.num_of_shots_lineedit.setMaximum(self.num_of_shots_max_value)
-        self.num_of_shots_lineedit.setMinimumHeight(28)
-        self.num_of_shots_lineedit.setMaximumWidth(75)
-        self.num_of_shots_lineedit.textChanged.connect(scale_spinbox_move_slider)
-        self.num_of_shots_slider.raise_()
-
-        # Start Shot Number Slider
-
-        self.start_shot_num_min_value = 1
-        self.start_shot_num_max_value = 10000
-        self.start_shot_num_start_value = self.starting_shot
-
-        def scale_spinbox_move_slider():
-            self.start_shot_num_slider.setValue(int(self.start_shot_num_lineedit.text()))
-
-        self.start_shot_num_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.start_shot_num_slider.setMaximumHeight(3)
-        self.start_shot_num_slider.setMaximumWidth(75)
-        self.start_shot_num_slider.setMinimum(self.start_shot_num_min_value)
-        self.start_shot_num_slider.setMaximum(self.start_shot_num_max_value)
-        self.start_shot_num_slider.setValue(self.start_shot_num_start_value)
-        self.start_shot_num_slider.setStyleSheet('QSlider {color: #111111}'
-                                                 'QSlider::disabled {color: #6a6a6a; background-color: #373737}'
-                                                 'QSlider::groove:horizontal {background-color: #111111}'
-                                                 'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-        self.start_shot_num_slider.setDisabled(True)
-
-        self.start_shot_num_lineedit = CustomSpinBox(CustomSpinBox.IntSpinBox, self.start_shot_num_start_value, parent=self.window)
-        self.start_shot_num_lineedit.setMinimum(self.start_shot_num_min_value)
-        self.start_shot_num_lineedit.setMaximum(self.start_shot_num_max_value)
-        self.start_shot_num_lineedit.setMinimumHeight(28)
-        self.start_shot_num_lineedit.setMaximumWidth(75)
-        self.start_shot_num_lineedit.textChanged.connect(scale_spinbox_move_slider)
-        self.start_shot_num_slider.raise_()
-
-        # Shot Increment Slider
-
-        self.shot_increment_min_value = 1
-        self.shot_increment_max_value = 100
-        self.shot_increment_start_value = self.shot_increments
-
-        def scale_spinbox_move_slider():
-            self.shot_increment_slider.setValue(int(self.shot_increment_lineedit.text()))
-
-        self.shot_increment_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.shot_increment_slider.setMaximumHeight(3)
-        self.shot_increment_slider.setMaximumWidth(75)
-        self.shot_increment_slider.setMinimum(self.shot_increment_min_value)
-        self.shot_increment_slider.setMaximum(self.shot_increment_max_value)
-        self.shot_increment_slider.setValue(self.shot_increment_start_value)
-        self.shot_increment_slider.setStyleSheet('QSlider {color: #111111}'
-                                                 'QSlider::disabled {color: #6a6a6a; background-color: #373737}'
-                                                 'QSlider::groove:horizontal {background-color: #111111}'
-                                                 'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-        self.shot_increment_slider.setDisabled(True)
-
-        self.shot_increment_lineedit = CustomSpinBox(CustomSpinBox.IntSpinBox, self.shot_increment_start_value, parent=self.window)
-        self.shot_increment_lineedit.setMinimum(self.shot_increment_min_value)
-        self.shot_increment_lineedit.setMaximum(self.shot_increment_max_value)
-        self.shot_increment_lineedit.setMinimumHeight(28)
-        self.shot_increment_lineedit.setMaximumWidth(75)
-        self.shot_increment_lineedit.textChanged.connect(scale_spinbox_move_slider)
-        self.shot_increment_slider.raise_()
+        self.num_of_shots_slider = FlameSlider(self.num_of_shots, 1, 1000, False)
+        self.start_shot_num_slider = FlameSlider(self.starting_shot, 1, 10000, False)
+        self.shot_increment_slider = FlameSlider(self.shot_increments, 1, 100, False)
 
         # Token PushButton
 
         shot_num_dict = {'Shot Number': '<ShotNum####>'}
-        self.shot_name_token_btn = FlameTokenPushButton('Add Token', shot_num_dict, self.shot_name_entry, self.window)
+        self.shot_name_token_btn = FlameTokenPushButton('Add Token', shot_num_dict, self.shot_name_entry)
 
         # Pushbuttons
 
-        self.create_folders_btn = FlamePushButton(' Folders', self.create_custom_folders, self.window)
+        self.create_folders_push_btn = FlamePushButton('Folders', self.create_custom_folders)
+        self.create_system_folders_push_btn = FlamePushButton('System Folders', self.create_custom_system_folders)
+        self.create_system_folders_push_btn.clicked.connect(reveal_in_finder_toggle)
+        self.reveal_in_finder_push_btn = FlamePushButton('Reveal in Finder', self.reveal_in_finder)
 
-        self.create_system_folders_btn = FlamePushButton(' System Folders', self.create_custom_system_folders, self.window)
+        reveal_in_finder_toggle()
 
         # Buttons
 
-        help_btn = FlameButton('Help', self.help, self.window)
-        create_btn = FlameButton('Create', create_shot_list, self.window)
-        cancel_btn = FlameButton('Cancel', self.window.close, self.window)
+        help_btn = FlameButton('Help', self.help)
+        create_btn = FlameButton('Create', create_shot_list)
+        cancel_btn = FlameButton('Cancel', self.window.close)
 
         check_shot_name_entry()
 
         # ------------------------------------------------------------- #
 
-        # Window layout
+        # UI Widget layout
 
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setVerticalSpacing(5)
-        gridbox.setHorizontalSpacing(5)
+        grid.setVerticalSpacing(5)
+        grid.setHorizontalSpacing(5)
+        grid.setMargin(20)
 
-        gridbox.addWidget(self.shot_naming_label, 0, 1, 1, 6)
+        grid.addWidget(self.shot_naming_label, 0, 1, 1, 6)
 
-        gridbox.addWidget(self.shot_name_label, 1, 1)
-        gridbox.addWidget(self.shot_name_entry, 1, 2, 1, 4)
-        gridbox.addWidget(self.shot_name_token_btn, 1, 6)
+        grid.addWidget(self.shot_name_label, 1, 1)
+        grid.addWidget(self.shot_name_entry, 1, 2, 1, 4)
+        grid.addWidget(self.shot_name_token_btn, 1, 6)
 
-        gridbox.addWidget(self.shot_increment_label, 2, 1)
-        gridbox.addWidget(self.shot_increment_slider, 2, 2, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.shot_increment_lineedit, 2, 2)
+        grid.addWidget(self.shot_increment_label, 2, 1)
+        grid.addWidget(self.shot_increment_slider, 2, 2)
 
-        gridbox.addWidget(self.num_shots_label, 3, 1)
-        gridbox.addWidget(self.num_of_shots_slider, 3, 2, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.num_of_shots_lineedit, 3, 2)
+        grid.addWidget(self.num_shots_label, 3, 1)
+        grid.addWidget(self.num_of_shots_slider, 3, 2)
 
-        gridbox.addWidget(self.start_shot_num_label, 4, 1)
-        gridbox.addWidget(self.start_shot_num_slider, 4, 2, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.start_shot_num_lineedit, 4, 2)
+        grid.addWidget(self.start_shot_num_label, 4, 1)
+        grid.addWidget(self.start_shot_num_slider, 4, 2)
 
-        gridbox.addWidget(self.create_label, 0, 8)
-        gridbox.addWidget(self.create_folders_btn, 1, 8)
-        gridbox.addWidget(self.create_system_folders_btn, 2, 8)
+        grid.addWidget(self.create_label, 0, 8)
+        grid.addWidget(self.create_folders_push_btn, 1, 8)
+        grid.addWidget(self.create_system_folders_push_btn, 2, 8)
+        grid.addWidget(self.reveal_in_finder_push_btn, 3, 8)
 
+        grid.setRowMinimumHeight(5, 30)
 
-        gridbox.addWidget(self.system_folder_path_label, 5, 1)
-        gridbox.addWidget(self.system_folder_path_label2, 5, 2, 1, 5)
+        grid.addWidget(self.system_folder_path_label, 6, 1)
+        grid.addWidget(self.system_folder_path_label2, 6, 2, 1, 5)
 
-        gridbox.setRowMinimumHeight(6, 30)
+        grid.setRowMinimumHeight(7, 30)
 
-        gridbox.addWidget(help_btn, 7, 1)
-        gridbox.addWidget(cancel_btn, 7, 7)
-        gridbox.addWidget(create_btn, 7, 8)
+        grid.addWidget(help_btn, 8, 1)
+        grid.addWidget(cancel_btn, 8, 7)
+        grid.addWidget(create_btn, 8, 8)
 
-        self.window.setLayout(gridbox)
+        self.window.setLayout(grid)
 
         self.window.show()
 
     def setup(self):
 
-        def setup_folder_tab():
+        def setup_preset_tab():
+
+            def global_default_pressed():
+
+                if not os.listdir(self.preset_path):
+                    self.preset_global_default_pushbutton.setChecked(True)
+
+                if self.preset_name_lineedit.text() == self.global_default:
+                    self.preset_global_default_pushbutton.setChecked(True)
+
+            def global_default_state():
+
+                # Set global default button state
+
+                if not os.listdir(self.preset_path):
+                    self.preset_global_default_pushbutton.setChecked(True)
+                if self.preset_name_lineedit.text() == self.global_default:
+                    self.preset_global_default_pushbutton.setChecked(True)
 
             # Labels
 
-            self.setup_folder_clip_dest_label = FlameLabel('Clip Dest Folder', 'background', self.setup_window.tab1)
-            self.setup_folder_clip_dest_label_02 = FlameLabel(self.clip_dest_folder, 'outline', self.setup_window.tab1)
-            self.folders_label = FlameLabel('Folder Setup', 'background', self.setup_window.tab1)
+            self.preset_setup_label = FlameLabel('Preset Setup', label_type='underline')
+            self.preset_name_label = FlameLabel('Preset Name')
+            self.shot_name_from_label = FlameLabel('Shot Name From')
 
-            # Media Panel Shot Folder Tree
+            # LineEdits
 
-            self.folder_tree = QtWidgets.QTreeWidget(self.setup_window.tab1)
-            self.folder_tree.setColumnCount(1)
-            self.folder_tree.setHeaderLabel('Media Panel Shot Folder Template')
-            self.folder_tree.itemsExpandable()
-            self.folder_tree.setAlternatingRowColors(True)
-            self.folder_tree.setFocusPolicy(QtCore.Qt.NoFocus)
-            self.folder_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #222222; alternate-background-color: #2d2d2d; border: none; font: 14pt "Discreet"}'
-                                           'QTreeWidget::item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #111111}'
-                                           'QHeaderView {color: #9a9a9a; background-color: #393939; font: 14pt "Discreet"}'
-                                           'QTreeWidget::item:selected {selection-background-color: #111111}'
-                                           'QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
-                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+            self.preset_name_lineedit = FlameLineEdit(self.preset_name)
+
+            # Push Buttons
+
+            self.preset_global_default_pushbutton = FlamePushButton('Global Default', False)
+            self.preset_global_default_pushbutton.clicked.connect(global_default_pressed)
+            global_default_state()
+
+            # Push Button Menus
+
+            shot_name_from_options = ['Shot Name', 'Clip Name']
+            self.shot_name_from_push_button = FlamePushButtonMenu(self.shot_name_from, shot_name_from_options)
+
+            # Buttons
+
+            setup_help_btn = FlameButton('Help', self.help)
+            setup_save_btn = FlameButton('Save', save_setup_settings)
+            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close)
+
+            # Tab layout
+
+            self.setup_window.tab6.layout = QtWidgets.QGridLayout()
+            self.setup_window.tab6.layout.setMargin(10)
+            self.setup_window.tab6.layout.setVerticalSpacing(5)
+            self.setup_window.tab6.layout.setHorizontalSpacing(5)
+
+            self.setup_window.tab6.layout.setColumnMinimumWidth(5, 150)
+
+            self.setup_window.tab6.layout.addWidget(self.preset_setup_label, 0, 1, 1, 5)
+
+            self.setup_window.tab6.layout.addWidget(self.preset_name_label, 1, 0)
+            self.setup_window.tab6.layout.addWidget(self.preset_name_lineedit, 1, 1, 1, 5)
+            self.setup_window.tab6.layout.addWidget(self.preset_global_default_pushbutton, 1, 6)
+
+            self.setup_window.tab6.layout.setRowMinimumHeight(2, 28)
+
+            self.setup_window.tab6.layout.addWidget(self.shot_name_from_label, 3, 0)
+            self.setup_window.tab6.layout.addWidget(self.shot_name_from_push_button, 3, 1)
+
+            self.setup_window.tab6.layout.setRowMinimumHeight(12, 500)
+
+            self.setup_window.tab6.layout.addWidget(setup_help_btn, 14, 0)
+            self.setup_window.tab6.layout.addWidget(setup_save_btn, 13, 6)
+            self.setup_window.tab6.layout.addWidget(setup_cancel_btn, 14, 6)
+
+            self.setup_window.tab6.setLayout(self.setup_window.tab6.layout)
+
+        def setup_file_system_folders_tab():
+
+            # Labels
+
+            self.file_system_export_dest_label = FlameLabel('Export Dest Folder')
+            self.file_system_export_dest_label_02 = FlameLabel(self.export_dest_folder, label_type='background')
+            self.folders_label = FlameLabel('Folder Setup', label_type='underline')
 
             # File System Shot Folder Tree
 
-            self.file_system_folder_tree = QtWidgets.QTreeWidget(self.setup_window.tab1)
+            self.file_system_folder_tree = QtWidgets.QTreeWidget()
             self.file_system_folder_tree.setColumnCount(1)
             self.file_system_folder_tree.setHeaderLabel('File System Shot Folder Template')
             self.file_system_folder_tree.itemsExpandable()
             self.file_system_folder_tree.setAlternatingRowColors(True)
             self.file_system_folder_tree.setFocusPolicy(QtCore.Qt.NoFocus)
-            self.file_system_folder_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #222222; alternate-background-color: #2d2d2d; border: none; font: 14pt "Discreet"}'
-                                                       'QTreeWidget:disabled {color: #747474; background-color: #353535; alternate-background-color: #353535}'
-                                                       'QTreeWidget::item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #111111}'
-                                                       'QHeaderView {color: #9a9a9a; background-color: #393939; font: 14pt "Discreet"}'
-                                                       'QTreeWidget::item:selected {selection-background-color: #111111}'
+            self.file_system_folder_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #1e1e1e; alternate-background-color: #242424; border: none; font: 14pt "Discreet"}'
+                                                       'QHeaderView::section {color: #9a9a9a; background-color: #3a3a3a; border: none; padding-left: 10px; font: 14pt "Discreet"}'
+                                                       'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #5a5a5a}'
+                                                       'QTreeWidget:item:selected:active {color: #999999; border: none}'
+                                                       'QTreeWidget:disabled {color: #656565; background-color: #222222}'
                                                        'QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
                                                        'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
 
             # Fill tree
 
-            fill_tree(self.folder_tree, self.folder_dict)
             fill_tree(self.file_system_folder_tree, self.file_system_folder_dict)
+
+            # Set tree top level items
+
+            self.file_system_folder_tree_top = self.file_system_folder_tree.topLevelItem(0)
+            self.file_system_folder_tree.setCurrentItem(self.file_system_folder_tree_top)
+
+            # Buttons
+
+            self.add_file_system_folder_btn = FlameButton('Add Folder', partial(add_tree_item, self.file_system_folder_tree_top, self.file_system_folder_tree))
+            self.delete_file_system_folder_btn = FlameButton('Delete Folder', partial(del_tree_item, self.file_system_folder_tree_top, self.file_system_folder_tree))
+            self.system_folder_sort_btn = FlameButton('Sort Folders', partial(self.sort_tree_items, self.file_system_folder_tree))
+            self.system_folder_export_dest_folder_btn = FlameButton('Set Export Dest Folder', partial(set_folder_as_destination, self.file_system_export_dest_label_02, self.file_system_folder_tree_top, self.file_system_folder_tree))
+
+            setup_help_btn = FlameButton('Help', self.help)
+            setup_save_btn = FlameButton('Save', save_setup_settings)
+            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close)
+
+            # File system shot folder tree contextual right click menus
+
+            action_file_system_add_folder = QtWidgets.QAction('Add Folder')
+            action_file_system_add_folder.triggered.connect(partial(add_tree_item, self.file_system_folder_tree_top, self.file_system_folder_tree))
+            self.file_system_folder_tree.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+            self.file_system_folder_tree.addAction(action_file_system_add_folder)
+
+            action_file_system_delete_folder = QtWidgets.QAction('Delete Folder')
+            action_file_system_delete_folder.triggered.connect(partial(del_tree_item, self.file_system_folder_tree_top, self.file_system_folder_tree))
+            self.file_system_folder_tree.addAction(action_file_system_delete_folder)
+
+            action_set_export_folder = QtWidgets.QAction('Set Export Dest Folder')
+            action_set_export_folder.triggered.connect(partial(set_folder_as_destination, self.file_system_export_dest_label_02, self.file_system_folder_tree_top, self.file_system_folder_tree))
+            self.file_system_folder_tree.addAction(action_set_export_folder)
+
+            # Tab layout
+
+            self.setup_window.tab5.layout = QtWidgets.QGridLayout()
+            self.setup_window.tab5.layout.setMargin(10)
+            self.setup_window.tab5.layout.setVerticalSpacing(5)
+            self.setup_window.tab5.layout.setHorizontalSpacing(5)
+
+            self.setup_window.tab5.layout.addWidget(self.folders_label, 0, 1, 1, 3)
+            self.setup_window.tab5.layout.addWidget(self.file_system_folder_tree, 1, 1, 7, 3)
+
+            self.setup_window.tab5.layout.addWidget(self.file_system_export_dest_label, 8, 0)
+            self.setup_window.tab5.layout.addWidget(self.file_system_export_dest_label_02, 8, 1, 1, 3)
+
+            self.setup_window.tab5.layout.addWidget(self.add_file_system_folder_btn, 1, 4)
+            self.setup_window.tab5.layout.addWidget(self.delete_file_system_folder_btn, 2, 4)
+            self.setup_window.tab5.layout.addWidget(self.system_folder_sort_btn, 3, 4)
+            self.setup_window.tab5.layout.addWidget(self.system_folder_export_dest_folder_btn, 4, 4)
+
+            self.setup_window.tab5.layout.setRowMinimumHeight(9, 175)
+
+            self.setup_window.tab5.layout.addWidget(setup_help_btn, 14, 0)
+            self.setup_window.tab5.layout.addWidget(setup_save_btn, 13, 4)
+            self.setup_window.tab5.layout.addWidget(setup_cancel_btn, 14, 4)
+
+            self.setup_window.tab5.setLayout(self.setup_window.tab5.layout)
+
+        def setup_folder_tab():
+
+            # Labels
+
+            self.setup_folder_clip_dest_label = FlameLabel('Clip Dest Folder', label_type='underline')
+            self.setup_folder_clip_dest_label_02 = FlameLabel(self.clip_dest_folder, label_type='background')
+            self.folders_label = FlameLabel('Folder Setup', label_type='underline')
+
+            # Media Panel Shot Folder Tree
+
+            self.folder_tree = QtWidgets.QTreeWidget()
+            self.folder_tree.setColumnCount(1)
+            self.folder_tree.setHeaderLabel('Media Panel Shot Folder Template')
+            self.folder_tree.itemsExpandable()
+            self.folder_tree.setAlternatingRowColors(True)
+            self.folder_tree.setFocusPolicy(QtCore.Qt.NoFocus)
+            self.folder_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #1e1e1e; alternate-background-color: #242424; border: none; font: 14pt "Discreet"}'
+                                           'QHeaderView::section {color: #9a9a9a; background-color: #3a3a3a; border: none; padding-left: 10px; font: 14pt "Discreet"}'
+                                           'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #5a5a5a}'
+                                           'QTreeWidget:item:selected:active {color: #999999; border: none}'
+                                           'QTreeWidget:disabled {color: #656565; background-color: #222222}'
+                                           'QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
+                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+
+            # Fill tree
+
+            fill_tree(self.folder_tree, self.folder_dict)
 
             # Set tree top level items
 
             folder_tree_top = self.folder_tree.topLevelItem(0)
             self.folder_tree.setCurrentItem(folder_tree_top)
-            file_system_folder_tree_top = self.file_system_folder_tree.topLevelItem(0)
 
             # Buttons
 
-            self.folder_sort_btn = FlameButton('Sort Folders', partial(self.sort_tree_items, self.folder_tree), self.setup_window.tab1)
-            self.system_folder_sort_btn = FlameButton('Sort Folders', partial(self.sort_tree_items, self.file_system_folder_tree), self.setup_window.tab1)
+            self.folder_sort_btn = FlameButton('Sort Folders', partial(self.sort_tree_items, self.folder_tree))
 
-            self.add_folder_btn = FlameButton('Add Folder', partial(add_tree_item, folder_tree_top, self.folder_tree), self.setup_window.tab1)
-            self.delete_folder_btn = FlameButton('Delete Folder', partial(del_tree_item, folder_tree_top, self.folder_tree), self.setup_window.tab1)
-            self.set_clip_dest_folder_btn = FlameButton('Set Clip Dest Folder', partial(set_as_destination, self.setup_folder_clip_dest_label_02, folder_tree_top, self.folder_tree), self.setup_window.tab1)
+            self.add_folder_btn = FlameButton('Add Folder', partial(add_tree_item, folder_tree_top, self.folder_tree))
+            self.delete_folder_btn = FlameButton('Delete Folder', partial(del_tree_item, folder_tree_top, self.folder_tree))
+            self.set_clip_dest_folder_btn = FlameButton('Set Clip Dest Folder', partial(set_as_destination, self.setup_folder_clip_dest_label_02, folder_tree_top, self.folder_tree))
 
-            self.add_file_system_folder_btn = FlameButton('Add Folder', partial(add_tree_item, file_system_folder_tree_top, self.file_system_folder_tree), self.setup_window.tab1)
-            self.delete_file_system_folder_btn = FlameButton('Delete Folder', partial(del_tree_item, file_system_folder_tree_top, self.file_system_folder_tree), self.setup_window.tab1)
-
-            setup_help_btn = FlameButton('Help', self.help, self.setup_window.tab1)
-            setup_save_btn = FlameButton('Save', save_setup_settings, self.setup_window.tab1)
-            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close, self.setup_window.tab1)
+            setup_help_btn = FlameButton('Help', self.help)
+            setup_save_btn = FlameButton('Save', save_setup_settings)
+            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close)
 
             # Media panel shot folder tree contextual right click menus
 
-            action_add_folder = QtWidgets.QAction('Add Folder', self.setup_window.tab1)
+            action_add_folder = QtWidgets.QAction('Add Folder')
             action_add_folder.triggered.connect(partial(add_tree_item, folder_tree_top, self.folder_tree))
             self.folder_tree.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
             self.folder_tree.addAction(action_add_folder)
 
-            action_delete_folder = QtWidgets.QAction('Delete Folder', self.setup_window.tab1)
+            action_delete_folder = QtWidgets.QAction('Delete Folder')
             action_delete_folder.triggered.connect(partial(del_tree_item, folder_tree_top, self.folder_tree))
             self.folder_tree.addAction(action_delete_folder)
 
-            action_set_dest_folder = QtWidgets.QAction('Set Clip Dest Folder', self.setup_window.tab1)
+            action_set_dest_folder = QtWidgets.QAction('Set Clip Dest Folder')
             action_set_dest_folder.triggered.connect(partial(set_as_destination, self.setup_folder_clip_dest_label_02, folder_tree_top, self.folder_tree))
             self.folder_tree.addAction(action_set_dest_folder)
-
-            # File system shot folder tree contextual right click menus
-
-            action_file_system_add_folder = QtWidgets.QAction('Add Folder', self.setup_window.tab1)
-            action_file_system_add_folder.triggered.connect(partial(add_tree_item, file_system_folder_tree_top, self.file_system_folder_tree))
-            self.file_system_folder_tree.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-            self.file_system_folder_tree.addAction(action_file_system_add_folder)
-
-            action_file_system_delete_folder = QtWidgets.QAction('Delete Folder', self.setup_window.tab1)
-            action_file_system_delete_folder.triggered.connect(partial(del_tree_item, file_system_folder_tree_top, self.file_system_folder_tree))
-            self.file_system_folder_tree.addAction(action_file_system_delete_folder)
 
             # Tab layout
 
@@ -1436,22 +1256,19 @@ class CreateShotFolders(object):
             self.setup_window.tab1.layout.addWidget(self.setup_folder_clip_dest_label, 1, 0)
             self.setup_window.tab1.layout.addWidget(self.setup_folder_clip_dest_label_02, 2, 0)
 
-            self.setup_window.tab1.layout.addWidget(self.folders_label, 0, 1)
-            self.setup_window.tab1.layout.addWidget(self.folder_tree, 1, 1, 6, 1)
-            self.setup_window.tab1.layout.addWidget(self.file_system_folder_tree, 7, 1, 6, 1)
+            self.setup_window.tab1.layout.addWidget(self.folders_label, 0, 1, 1, 3)
+            self.setup_window.tab1.layout.addWidget(self.folder_tree, 1, 1, 5, 3)
 
-            self.setup_window.tab1.layout.addWidget(self.add_folder_btn, 1, 2)
-            self.setup_window.tab1.layout.addWidget(self.delete_folder_btn, 2, 2)
-            self.setup_window.tab1.layout.addWidget(self.folder_sort_btn, 3, 2)
-            self.setup_window.tab1.layout.addWidget(self.set_clip_dest_folder_btn, 4, 2)
+            self.setup_window.tab1.layout.addWidget(self.add_folder_btn, 1, 4)
+            self.setup_window.tab1.layout.addWidget(self.delete_folder_btn, 2, 4)
+            self.setup_window.tab1.layout.addWidget(self.folder_sort_btn, 3, 4)
+            self.setup_window.tab1.layout.addWidget(self.set_clip_dest_folder_btn, 4, 4)
 
-            self.setup_window.tab1.layout.addWidget(self.add_file_system_folder_btn, 7, 2)
-            self.setup_window.tab1.layout.addWidget(self.delete_file_system_folder_btn, 8, 2)
-            self.setup_window.tab1.layout.addWidget(self.system_folder_sort_btn, 9, 2)
+            self.setup_window.tab1.layout.setRowMinimumHeight(6, 195)
 
             self.setup_window.tab1.layout.addWidget(setup_help_btn, 14, 0)
-            self.setup_window.tab1.layout.addWidget(setup_save_btn, 13, 2)
-            self.setup_window.tab1.layout.addWidget(setup_cancel_btn, 14, 2)
+            self.setup_window.tab1.layout.addWidget(setup_save_btn, 13, 4)
+            self.setup_window.tab1.layout.addWidget(setup_cancel_btn, 14, 4)
 
             self.setup_window.tab1.setLayout(self.setup_window.tab1.layout)
 
@@ -1459,20 +1276,20 @@ class CreateShotFolders(object):
 
             # Labels
 
-            self.batch_groups_label = FlameLabel('Batch Group Reel Setup', 'background', self.setup_window.tab2)
-            self.setup_batch_clip_dest_reel_label = FlameLabel('Clip Dest Reel', 'background', self.setup_window.tab2)
-            self.setup_batch_clip_dest_reel_label_02 = FlameLabel(self.clip_dest_reel, 'outline', self.setup_window.tab2)
-            self.setup_batch_start_frame_label = FlameLabel('Batch Start Frame', 'background', self.setup_window.tab2)
-            self.setup_batch_additional_naming_label = FlameLabel('Additional Batch Naming', 'background', self.setup_window.tab2)
+            self.batch_groups_label = FlameLabel('Batch Group Reel Setup', label_type='underline')
+            self.setup_batch_clip_dest_reel_label = FlameLabel('Clip Dest Reel', label_type='underline')
+            self.setup_batch_clip_dest_reel_label_02 = FlameLabel(self.clip_dest_reel, label_type='background')
+            self.setup_batch_start_frame_label = FlameLabel('Batch Start Frame', label_type='underline')
+            self.setup_batch_additional_naming_label = FlameLabel('Additional Batch Naming', label_type='underline')
 
             # LineEdits
 
-            self.setup_batch_additional_naming_lineedit = FlameLineEdit(self.batch_additional_naming, self.setup_window.tab2)
+            self.setup_batch_additional_naming_lineedit = FlameLineEdit(self.batch_additional_naming)
             self.setup_batch_additional_naming_lineedit.setMaximumWidth(150)
 
             # Schematic Reel Tree
 
-            self.schematic_reel_tree = QtWidgets.QTreeWidget(self.setup_window.tab2)
+            self.schematic_reel_tree = QtWidgets.QTreeWidget()
             self.schematic_reel_tree.setColumnCount(1)
             self.schematic_reel_tree.setHeaderLabel('Schematic Reel Template')
             self.schematic_reel_tree.itemsExpandable()
@@ -1480,24 +1297,27 @@ class CreateShotFolders(object):
             self.schematic_reel_tree.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
             self.schematic_reel_tree.setAlternatingRowColors(True)
             self.schematic_reel_tree.setFocusPolicy(QtCore.Qt.NoFocus)
-            self.schematic_reel_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #222222; alternate-background-color: #2d2d2d; border: none; font: 14pt "Discreet"}'
-                                                   'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #111111}'
-                                                   'QHeaderView {color: #9a9a9a; background-color: #393939; font: 14pt "Discreet"}'
+            self.schematic_reel_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #1e1e1e; alternate-background-color: #242424; border: none; font: 14pt "Discreet"}'
+                                                   'QHeaderView::section {color: #9a9a9a; background-color: #3a3a3a; border: none; padding-left: 10px; font: 14pt "Discreet"}'
+                                                   'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #5a5a5a}'
+                                                   'QTreeWidget:item:selected:active {color: #999999; border: none}'
+                                                   'QTreeWidget:disabled {color: #656565; background-color: #222222}'
                                                    'QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
                                                    'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
 
             # Shelf Reel Tree
 
-            self.shelf_reel_tree = QtWidgets.QTreeWidget(self.setup_window.tab2)
+            self.shelf_reel_tree = QtWidgets.QTreeWidget()
             self.shelf_reel_tree.setColumnCount(1)
             self.shelf_reel_tree.setHeaderLabel('Shelf Reel Template')
             self.shelf_reel_tree.itemsExpandable()
             self.shelf_reel_tree.setAlternatingRowColors(True)
             self.shelf_reel_tree.setFocusPolicy(QtCore.Qt.NoFocus)
-            self.shelf_reel_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #222222; alternate-background-color: #2d2d2d; border: none; font: 14pt "Discreet"}'
-                                               'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #111111}'
-                                               'QTreeWidget:item:selected:active {color: #999999}'
-                                               'QHeaderView {color: #9a9a9a; background-color: #393939; font: 14pt "Discreet"}'
+            self.shelf_reel_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #1e1e1e; alternate-background-color: #242424; border: none; font: 14pt "Discreet"}'
+                                               'QHeaderView::section {color: #9a9a9a; background-color: #3a3a3a; border: none; padding-left: 10px; font: 14pt "Discreet"}'
+                                               'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #5a5a5a}'
+                                               'QTreeWidget:item:selected:active {color: #999999; border: none}'
+                                               'QTreeWidget:disabled {color: #656565; background-color: #222222}'
                                                'QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
                                                'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
 
@@ -1515,84 +1335,59 @@ class CreateShotFolders(object):
 
             # Batch Start Frame Slider
 
-            self.setup_batch_start_frame_min_value = 1
-            self.setup_batch_start_frame_max_value = 10000
-            self.setup_batch_start_frame_start_value = self.batch_start_frame
-
-            def setup_batch_start_frame_spinbox_move_slider():
-                self.setup_batch_start_frame_slider.setValue(int(self.setup_batch_start_frame_lineedit.text()))
-
-            self.setup_batch_start_frame_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.setup_window.tab2)
-            self.setup_batch_start_frame_slider.setMaximumHeight(3)
-            self.setup_batch_start_frame_slider.setMaximumWidth(75)
-            self.setup_batch_start_frame_slider.setMinimum(self.setup_batch_start_frame_min_value)
-            self.setup_batch_start_frame_slider.setMaximum(self.setup_batch_start_frame_max_value)
-            self.setup_batch_start_frame_slider.setValue(self.setup_batch_start_frame_start_value)
-            self.setup_batch_start_frame_slider.setStyleSheet('QSlider {color: #111111}'
-                                                              'QSlider::disabled {color: #6a6a6a; background-color: #373737}'
-                                                              'QSlider::groove:horizontal {background-color: #111111}'
-                                                              'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-            self.setup_batch_start_frame_slider.setDisabled(True)
-
-            self.setup_batch_start_frame_lineedit = CustomSpinBox(CustomSpinBox.IntSpinBox, self.setup_batch_start_frame_start_value, parent=self.setup_window.tab2)
-            self.setup_batch_start_frame_lineedit.setMinimum(self.setup_batch_start_frame_min_value)
-            self.setup_batch_start_frame_lineedit.setMaximum(self.setup_batch_start_frame_max_value)
-            self.setup_batch_start_frame_lineedit.setMinimumHeight(28)
-            self.setup_batch_start_frame_lineedit.setMaximumWidth(75)
-            self.setup_batch_start_frame_lineedit.textChanged.connect(setup_batch_start_frame_spinbox_move_slider)
-            self.setup_batch_start_frame_slider.raise_()
+            self.setup_batch_start_frame_slider = FlameSlider(self.batch_start_frame, 1, 10000, False)
 
             # Push Buttons
 
-            self.add_render_node_btn = FlamePushButton(' Add Render Node', self.add_render_node, self.setup_window.tab2)
+            self.add_render_node_btn = FlamePushButton('Add Render Node', self.add_render_node)
             self.add_render_node_btn.clicked.connect(render_button_toggle)
 
-            self.add_write_file_node_btn = FlamePushButton(' Add Write File Node', self.add_write_file_node, self.setup_window.tab2)
+            self.add_write_file_node_btn = FlamePushButton('Add Write File Node', self.add_write_file_node)
             self.add_write_file_node_btn.clicked.connect(write_file_button_toggle)
 
             # Buttons
 
-            self.schematic_reels_sort_btn = FlameButton('Sort Schematic Reels', partial(self.sort_tree_items, self.schematic_reel_tree), self.setup_window.tab2)
-            self.shelf_reels_sort_btn = FlameButton('Sort Shelf Reels', partial(self.sort_tree_items, self.shelf_reel_tree), self.setup_window.tab2)
+            self.schematic_reels_sort_btn = FlameButton('Sort Schematic Reels', partial(self.sort_tree_items, self.schematic_reel_tree))
+            self.shelf_reels_sort_btn = FlameButton('Sort Shelf Reels', partial(self.sort_tree_items, self.shelf_reel_tree))
 
-            self.add_schematic_reel_btn = FlameButton('Add Schematic Reel', partial(add_tree_item, batch_group_schematic_tree_top, self.schematic_reel_tree), self.setup_window.tab2)
-            self.del_schematic_reel_btn = FlameButton('Delete Schematic Reel', partial(del_tree_item, batch_group_schematic_tree_top, self.schematic_reel_tree), self.setup_window.tab2)
-            self.set_clip_dest_reel_btn = FlameButton('Set Clip Dest Reel', partial(set_as_destination, self.setup_batch_clip_dest_reel_label_02, batch_group_schematic_tree_top, self.schematic_reel_tree), self.setup_window.tab2)
+            self.add_schematic_reel_btn = FlameButton('Add Schematic Reel', partial(add_tree_item, batch_group_schematic_tree_top, self.schematic_reel_tree))
+            self.del_schematic_reel_btn = FlameButton('Delete Schematic Reel', partial(del_tree_item, batch_group_schematic_tree_top, self.schematic_reel_tree))
+            self.set_clip_dest_reel_btn = FlameButton('Set Clip Dest Reel', partial(set_as_destination, self.setup_batch_clip_dest_reel_label_02, batch_group_schematic_tree_top, self.schematic_reel_tree))
 
-            self.add_shelf_reel_btn = FlameButton('Add Shelf Reel', partial(add_tree_item, batch_group_shelf_tree_top, self.shelf_reel_tree), self.setup_window.tab2)
-            self.del_shelf_reel_btn = FlameButton('Delete Shelf Reel', partial(del_tree_item, batch_group_shelf_tree_top, self.shelf_reel_tree), self.setup_window.tab2)
+            self.add_shelf_reel_btn = FlameButton('Add Shelf Reel', partial(add_tree_item, batch_group_shelf_tree_top, self.shelf_reel_tree))
+            self.del_shelf_reel_btn = FlameButton('Delete Shelf Reel', partial(del_tree_item, batch_group_shelf_tree_top, self.shelf_reel_tree))
 
-            self.write_file_setup_btn = FlameButton('Write File Setup', self.write_file_node_setup, self.setup_window.tab2)
+            self.write_file_setup_btn = FlameButton('Write File Setup', self.write_file_node_setup)
             if self.add_render_node:
                 self.write_file_setup_btn.setEnabled(False)
 
-            setup_help_btn = FlameButton('Help', self.help, self.setup_window.tab2)
-            setup_save_btn = FlameButton('Save', save_setup_settings, self.setup_window.tab2)
-            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close, self.setup_window.tab2)
+            setup_help_btn = FlameButton('Help', self.help)
+            setup_save_btn = FlameButton('Save', save_setup_settings)
+            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close)
 
             # Schematic reel tree contextual right click menus
 
-            action_add_schematic_reel = QtWidgets.QAction('Add Reel', self.setup_window.tab2)
+            action_add_schematic_reel = QtWidgets.QAction('Add Reel')
             action_add_schematic_reel.triggered.connect(partial(add_tree_item, batch_group_schematic_tree_top, self.schematic_reel_tree))
             self.schematic_reel_tree.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
             self.schematic_reel_tree.addAction(action_add_schematic_reel)
 
-            action_delete_schematic_reel = QtWidgets.QAction('Delete Reel', self.setup_window.tab2)
+            action_delete_schematic_reel = QtWidgets.QAction('Delete Reel')
             action_delete_schematic_reel.triggered.connect(partial(del_tree_item, batch_group_schematic_tree_top, self.schematic_reel_tree))
             self.schematic_reel_tree.addAction(action_delete_schematic_reel)
 
-            action_set_dest_reel = QtWidgets.QAction('Set Clip Dest Reel', self.setup_window.tab2)
+            action_set_dest_reel = QtWidgets.QAction('Set Clip Dest Reel')
             action_set_dest_reel.triggered.connect(partial(set_as_destination, self.setup_batch_clip_dest_reel_label_02, batch_group_schematic_tree_top, self.schematic_reel_tree))
             self.schematic_reel_tree.addAction(action_set_dest_reel)
 
             # Shelf reel contextual right click menus
 
-            action_add_shelf_reel = QtWidgets.QAction('Add Reel', self.setup_window.tab2)
+            action_add_shelf_reel = QtWidgets.QAction('Add Reel')
             action_add_shelf_reel.triggered.connect(partial(add_tree_item, batch_group_shelf_tree_top, self.shelf_reel_tree))
             self.shelf_reel_tree.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
             self.shelf_reel_tree.addAction(action_add_shelf_reel)
 
-            action_delete_shelf_reel = QtWidgets.QAction('Delete Reel', self.setup_window.tab2)
+            action_delete_shelf_reel = QtWidgets.QAction('Delete Reel')
             action_delete_shelf_reel.triggered.connect(partial(del_tree_item, batch_group_shelf_tree_top, self.shelf_reel_tree))
             self.shelf_reel_tree.addAction(action_delete_shelf_reel)
 
@@ -1609,8 +1404,7 @@ class CreateShotFolders(object):
             self.setup_window.tab2.layout.addWidget(self.setup_batch_clip_dest_reel_label_02, 2, 0)
 
             self.setup_window.tab2.layout.addWidget(self.setup_batch_start_frame_label, 4, 0)
-            self.setup_window.tab2.layout.addWidget(self.setup_batch_start_frame_slider, 5, 0, QtCore.Qt.AlignBottom)
-            self.setup_window.tab2.layout.addWidget(self.setup_batch_start_frame_lineedit, 5, 0)
+            self.setup_window.tab2.layout.addWidget(self.setup_batch_start_frame_slider, 5, 0)
 
             self.setup_window.tab2.layout.addWidget(self.setup_batch_additional_naming_label, 7, 0)
             self.setup_window.tab2.layout.addWidget(self.setup_batch_additional_naming_lineedit, 8, 0)
@@ -1658,7 +1452,7 @@ class CreateShotFolders(object):
                 # Count number of reels in list
 
                 reel_count = len(existing_reels)
-                print ('reel_count: ', reel_count)
+                # print ('reel_count: ', reel_count)
 
                 # Don't allow to delete reels if only 4 reels are left
 
@@ -1669,32 +1463,27 @@ class CreateShotFolders(object):
                     for item in tree.selectedItems():
                         (item.parent() or tree_top).removeChild(item)
                 else:
-                    message_box('Reel Group must have at least 4 reels')
+                    FlameMessageWindow('Error', 'error', 'Reel Group must have at least 4 reels')
 
             # Labels
 
-            self.reel_group_label = FlameLabel('Desktop Reel Group Setup', 'background', self.setup_window.tab3)
+            self.reel_group_label = FlameLabel('Desktop Reel Group Setup', label_type='underline')
 
             # Reel Group Tree
 
-            self.reel_group_tree = QtWidgets.QTreeWidget(self.setup_window.tab3)
+            self.reel_group_tree = QtWidgets.QTreeWidget()
             self.reel_group_tree.move(230, 170)
             self.reel_group_tree.resize(250, 140)
             self.reel_group_tree.setColumnCount(1)
             self.reel_group_tree.setHeaderLabel('Reel Group Template')
             self.reel_group_tree.setAlternatingRowColors(True)
             self.reel_group_tree.setFocusPolicy(QtCore.Qt.NoFocus)
-            # self.reel_group_tree.setAcceptDrops(True)
-            # self.reel_group_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-            # self.reel_group_tree.setDragEnabled(True)
-            # self.reel_group_tree.setDropIndicatorShown(True)
-            # self.reel_group_tree.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
-            # self.reel_group_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-            self.reel_group_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #222222; alternate-background-color: #2d2d2d; border: none; font: 14pt "Discreet"}'
-                                               'QTreeWidget:disabled {color: #656565; background-color: #2a2a2a}'
-                                               'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #111111}'
-                                               'QTreeWidget:item:selected:active {color: #999999}'
-                                               'QHeaderView {color: #9a9a9a; background-color: #393939; font: 14pt "Discreet"}'
+            self.reel_group_tree.setUniformRowHeights(True)
+            self.reel_group_tree.setStyleSheet('QTreeWidget {color: #9a9a9a; background-color: #1e1e1e; alternate-background-color: #242424; border: none; font: 14pt "Discreet"}'
+                                               'QHeaderView::section {color: #9a9a9a; background-color: #3a3a3a; border: none; padding-left: 10px; font: 14pt "Discreet"}'
+                                               'QTreeWidget:item:selected {color: #d9d9d9; background-color: #474747; border: 1px solid #5a5a5a}'
+                                               'QTreeWidget:item:selected:active {color: #999999; border: none}'
+                                               'QTreeWidget:disabled {color: #656565; background-color: #222222}'
                                                'QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
                                                'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
 
@@ -1721,20 +1510,21 @@ class CreateShotFolders(object):
                     self.del_reel_btn.setEnabled(False)
                     self.reel_group_sort_btn.setEnabled(False)
 
-
-            self.add_reel_group_btn = FlamePushButton(' Add Reel Group', self.add_reel_group, self.setup_window.tab3)
+            self.add_reel_group_btn = FlamePushButton('Add Reel Group', self.add_reel_group)
             self.add_reel_group_btn.clicked.connect(add_reel_group_button)
 
             # Buttons
 
-            self.reel_group_sort_btn = FlameButton('Sort Reels', partial(self.sort_tree_items, self.reel_group_tree), self.setup_window.tab3)
+            self.reel_group_sort_btn = FlameButton('Sort Reels', partial(self.sort_tree_items, self.reel_group_tree))
 
-            self.add_reel_btn = FlameButton('Add Reel', partial(add_tree_item, reel_tree_top, self.reel_group_tree), self.setup_window.tab3)
-            self.del_reel_btn = FlameButton('Delete Reel', partial(del_reel_item, reel_tree_top, self.reel_group_tree), self.setup_window.tab3)
+            self.add_reel_btn = FlameButton('Add Reel', partial(add_tree_item, reel_tree_top, self.reel_group_tree))
+            self.del_reel_btn = FlameButton('Delete Reel', partial(del_reel_item, reel_tree_top, self.reel_group_tree))
 
-            setup_help_btn = FlameButton('Help', self.help, self.setup_window.tab3)
-            setup_save_btn = FlameButton('Save', save_setup_settings, self.setup_window.tab3)
-            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close, self.setup_window.tab3)
+            setup_help_btn = FlameButton('Help', self.help)
+            setup_save_btn = FlameButton('Save', save_setup_settings)
+            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close)
+
+            add_reel_group_button()
 
             # Tab layout
 
@@ -1745,26 +1535,22 @@ class CreateShotFolders(object):
 
             self.setup_window.tab3.layout.addWidget(self.add_reel_group_btn, 1, 0)
 
-            self.setup_window.tab3.layout.addWidget(self.reel_group_label, 0, 1)
-            self.setup_window.tab3.layout.addWidget(self.add_reel_btn, 1, 2)
-            self.setup_window.tab3.layout.addWidget(self.del_reel_btn, 2, 2)
-            self.setup_window.tab3.layout.addWidget(self.reel_group_sort_btn, 3, 2)
+            self.setup_window.tab3.layout.addWidget(self.reel_group_label, 0, 1, 1, 3)
+            self.setup_window.tab3.layout.addWidget(self.add_reel_btn, 1, 4)
+            self.setup_window.tab3.layout.addWidget(self.del_reel_btn, 2, 4)
+            self.setup_window.tab3.layout.addWidget(self.reel_group_sort_btn, 3, 4)
 
-            self.setup_window.tab3.layout.addWidget(self.reel_group_tree, 1, 1, 6, 1)
+            self.setup_window.tab3.layout.addWidget(self.reel_group_tree, 1, 1, 5, 3)
+
+            self.setup_window.tab3.layout.setRowMinimumHeight(6, 195)
 
             self.setup_window.tab3.layout.addWidget(setup_help_btn, 14, 0)
-            self.setup_window.tab3.layout.addWidget(setup_save_btn, 13, 2)
-            self.setup_window.tab3.layout.addWidget(setup_cancel_btn, 14, 2)
+            self.setup_window.tab3.layout.addWidget(setup_save_btn, 13, 4)
+            self.setup_window.tab3.layout.addWidget(setup_cancel_btn, 14, 4)
 
             self.setup_window.tab3.setLayout(self.setup_window.tab3.layout)
 
-        def setup_clips_tab():
-
-            def update_system_folder_path():
-
-                shot_name = 'pyt_0010'
-                self.system_shot_folders_path = self.setup_system_shot_folders_path_lineedit.text()
-                self.setup_system_folder_path_translated_label.setText(self.translate_system_shot_folder_path(shot_name))
+        def setup_options_tab():
 
             def folders_button_toggle():
 
@@ -1833,6 +1619,26 @@ class CreateShotFolders(object):
                             self.setup_batch_group_dest_label.setEnabled(True)
                             self.setup_batch_group_dest_btn.setEnabled(True)
 
+            def system_folders_toggle():
+
+                # Toggle system folder options
+
+                if self.setup_system_folders_pushbutton.isChecked():
+                    self.setup_export_plates_pushbutton.setEnabled(True)
+                else:
+                    self.setup_export_plates_pushbutton.setEnabled(False)
+
+            def export_plates_toggle():
+
+                # Toggle Export Plate options
+
+                if self.setup_export_plates_pushbutton.isChecked():
+                    self.setup_export_preset_push_btn.setEnabled(True)
+                    self.setup_foreground_export_pushbutton.setEnabled(True)
+                else:
+                    self.setup_export_preset_push_btn.setEnabled(False)
+                    self.setup_foreground_export_pushbutton.setEnabled(False)
+
             def batch_template_toggle():
 
                 if self.setup_batch_template_pushbutton.isChecked():
@@ -1844,56 +1650,76 @@ class CreateShotFolders(object):
                     self.setup_batch_template_path_lineedit.setEnabled(False)
                     self.setup_batch_template_path_browse_button.setEnabled(False)
 
+            def update_system_folder_path():
+
+                shot_name = 'seq_0010'
+                self.system_shot_folders_path = self.setup_system_shot_folders_path_lineedit.text()
+                self.setup_system_folder_path_translated_label.setText(self.translate_system_shot_folder_path(shot_name))
+
             # Labels
 
-            self.setup_create_shot_type_label = FlameLabel('Create', 'background', self.setup_window.tab4)
-            self.setup_settings_label = FlameLabel('Settings', 'background', self.setup_window.tab4)
-            self.setup_batch_group_options_label = FlameLabel('Batch Group Options', 'background', self.setup_window.tab4)
-            self.setup_batch_template_path_label = FlameLabel('Template Path', 'normal', self.setup_window.tab4)
-            self.setup_batch_group_dest_label = FlameLabel('Batch Group Dest', 'normal', self.setup_window.tab4)
-            self.setup_system_folder_path_label = FlameLabel('File System Folders Path', 'background', self.setup_window.tab4)
-            self.setup_system_folder_path_translated_label = FlameLabel('', 'outline', self.setup_window.tab4)
+            self.setup_create_shot_type_label = FlameLabel('Create', label_type='underline')
+            self.setup_options_label = FlameLabel('Options', label_type='underline')
+            self.setup_batch_group_options_label = FlameLabel('Batch Group Options', label_type='underline')
+            self.setup_batch_template_path_label = FlameLabel('Template Path')
+            self.setup_batch_group_dest_label = FlameLabel('Batch Group Dest')
+            self.setup_system_folder_path_label = FlameLabel('File System Folders Path', label_type='underline')
+            self.setup_system_folder_path_translated_label = FlameLabel('', label_type='background')
+            self.setup_export_preset_label = FlameLabel('Export Preset')
+            # self.setup_import_options_label = FlameLabel('Import Options', 'underline')
 
             # LineEdits
 
-            self.setup_batch_template_path_lineedit = FlameLineEdit(self.batch_template_path, self.setup_window.tab4)
-
-            self.setup_system_shot_folders_path_lineedit = FlameLineEdit(self.system_shot_folders_path, self.setup_window.tab4)
+            self.setup_batch_template_path_lineedit = FlameLineEdit(self.batch_template_path)
+            self.setup_system_shot_folders_path_lineedit = FlameLineEdit(self.system_shot_folders_path)
             self.setup_system_shot_folders_path_lineedit.textChanged.connect(update_system_folder_path)
             update_system_folder_path()
 
             # Push Buttons
 
-            self.setup_folders_pushbutton = FlamePushButton('  Folders', self.create_shot_type_folders, self.setup_window.tab4)
+            self.setup_folders_pushbutton = FlamePushButton('Folders', self.create_shot_type_folders)
             self.setup_folders_pushbutton.clicked.connect(folders_button_toggle)
 
-            self.setup_batch_group_pushbutton = FlamePushButton('  Batch Group', self.create_shot_type_batch_group, self.setup_window.tab4)
+            self.setup_batch_group_pushbutton = FlamePushButton('Batch Group', self.create_shot_type_batch_group)
             self.setup_batch_group_pushbutton.clicked.connect(batch_group_button_toggle)
 
-            self.setup_desktop_pushbutton = FlamePushButton('  Desktop', self.create_shot_type_desktop, self.setup_window.tab4)
+            self.setup_desktop_pushbutton = FlamePushButton('Desktop', self.create_shot_type_desktop)
             self.setup_desktop_pushbutton.clicked.connect(desktop_button_toggle)
 
-            self.setup_system_folders_pushbutton = FlamePushButton('  System Folders', self.create_shot_type_system_folders, self.setup_window.tab4)
+            self.setup_system_folders_pushbutton = FlamePushButton('System Folders', self.create_shot_type_system_folders)
+            self.setup_system_folders_pushbutton.clicked.connect(system_folders_toggle)
 
-            self.setup_batch_template_pushbutton = FlamePushButton('  Batch Template', self.apply_batch_template, self.setup_window.tab4)
+            self.setup_batch_template_pushbutton = FlamePushButton('Batch Template', self.apply_batch_template)
             self.setup_batch_template_pushbutton.clicked.connect(batch_template_toggle)
 
-            # Push Button Menu
+            self.setup_export_plates_pushbutton = FlamePushButton('Export Plates', self.create_shot_export_plates)
+            self.setup_export_plates_pushbutton.clicked.connect(export_plates_toggle)
+
+            self.setup_foreground_export_pushbutton = FlamePushButton('Foreground Export', self.create_shot_fg_export)
+
+            # self.setup_cache_on_import_pushbutton = FlamePushButton('Cache on Import', self.create_shot_cache_on_import)
+
+            # Push Button Menus
 
             batch_group_dest_options = ['Desktop', 'Library']
-            self.setup_batch_group_dest_btn = FlamePushButtonMenu(self.batch_group_dest, batch_group_dest_options, self.setup_window.tab4)
+            self.setup_batch_group_dest_btn = FlamePushButtonMenu(self.batch_group_dest, batch_group_dest_options)
+
+            export_preset_list = self.get_export_presets()
+            self.setup_export_preset_push_btn = FlamePushButtonMenu(self.create_shot_export_plate_preset, export_preset_list)
+
+            # Token Push Button
 
             system_path_token_dict = {'Project Name': '<ProjectName>', 'Project Nickname': '<ProjectNickName>', 'SEQUENCE NAME': '<SEQNAME>', 'Sequence Name': '<SeqName>'}
-            self.system_path_token_push_button = FlameTokenPushButton('Add Token', system_path_token_dict, self.setup_system_shot_folders_path_lineedit, self.setup_window.tab4)
+            self.system_path_token_push_button = FlameTokenPushButton('Add Token', system_path_token_dict, self.setup_system_shot_folders_path_lineedit)
 
             # Buttons
 
-            self.setup_system_folder_path_browse_button = FlameButton('Browse', partial(self.system_folder_browse, self.setup_system_shot_folders_path_lineedit, self.setup_window.tab4), self.setup_window.tab4)
-            self.setup_batch_template_path_browse_button = FlameButton('Browse', partial(self.batch_template_browse, self.setup_batch_template_path_lineedit, self.setup_window.tab4), self.setup_window.tab4)
+            self.setup_batch_template_path_browse_button = FlameButton('Browse', partial(self.batch_template_browse, self.setup_batch_template_path_lineedit))
+            self.setup_system_folder_path_browse_button = FlameButton('Browse', partial(self.system_folder_browse, self.setup_system_shot_folders_path_lineedit))
 
-            setup_help_btn = FlameButton('Help', self.help, self.setup_window.tab4)
-            setup_save_btn = FlameButton('Save', save_setup_settings, self.setup_window.tab4)
-            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close, self.setup_window.tab4)
+            setup_help_btn = FlameButton('Help', self.help)
+            setup_save_btn = FlameButton('Save', save_setup_settings)
+            setup_cancel_btn = FlameButton('Cancel', self.setup_window.close)
 
             # ----- #
 
@@ -1903,6 +1729,8 @@ class CreateShotFolders(object):
             desktop_button_toggle()
             batch_template_toggle()
             folders_button_toggle()
+            system_folders_toggle()
+            export_plates_toggle()
 
             # Tab layout
 
@@ -1917,31 +1745,39 @@ class CreateShotFolders(object):
             self.setup_window.tab4.layout.addWidget(self.setup_desktop_pushbutton, 3, 0)
             self.setup_window.tab4.layout.addWidget(self.setup_system_folders_pushbutton, 4, 0)
 
-            self.setup_window.tab4.layout.addWidget(self.setup_settings_label, 0, 1)
-            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_pushbutton, 1, 1)
+            self.setup_window.tab4.layout.addWidget(self.setup_export_plates_pushbutton, 4, 1)
+            self.setup_window.tab4.layout.addWidget(self.setup_export_preset_label, 4, 2)
+            self.setup_window.tab4.layout.addWidget(self.setup_export_preset_push_btn, 4, 2, 1, 1)
+            self.setup_window.tab4.layout.addWidget(self.setup_foreground_export_pushbutton, 4, 3)
 
-            self.setup_window.tab4.layout.setRowMinimumHeight(8, 28)
+            self.setup_window.tab4.layout.addWidget(self.setup_options_label, 0, 1, 1, 3)
+            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_pushbutton, 2, 1)
 
-            self.setup_window.tab4.layout.addWidget(self.setup_batch_group_options_label, 9, 0, 1, 5)
-            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_path_label, 10, 0)
-            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_path_lineedit, 10, 1, 1, 3)
-            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_path_browse_button, 10, 4)
-            self.setup_window.tab4.layout.addWidget(self.setup_batch_group_dest_label, 11, 0)
-            self.setup_window.tab4.layout.addWidget(self.setup_batch_group_dest_btn, 11, 1)
+            # self.setup_window.tab4.layout.addWidget(self.setup_import_options_label, 0, 4)
+            # self.setup_window.tab4.layout.addWidget(self.setup_cache_on_import_pushbutton, 1, 4)
 
-            self.setup_window.tab4.layout.addWidget(self.setup_system_folder_path_label, 13, 0, 1, 5)
-            self.setup_window.tab4.layout.addWidget(self.setup_system_folder_path_translated_label, 14, 0, 1, 5)
-            self.setup_window.tab4.layout.addWidget(self.setup_system_shot_folders_path_lineedit, 15, 0, 1, 3)
-            self.setup_window.tab4.layout.addWidget(self.setup_system_folder_path_browse_button, 15, 3)
-            self.setup_window.tab4.layout.addWidget(self.system_path_token_push_button, 15, 4)
+            self.setup_window.tab4.layout.setRowMinimumHeight(5, 28)
 
-            self.setup_window.tab4.layout.setRowMinimumHeight(12, 30)
+            self.setup_window.tab4.layout.addWidget(self.setup_batch_group_options_label, 6, 0, 1, 5)
+            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_path_label, 7, 0)
+            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_path_lineedit, 7, 1, 1, 3)
+            self.setup_window.tab4.layout.addWidget(self.setup_batch_template_path_browse_button, 7, 4)
+            self.setup_window.tab4.layout.addWidget(self.setup_batch_group_dest_label, 8, 0)
+            self.setup_window.tab4.layout.addWidget(self.setup_batch_group_dest_btn, 8, 1)
 
-            self.setup_window.tab4.layout.setRowMinimumHeight(17, 100)
+            self.setup_window.tab4.layout.setRowMinimumHeight(9, 28)
 
-            self.setup_window.tab4.layout.addWidget(setup_help_btn, 19, 0)
-            self.setup_window.tab4.layout.addWidget(setup_save_btn, 18, 4)
-            self.setup_window.tab4.layout.addWidget(setup_cancel_btn, 19, 4)
+            self.setup_window.tab4.layout.addWidget(self.setup_system_folder_path_label, 10, 0, 1, 5)
+            self.setup_window.tab4.layout.addWidget(self.setup_system_folder_path_translated_label, 11, 0, 1, 5)
+            self.setup_window.tab4.layout.addWidget(self.setup_system_shot_folders_path_lineedit, 12, 0, 1, 3)
+            self.setup_window.tab4.layout.addWidget(self.setup_system_folder_path_browse_button, 12, 3)
+            self.setup_window.tab4.layout.addWidget(self.system_path_token_push_button, 12, 4)
+
+            self.setup_window.tab4.layout.setRowMinimumHeight(13, 175)
+
+            self.setup_window.tab4.layout.addWidget(setup_help_btn, 15, 0)
+            self.setup_window.tab4.layout.addWidget(setup_save_btn, 14, 4)
+            self.setup_window.tab4.layout.addWidget(setup_cancel_btn, 15, 4)
 
             self.setup_window.tab4.setLayout(self.setup_window.tab4.layout)
 
@@ -1957,11 +1793,59 @@ class CreateShotFolders(object):
                 self.delete_file_system_folder_btn.setDisabled(True)
 
         def set_as_destination(label, tree_top, tree):
-            '''Set selected item in tree as clip folder or reel destination'''
 
-            for item in tree.selectedItems():
-                if item != tree_top:
-                    label.setText(item.text(0))
+            if tree.selectedItems()[0] is not tree_top:
+                label.setText(tree.selectedItems()[0].text(0))
+
+        def set_folder_as_destination(label, tree_top, tree):
+
+            if tree.selectedItems()[0] is not tree_top:
+                selected_folder = tree.selectedItems()[0]
+            else:
+                return
+
+            def get_items_recursively():
+
+                # Create empty list for all folder paths
+
+                self.path_list = []
+
+                # Iterate through folders to get paths through get_tree_path
+
+                def search_child_item(item=None):
+                    if not item:
+                        return
+                    for m in range(item.childCount()):
+                        child_item = item.child(m)
+                        get_tree_path(child_item)
+                        if not child_item:
+                            continue
+                        search_child_item(child_item)
+
+                for i in range(tree.topLevelItemCount()):
+                    item = tree.topLevelItem(i)
+                    if not item:
+                        continue
+                    search_child_item(item)
+
+            def get_tree_path(item):
+
+                # Get path of each child item
+
+                if item is selected_folder:
+
+                    path = []
+
+                    while item is not None:
+                        path.append(str(item.text(0)))
+                        item = item.parent()
+                    item_path = '/'.join(reversed(path))
+                    self.path_list.append(item_path)
+                    self.set_export_folder_path = path
+
+            get_items_recursively()
+
+            label.setText(self.path_list[0])
 
         def fill_tree(tree_widget, tree_dict):
 
@@ -1978,9 +1862,7 @@ class CreateShotFolders(object):
 
                 if type(value) is dict:
                     for key, val in iter(value.items()):
-                    # for key, val in sorted(iter(value.items())):
                         child = QtWidgets.QTreeWidgetItem()
-                        # child.setText(0, unicode(key))
                         child.setText(0, key)
 
                         item.addChild(child)
@@ -2024,7 +1906,7 @@ class CreateShotFolders(object):
                 for item in tree.selectedItems():
                     (item.parent() or root).removeChild(item)
             else:
-                return message_box('Template must have at least one folder/reel')
+                return FlameMessageWindow('Error', 'error', 'Template must have at least one folder/reel')
 
         def add_tree_item(tree_top, tree, new_item_num=0):
 
@@ -2036,10 +1918,10 @@ class CreateShotFolders(object):
             while iterator.value():
                 item = iterator.value()
                 existing_item = item.text(0)
-                print ('existing_item:', existing_item)
+                # print ('existing_item:', existing_item)
                 existing_item_names.append(existing_item)
                 iterator += 1
-            print ('existing_item_names:', existing_item_names)
+            # print ('existing_item_names:', existing_item_names)
 
             # Set New Item name
 
@@ -2054,8 +1936,8 @@ class CreateShotFolders(object):
 
             new_item = new_item_name + ' ' + str(new_item_num)
 
-            if new_item == '%s 0' % new_item_name:
-                new_item = '%s' % new_item_name
+            if new_item == f'{new_item_name} 0':
+                new_item = f'{new_item_name}'
 
             # Check if new item name exists, if it does add one to file name
 
@@ -2150,94 +2032,322 @@ class CreateShotFolders(object):
                 # Make sure entry destination exists in current folder/reel tree
 
                 for key, value in iter(tree_dict.items()):
-                    # print (value)
                     for v in value:
-                        # print (v)
                         if v == str(lineedit.text()):
                             return True
                 return False
 
+            def check_tree_path(tree_top, tree):
+
+                def get_items_recursively():
+
+                    # Create empty list for all folder paths
+
+                    self.file_system_folder_tree_path_list = []
+
+                    # Iterate through folders to get paths through get_tree_path
+
+                    def search_child_item(item=None):
+                        if not item:
+                            return
+                        for m in range(item.childCount()):
+                            child_item = item.child(m)
+                            get_tree_path(child_item)
+                            if not child_item:
+                                continue
+                            search_child_item(child_item)
+
+                    for i in range(tree.topLevelItemCount()):
+                        item = tree.topLevelItem(i)
+                        if not item:
+                            continue
+                        search_child_item(item)
+
+                def get_tree_path(item):
+
+                    # Get path of each child item
+
+                    path = []
+
+                    while item is not None:
+                        path.append(str(item.text(0)))
+                        item = item.parent()
+                    item_path = '/'.join(reversed(path))
+                    self.file_system_folder_tree_path_list.append(item_path)
+                    self.set_export_folder_path = path
+
+                get_items_recursively()
+
+            check_tree_path(self.file_system_folder_tree_top, self.file_system_folder_tree)
             folder_dict = create_dict(self.folder_tree)
             reel_dict = create_dict(self.schematic_reel_tree)
 
+            if not self.preset_name_lineedit.text():
+                return FlameMessageWindow('Error', 'error', 'Preset must have a name')
+
+            if self.file_system_export_dest_label_02.text() not in self.file_system_folder_tree_path_list:
+                return FlameMessageWindow('Error', 'error', 'Export Destination folder must exist in File System Shot Folder Template')
+
             if not clip_dest(self.setup_folder_clip_dest_label_02, folder_dict):
-                return message_box('Clip destination folder must exist in Shot Folder Template')
+                return FlameMessageWindow('Error', 'error', 'Clip destination folder must exist in Shot Folder Template')
 
             if not clip_dest(self.setup_batch_clip_dest_reel_label_02, reel_dict):
-                return message_box('Clip destination reel must exist in Batch Group Template')
+                return FlameMessageWindow('Error', 'error', 'Clip destination reel must exist in Batch Group Template')
 
             if not any([self.setup_folders_pushbutton.isChecked(), self.setup_batch_group_pushbutton.isChecked(), self.setup_desktop_pushbutton.isChecked(), self.setup_system_folders_pushbutton.isChecked()]):
-                return message_box('At least one Create Shot Type must be selected ')
+                return FlameMessageWindow('Error', 'error', 'At least one Create Shot Type must be selected ')
 
             if self.setup_batch_template_pushbutton.isChecked():
                 if not self.setup_batch_template_path_lineedit.text():
-                    return message_box('Select batch setup to use as batch template')
+                    return FlameMessageWindow('Error', 'error', 'Select batch setup to use as batch template')
 
                 elif not os.path.isfile(self.setup_batch_template_path_lineedit.text()):
-                    return message_box('Select valid batch setup')
+                    return FlameMessageWindow('Error', 'error', 'Select valid batch setup')
 
                 elif not self.setup_batch_template_path_lineedit.text().endswith('.batch'):
-                    return message_box('Selected file should be batch setup')
+                    return FlameMessageWindow('Error', 'error', 'Selected file should be batch setup')
+
+            if self.setup_export_plates_pushbutton.isChecked() and self.setup_export_preset_push_btn.text() == 'Select Preset':
+                return FlameMessageWindow('Error', 'error', 'An Export Preset must be selected')
+
+            if self.setup_export_plates_pushbutton.isChecked() and self.setup_export_preset_push_btn.text() == 'No Presets Found':
+                return FlameMessageWindow('Error', 'error', 'Save an export preset in Flame to be used')
 
             batch_group_dest = self.setup_batch_group_dest_btn.text()
 
             if self.setup_folders_pushbutton.isChecked() or self.setup_desktop_pushbutton.isChecked():
                 batch_group_dest = 'Library'
 
-            # Save settings to config file
+            preset_name_text = self.preset_name_lineedit.text()
 
-            xml_tree = ET.parse(self.config_xml)
+            # Check if preset already exists with current name. Give option to delete.
+
+            if [f for f in os.listdir(self.preset_path) if f[:-4] == preset_name_text]:
+                if FlameMessageWindow('Confirm Operation', 'warning', 'Preset with this name already exists. Overwrite?'):
+                    os.remove(os.path.join(self.preset_path, preset_name_text + '.xml'))
+                else:
+                    return
+
+            # Save empty preset file
+
+            preset_name_text = self.preset_name_lineedit.text()
+            preset_xml_path = os.path.join(self.preset_path, preset_name_text + '.xml')
+
+            try:
+                os.remove(os.path.join(self.preset_path, preset_name_text + '.xml'))
+            except:
+                pass
+
+            # Save empty preset file
+
+            preset = """
+<settings>
+    <create_shot_preset>
+        <preset_name></preset_name>
+        <shot_name_from></shot_name_from>
+
+        <shot_folders></shot_folders>
+        <file_system_folders></file_system_folders>
+        <schematic_reels></schematic_reels>
+        <shelf_reels></shelf_reels>
+        <reel_group_reels></reel_group_reels>
+
+        <export_dest_folder></export_dest_folder>
+
+        <add_reel_group></add_reel_group>
+        <add_render_node></add_render_node>
+        <add_write_node></add_write_node>
+
+        <write_file_media_path></write_file_media_path>
+        <write_file_pattern></write_file_pattern>
+        <write_file_create_open_clip></write_file_create_open_clip>
+        <write_file_include_setup></write_file_include_setup>
+        <write_file_create_open_clip_value></write_file_create_open_clip_value>
+        <write_file_include_setup_value></write_file_include_setup_value>
+        <write_file_image_format></write_file_image_format>
+        <write_file_compression></write_file_compression>
+        <write_file_padding></write_file_padding>
+        <write_file_frame_index></write_file_frame_index>
+        <write_file_iteration_padding></write_file_iteration_padding>
+        <write_file_version_name></write_file_version_name>
+
+        <create_shot_type_folders></create_shot_type_folders>
+        <create_shot_type_batch_group></create_shot_type_batch_group>
+        <create_shot_type_desktop></create_shot_type_desktop>
+        <create_shot_type_system_folders></create_shot_type_system_folders>
+        <create_shot_export_plates></create_shot_export_plates>
+        <create_shot_export_plate_preset></create_shot_export_plate_preset>
+        <create_shot_fg_export></create_shot_fg_export>
+
+        <system_shot_folders_path></system_shot_folders_path>
+        <clip_destination_folder></clip_destination_folder>
+        <clip_destination_reel></clip_destination_reel>
+        <setup_batch_template></setup_batch_template>
+        <setup_batch_template_path></setup_batch_template_path>
+        <setup_batch_group_dest></setup_batch_group_dest>
+        <setup_batch_start_frame></setup_batch_start_frame>
+        <setup_batch_additional_naming></setup_batch_additional_naming>
+    </create_shot_preset>
+</settings>"""
+
+            with open(preset_xml_path, 'a') as xml_file:
+                xml_file.write(preset)
+                xml_file.close()
+
+            # Save settings to preset file
+
+            xml_tree = ET.parse(preset_xml_path)
             root = xml_tree.getroot()
+
+            preset_name = root.find('.//preset_name')
+            preset_name.text = preset_name_text
+
+            shot_name_from = root.find('.//shot_name_from')
+            shot_name_from.text = self.shot_name_from_push_button.text()
 
             shot_folders = root.find('.//shot_folders')
             shot_folders.text = str(create_dict(self.folder_tree))
+
             file_system_folders = root.find('.//file_system_folders')
             file_system_folders.text = str(create_dict(self.file_system_folder_tree))
+
             schematic_reels = root.find('.//schematic_reels')
             schematic_reels.text = str(create_dict(self.schematic_reel_tree))
+
             shelf_reels = root.find('.//shelf_reels')
             shelf_reels.text = str(create_dict(self.shelf_reel_tree))
+
             reel_group_reels = root.find('.//reel_group_reels')
             reel_group_reels.text = str(create_dict(self.reel_group_tree))
+
             add_reel_group = root.find('.//add_reel_group')
             add_reel_group.text = str(self.add_reel_group_btn.isChecked())
+
             add_render_node = root.find('.//add_render_node')
             add_render_node.text = str(self.add_render_node_btn.isChecked())
+
             add_write_node = root.find('.//add_write_node')
             add_write_node.text = str(self.add_write_file_node_btn.isChecked())
+
+            export_dest_folder = root.find('.//export_dest_folder')
+            export_dest_folder.text = self.file_system_export_dest_label_02.text()
+
             create_shot_type_folders = root.find('.//create_shot_type_folders')
             create_shot_type_folders.text = str(self.setup_folders_pushbutton.isChecked())
+
             create_shot_type_batch_group = root.find('.//create_shot_type_batch_group')
             create_shot_type_batch_group.text = str(self.setup_batch_group_pushbutton.isChecked())
+
             create_shot_type_desktop = root.find('.//create_shot_type_desktop')
             create_shot_type_desktop.text = str(self.setup_desktop_pushbutton.isChecked())
+
             create_shot_type_system_folders = root.find('.//create_shot_type_system_folders')
             create_shot_type_system_folders.text = str(self.setup_system_folders_pushbutton.isChecked())
+
+            # create_shot_cache_on_import = root.find('.//create_shot_cache_on_import')
+            # create_shot_cache_on_import.text = str(self.setup_cache_on_import_pushbutton.isChecked())
+
+            create_shot_export_plates = root.find('.//create_shot_export_plates')
+            create_shot_export_plates.text = str(self.setup_export_plates_pushbutton.isChecked())
+
+            create_shot_export_plate_preset = root.find('.//create_shot_export_plate_preset')
+            create_shot_export_plate_preset.text = self.setup_export_preset_push_btn.text()
+
+            create_shot_fg_export = root.find('.//create_shot_fg_export')
+            create_shot_fg_export.text = str(self.setup_foreground_export_pushbutton.isChecked())
+
             system_shot_folders_path = root.find('.//system_shot_folders_path')
             system_shot_folders_path.text = self.setup_system_shot_folders_path_lineedit.text()
+
             clip_destination_folder = root.find('.//clip_destination_folder')
             clip_destination_folder.text = str(self.setup_folder_clip_dest_label_02.text())
+
             clip_destination_reel = root.find('.//clip_destination_reel')
             clip_destination_reel.text = str(self.setup_batch_clip_dest_reel_label_02.text())
+
             setup_batch_template = root.find('.//setup_batch_template')
             setup_batch_template.text = str(self.setup_batch_template_pushbutton.isChecked())
+
             setup_batch_template_path = root.find('.//setup_batch_template_path')
             setup_batch_template_path.text = self.setup_batch_template_path_lineedit.text()
+
             setup_batch_group_dest = root.find('.//setup_batch_group_dest')
             setup_batch_group_dest.text = batch_group_dest
 
             setup_batch_start_frame = root.find('.//setup_batch_start_frame')
-            setup_batch_start_frame.text = self.setup_batch_start_frame_lineedit.text()
+            setup_batch_start_frame.text = self.setup_batch_start_frame_slider.text()
+
             setup_batch_additional_naming = root.find('.//setup_batch_additional_naming')
             setup_batch_additional_naming.text = self.setup_batch_additional_naming_lineedit.text()
 
-            xml_tree.write(self.config_xml)
+            # Write file values
 
-            print ('\n>>> settings saved <<<\n')
+            write_file_media_path = root.find('.//write_file_media_path')
+            write_file_media_path.text = self.write_file_media_path
+
+            write_file_pattern = root.find('.//write_file_pattern')
+            write_file_pattern.text = self.write_file_pattern
+
+            write_file_create_open_clip = root.find('.//write_file_create_open_clip')
+            write_file_create_open_clip.text = str(self.write_file_create_open_clip)
+
+            write_file_include_setup = root.find('.//write_file_include_setup')
+            write_file_include_setup.text = str(self.write_file_include_setup)
+
+            write_file_create_open_clip_value = root.find('.//write_file_create_open_clip_value')
+            write_file_create_open_clip_value.text = self.write_file_create_open_clip_value
+
+            write_file_include_setup_value = root.find('.//write_file_include_setup_value')
+            write_file_include_setup_value.text = self.write_file_include_setup_value
+
+            write_file_image_format = root.find('.//write_file_image_format')
+            write_file_image_format.text = self.write_file_image_format
+
+            write_file_compression = root.find('.//write_file_compression')
+            write_file_compression.text = self.write_file_compression
+
+            write_file_padding = root.find('.//write_file_padding')
+            write_file_padding.text = self.write_file_padding
+
+            write_file_frame_index = root.find('.//write_file_frame_index')
+            write_file_frame_index.text = self.write_file_frame_index
+
+            write_file_iteration_padding = root.find('.//write_file_iteration_padding')
+            write_file_iteration_padding.text = self.write_file_iteration_padding
+
+            write_file_version_name = root.find('.//write_file_version_name')
+            write_file_version_name.text = self.write_file_version_name
+
+            xml_tree.write(preset_xml_path)
+
+            # Remove old preset if preset name is changed.
+
+            if self.preset_name and preset_name_text != self.preset_name:
+                os.remove(os.path.join(self.preset_path, self.preset_name + '.xml'))
+
+            # Update config
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            if self.preset_global_default_pushbutton.isChecked():
+                global_default = root.find('.//global_default')
+                global_default.text = preset_name_text
+                preset_name_text = preset_name_text + '*'
+
+                xml_tree.write(self.config_xml)
 
             # Close setup window and reload settings
 
             self.setup_window.close()
+
+            print ('--> preset saved \n')
+
+            self.selector_window.close()
+
+            self.preset_selector()
+
+            self.current_preset_push_btn.setText(preset_name_text)
 
         def render_button_toggle():
             if self.add_render_node_btn.isChecked():
@@ -2255,54 +2365,43 @@ class CreateShotFolders(object):
                 self.add_render_node_btn.setChecked(True)
                 self.write_file_setup_btn.setDisabled(True)
 
-        self.setup_window = QtWidgets.QTabWidget()
-        self.setup_window.setMinimumSize(QtCore.QSize(800, 560))
-        self.setup_window.setMaximumSize(QtCore.QSize(800, 560))
-        self.setup_window.setWindowTitle('Create Shot Setup %s' % VERSION)
-        self.setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.setup_window.setStyleSheet('background-color: #272727')
+                vbox = QtWidgets.QVBoxLayout()
 
-        # Center window in linux
+        vbox = QtWidgets.QVBoxLayout()
+        self.setup_window = FlameWindow(f'Create Shot - Preset Setup <small>{VERSION}', vbox, 1000, 620)
 
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.setup_window.move((resolution.width() / 2) - (self.setup_window.frameSize().width() / 2),
-                               (resolution.height() / 2) - (self.setup_window.frameSize().height() / 2))
+        # Tabs
+
+        self.main_tabs = QtWidgets.QTabWidget()
 
         self.setup_window.tab1 = QtWidgets.QWidget()
         self.setup_window.tab2 = QtWidgets.QWidget()
         self.setup_window.tab3 = QtWidgets.QWidget()
         self.setup_window.tab4 = QtWidgets.QWidget()
+        self.setup_window.tab5 = QtWidgets.QWidget()
+        self.setup_window.tab6 = QtWidgets.QWidget()
 
-        self.setup_window.setStyleSheet('QTabWidget {background-color: #272727; font: 14px "Discreet"}'
-                                        'QTabWidget::tab-bar {alignment: center}'
-                                        'QTabBar::tab {color: #9a9a9a; background-color: #272727; border: 1px solid #3a3a3a; border-bottom-color: #555555; min-width: 20ex; padding: 5px}'
-                                        'QTabBar::tab:selected {color: #bababa; border: 1px solid #555555; border-bottom: 1px solid #272727}'
-                                        'QTabWidget::pane {border-top: 1px solid #555555; top: -0.05em}')
+        self.main_tabs.addTab(self.setup_window.tab6, 'Preset')
+        self.main_tabs.addTab(self.setup_window.tab5, 'File System Folders')
+        self.main_tabs.addTab(self.setup_window.tab1, 'Media Panel Folders')
+        self.main_tabs.addTab(self.setup_window.tab2, 'Batch Groups')
+        self.main_tabs.addTab(self.setup_window.tab3, 'Desktops')
+        self.main_tabs.addTab(self.setup_window.tab4, 'Shot Options')
 
-        self.setup_window.addTab(self.setup_window.tab1, 'Folders')
-        self.setup_window.addTab(self.setup_window.tab2, 'Batch Groups')
-        self.setup_window.addTab(self.setup_window.tab3, 'Desktops')
-        self.setup_window.addTab(self.setup_window.tab4, 'Clip/File to Shot')
-
+        setup_preset_tab()
         setup_folder_tab()
+        setup_file_system_folders_tab()
         setup_batch_group_tab()
         setup_desktop_tab()
-        setup_clips_tab()
+        setup_options_tab()
 
         flame_version_check()
 
-        # Window Layout
+        # UI Widget Layout
 
-        vbox = QtWidgets.QVBoxLayout()
         vbox.setMargin(15)
 
-        vbox.addLayout(self.setup_window.tab1.layout)
-        vbox.addLayout(self.setup_window.tab2.layout)
-        vbox.addLayout(self.setup_window.tab3.layout)
-        vbox.addLayout(self.setup_window.tab4.layout)
-
-        self.setup_window.setLayout(vbox)
+        vbox.addWidget(self.main_tabs)
 
         self.setup_window.show()
 
@@ -2317,132 +2416,80 @@ class CreateShotFolders(object):
             if os.path.isdir(file_path):
                 self.write_file_media_path_lineedit.setText(file_path)
 
-        def save_write_file_config():
+        def set_write_file_values():
 
-            def save_config():
-
-                # Save settings to config file
-
-                xml_tree = ET.parse(self.config_xml)
-                root = xml_tree.getroot()
-
-                write_file_media_path = root.find('.//write_file_media_path')
-                write_file_media_path.text = self.write_file_media_path_lineedit.text()
-                write_file_pattern = root.find('.//write_file_pattern')
-                write_file_pattern.text = self.write_file_pattern_lineedit.text()
-                write_file_create_open_clip = root.find('.//write_file_create_open_clip')
-                write_file_create_open_clip.text = str(self.write_file_create_open_clip_btn.isChecked())
-                write_file_include_setup = root.find('.//write_file_include_setup')
-                write_file_include_setup.text = str(self.write_file_include_setup_btn.isChecked())
-                write_file_create_open_clip_value = root.find('.//write_file_create_open_clip_value')
-                write_file_create_open_clip_value.text = self.write_file_create_open_clip_lineedit.text()
-                write_file_include_setup_value = root.find('.//write_file_include_setup_value')
-                write_file_include_setup_value.text = self.write_file_include_setup_lineedit.text()
-                write_file_image_format = root.find('.//write_file_image_format')
-                write_file_image_format.text = self.write_file_image_format_push_btn.text()
-                write_file_image_format = root.find('.//write_file_compression')
-                write_file_image_format.text = self.write_file_compression_push_btn.text()
-                write_file_padding = root.find('.//write_file_padding')
-                write_file_padding.text = self.write_file_padding_lineedit.text()
-                write_file_frame_index = root.find('.//write_file_frame_index')
-                write_file_frame_index.text = self.write_file_frame_index_push_btn.text()
-
-                xml_tree.write(self.config_xml)
-
-                print ('\n>>> settings saved <<<\n')
-
-                # Close setup window and reload settings
+            if not self.write_file_media_path_lineedit.text():
+                FlameMessageWindow('Error', 'error', 'Enter Media Path')
+            elif not os.path.isdir(self.write_file_media_path_lineedit.text()):
+                FlameMessageWindow('Error', 'error', 'Enter Valid Media Path')
+            elif not self.write_file_pattern_lineedit.text():
+                FlameMessageWindow('Error', 'error', 'Enter Pattern for image files')
+            elif not self.write_file_create_open_clip_lineedit.text():
+                FlameMessageWindow('Error', 'error', 'Enter Create Open Clip Naming')
+            elif not self.write_file_include_setup_lineedit.text():
+                FlameMessageWindow('Error', 'error', 'Enter Include Setup Naming')
+            elif not self.write_file_version_name_lineedit.text():
+                FlameMessageWindow('Error', 'error', 'Enter Version Naming')
+            else:
+                self.write_file_media_path = self.write_file_media_path_lineedit.text()
+                self.write_file_pattern = self.write_file_pattern_lineedit.text()
+                self.write_file_create_open_clip = self.write_file_create_open_clip_btn.isChecked()
+                self.write_file_include_setup = self.write_file_include_setup_btn.isChecked()
+                self.write_file_create_open_clip_value = self.write_file_create_open_clip_lineedit.text()
+                self.write_file_include_setup_value = self.write_file_include_setup_lineedit.text()
+                self.write_file_image_format = self.write_file_image_format_push_btn.text()
+                self.write_file_compression = self.write_file_compression_push_btn.text()
+                self.write_file_padding = self.write_file_padding_slider.text()
+                self.write_file_frame_index = self.write_file_frame_index_push_btn.text()
+                self.write_file_iteration_padding = self.write_file_iteration_padding_slider.text()
+                self.write_file_version_name = self.write_file_version_name_lineedit.text()
 
                 self.write_file_setup_window.close()
 
-                self.config()
-
-            if self.write_file_media_path_lineedit.text() == '':
-                message_box('Enter Media Path')
-            elif not os.path.isdir(self.write_file_media_path_lineedit.text()):
-                message_box('Enter Valid Media Path')
-            elif self.write_file_pattern_lineedit.text() == '':
-                message_box('Enter Pattern for image files')
-            elif self.write_file_create_open_clip_lineedit.text() == '':
-                message_box('Enter Create Open Clip Naming')
-            elif self.write_file_include_setup_lineedit.text() == '':
-                message_box('Enter Include Setup Naming')
-            else:
-                save_config()
-
-        self.write_file_setup_window = QtWidgets.QWidget()
-        self.write_file_setup_window.setMinimumSize(QtCore.QSize(1000, 500))
-        self.write_file_setup_window.setMaximumSize(QtCore.QSize(1000, 500))
-        self.write_file_setup_window.setWindowTitle('Shot Folder Creator Write File Node Setup %s' % VERSION)
-        self.write_file_setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.write_file_setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.write_file_setup_window.setStyleSheet('background-color: #272727')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.write_file_setup_window.move((resolution.width() / 2) - (self.write_file_setup_window.frameSize().width() / 2),
-                                          (resolution.height() / 2) - (self.write_file_setup_window.frameSize().height() / 2))
+        gridbox = QtWidgets.QGridLayout()
+        self.write_file_setup_window = FlameWindow(f'Create Shot - Write File Node Setup <small>{VERSION}', gridbox, 1000, 570, window_bar_color='green')
 
         # Labels
 
-        self.write_file_setup_label = FlameLabel('Write File Node Setup', 'background', self.write_file_setup_window)
-        self.write_file_media_path_label = FlameLabel('Media Path', 'normal', self.write_file_setup_window)
-        self.write_file_pattern_label = FlameLabel('Pattern', 'normal', self.write_file_setup_window)
-        self.write_file_type_label = FlameLabel('File Type', 'normal', self.write_file_setup_window)
-        self.write_file_frame_index_label = FlameLabel('Frame Index', 'normal', self.write_file_setup_window)
-        self.write_file_padding_label = FlameLabel('Padding', 'normal', self.write_file_setup_window)
-        self.write_file_compression_label = FlameLabel('Compression', 'normal', self.write_file_setup_window)
-        self.write_file_settings_label = FlameLabel('Settings', 'background', self.write_file_setup_window)
+        self.write_file_setup_label = FlameLabel('Write File Node Setup', label_type='underline')
+        self.write_file_media_path_label = FlameLabel('Media Path')
+        self.write_file_pattern_label = FlameLabel('Pattern')
+        self.write_file_type_label = FlameLabel('File Type')
+        self.write_file_frame_index_label = FlameLabel('Frame Index')
+        self.write_file_padding_label = FlameLabel('Padding')
+        self.write_file_compression_label = FlameLabel('Compression')
+        self.write_file_settings_label = FlameLabel('Settings', label_type='underline')
+        self.write_file_iteration_padding_label = FlameLabel('Iteration Padding')
+        self.write_file_version_name_label = FlameLabel('Version Name')
 
         # LineEdits
 
-        self.write_file_media_path_lineedit = FlameLineEdit(self.write_file_media_path, self.write_file_setup_window)
-        self.write_file_pattern_lineedit = FlameLineEdit(self.write_file_pattern, self.write_file_setup_window)
-        self.write_file_create_open_clip_lineedit = FlameLineEdit(self.write_file_create_open_clip_value, self.write_file_setup_window)
-        self.write_file_include_setup_lineedit = FlameLineEdit(self.write_file_include_setup_value, self.write_file_setup_window)
+        self.write_file_media_path_lineedit = FlameLineEdit(self.write_file_media_path)
+        self.write_file_pattern_lineedit = FlameLineEdit(self.write_file_pattern)
+        self.write_file_create_open_clip_lineedit = FlameLineEdit(self.write_file_create_open_clip_value)
+        self.write_file_include_setup_lineedit = FlameLineEdit(self.write_file_include_setup_value)
+        self.write_file_version_name_lineedit = FlameLineEdit(self.write_file_version_name)
 
-        # Padding Slider
+        # Sliders
 
-        self.write_file_padding_min_value = 1
-        self.write_file_padding_max_value = 20
-        self.write_file_padding_start_value = int(self.write_file_padding)
+        self.write_file_padding_slider = FlameSlider(int(self.write_file_padding), 1, 20, False)
+        self.write_file_iteration_padding_slider = FlameSlider(int(self.write_file_iteration_padding), 1, 10, False)
 
-        def padding_set_slider():
-            self.write_file_padding_slider.setValue(int(self.write_file_padding_lineedit.text()))
-
-        self.write_file_padding_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.write_file_setup_window)
-        self.write_file_padding_slider.setMaximumHeight(3)
-        self.write_file_padding_slider.setMaximumWidth(150)
-        self.write_file_padding_slider.setMinimum(self.write_file_padding_min_value)
-        self.write_file_padding_slider.setMaximum(self.write_file_padding_max_value)
-        self.write_file_padding_slider.setValue(self.write_file_padding_start_value)
-        self.write_file_padding_slider.setStyleSheet('QSlider {color: #111111}'
-                                                     'QSlider::groove:horizontal {background-color: #111111}'
-                                                     'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-        self.write_file_padding_slider.setDisabled(True)
-
-        self.write_file_padding_lineedit = CustomSpinBox(CustomSpinBox.IntSpinBox, self.write_file_padding_start_value, parent=self.write_file_setup_window)
-        self.write_file_padding_lineedit.setMinimum(self.write_file_padding_min_value)
-        self.write_file_padding_lineedit.setMaximum(self.write_file_padding_max_value)
-        self.write_file_padding_lineedit.setMinimumHeight(28)
-        self.write_file_padding_lineedit.setMaximumWidth(150)
-        self.write_file_padding_lineedit.textChanged.connect(padding_set_slider)
-        self.write_file_padding_slider.raise_()
-
-
+        # Image format pushbutton
 
         image_format_menu = QtWidgets.QMenu(self.write_file_setup_window)
-        image_format_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                               'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+        image_format_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#2d3744; border: none; font: 14px "Discreet"}'
+                                        'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
 
-        self.write_file_image_format_push_btn = QtWidgets.QPushButton(self.write_file_image_format, self.write_file_setup_window)
+        self.write_file_image_format_push_btn = QtWidgets.QPushButton(self.write_file_image_format)
         self.write_file_image_format_push_btn.setMenu(image_format_menu)
         self.write_file_image_format_push_btn.setMinimumSize(QtCore.QSize(150, 28))
         self.write_file_image_format_push_btn.setMaximumSize(QtCore.QSize(150, 28))
         self.write_file_image_format_push_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.write_file_image_format_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                            'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
+        self.write_file_image_format_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #2d3744; border: none; font: 14px "Discreet"}'
+                                                            'QPushButton:hover {border: 1px solid #5a5a5a}'
+                                                            'QPushButton:disabled {color: #747474; background-color: #2d3744; border: none}'
+                                                            'QPushButton::menu-indicator { image: none; }')
 
         # -------------------------------------------------------------
 
@@ -2510,32 +2557,34 @@ class CreateShotFolders(object):
         image_format_menu.addAction('Tiff 16-bit', partial(compression, 'Tiff 16-bit'))
 
         compression_menu = QtWidgets.QMenu(self.write_file_setup_window)
-        compression_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
+        compression_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#2d3744; border: none; font: 14px "Discreet"}'
                                        'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
 
-        self.write_file_compression_push_btn = QtWidgets.QPushButton(self.write_file_compression, self.write_file_setup_window)
+        self.write_file_compression_push_btn = QtWidgets.QPushButton(self.write_file_compression)
         self.write_file_compression_push_btn.setMenu(compression_menu)
         self.write_file_compression_push_btn.setMinimumSize(QtCore.QSize(150, 28))
         self.write_file_compression_push_btn.setMaximumSize(QtCore.QSize(150, 28))
         self.write_file_compression_push_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.write_file_compression_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
+        self.write_file_compression_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #2d3744; border: none; font: 14px "Discreet"}'
+                                                           'QPushButton:hover {border: 1px solid #5a5a5a}'
+                                                           'QPushButton:disabled {color: #747474; background-color: #2d3744; border: none}'
+                                                           'QPushButton::menu-indicator { image: none; }')
+        self.write_file_compression_push_btn.setText(self.write_file_compression)
 
         # Frame Index Pushbutton Menu
 
         frame_index = ['Use Start Frame', 'Use Timecode']
-        self.write_file_frame_index_push_btn = FlamePushButtonMenu(self.write_file_frame_index, frame_index, self.write_file_setup_window)
+        self.write_file_frame_index_push_btn = FlamePushButtonMenu(self.write_file_frame_index, frame_index)
 
         # Token Push Buttons
 
         write_file_token_dict = {'Batch Name': '<batch name>', 'Batch Iteration': '<batch iteration>', 'Iteration': '<iteration>',
-                                 'Project': '<project>', 'Shot Name': '<shot name>', 'Clip Height': '<height>',
+                                 'Project': '<project>', 'Project Nickname': '<project nickname>', 'Shot Name': '<shot name>', 'Clip Height': '<height>',
                                  'Clip Width': '<width>', 'Clip Name': '<name>', }
 
-        self.write_file_pattern_token_btn = FlameTokenPushButton('Add Token', write_file_token_dict, self.write_file_pattern_lineedit, self.write_file_setup_window)
-        self.write_file_open_clip_token_btn = FlameTokenPushButton('Add Token', write_file_token_dict, self.write_file_create_open_clip_lineedit, self.write_file_setup_window)
-        self.write_file_include_setup_token_btn = FlameTokenPushButton('Add Token', write_file_token_dict, self.write_file_include_setup_lineedit, self.write_file_setup_window)
+        self.write_file_pattern_token_btn = FlameTokenPushButton('Add Token', write_file_token_dict, self.write_file_pattern_lineedit)
+        self.write_file_open_clip_token_btn = FlameTokenPushButton('Add Token', write_file_token_dict, self.write_file_create_open_clip_lineedit)
+        self.write_file_include_setup_token_btn = FlameTokenPushButton('Add Token', write_file_token_dict, self.write_file_include_setup_lineedit)
 
         # Pushbuttons
 
@@ -2547,7 +2596,7 @@ class CreateShotFolders(object):
                 self.write_file_create_open_clip_lineedit.setDisabled(True)
                 self.write_file_open_clip_token_btn.setDisabled(True)
 
-        self.write_file_create_open_clip_btn = FlamePushButton('  Create Open Clip', self.write_file_create_open_clip, self.write_file_setup_window)
+        self.write_file_create_open_clip_btn = FlamePushButton('Create Open Clip', self.write_file_create_open_clip)
         self.write_file_create_open_clip_btn.clicked.connect(write_file_create_open_clip_btn_check)
         write_file_create_open_clip_btn_check()
 
@@ -2559,22 +2608,23 @@ class CreateShotFolders(object):
                 self.write_file_include_setup_lineedit.setDisabled(True)
                 self.write_file_include_setup_token_btn.setDisabled(True)
 
-        self.write_file_include_setup_btn = FlamePushButton('  Include Setup', self.write_file_include_setup, self.write_file_setup_window)
+        self.write_file_include_setup_btn = FlamePushButton('Include Setup', self.write_file_include_setup)
         self.write_file_include_setup_btn.clicked.connect(write_file_include_setup_btn_check)
         write_file_include_setup_btn_check()
 
         # Buttons
 
-        self.write_file_browse_btn = FlameButton('Browse', media_path_browse, self.write_file_setup_window)
-        self.write_file_save_btn = FlameButton('Save', save_write_file_config, self.write_file_setup_window)
-        self.write_file_cancel_btn = FlameButton('Cancel', self.write_file_setup_window.close, self.write_file_setup_window)
+        self.write_file_browse_btn = FlameButton('Browse', media_path_browse)
+        self.write_file_done_btn = FlameButton('Done', set_write_file_values)
+        self.write_file_cancel_btn = FlameButton('Cancel', self.write_file_setup_window.close)
 
         # ------------------------------------------------------------- #
+
         compression(self.write_file_image_format_push_btn.text())
+        self.write_file_compression_push_btn.setText(self.write_file_compression)
 
-        # Window layout
+        # UI Widget layout
 
-        gridbox = QtWidgets.QGridLayout()
         gridbox.setMargin(20)
         gridbox.setVerticalSpacing(5)
         gridbox.setHorizontalSpacing(5)
@@ -2602,18 +2652,23 @@ class CreateShotFolders(object):
 
         gridbox.setRowMinimumHeight(6, 28)
 
-        gridbox.addWidget(self.write_file_settings_label, 7, 0, 1, 2)
+        gridbox.addWidget(self.write_file_settings_label, 7, 0, 1, 5)
         gridbox.addWidget(self.write_file_frame_index_label, 8, 0)
         gridbox.addWidget(self.write_file_frame_index_push_btn, 8, 1)
         gridbox.addWidget(self.write_file_type_label, 9, 0)
         gridbox.addWidget(self.write_file_image_format_push_btn, 9, 1)
-        gridbox.addWidget(self.write_file_padding_label, 10, 0)
-        gridbox.addWidget(self.write_file_padding_slider, 10, 1, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.write_file_padding_lineedit, 10, 1)
-        gridbox.addWidget(self.write_file_compression_label, 11, 0)
-        gridbox.addWidget(self.write_file_compression_push_btn, 11, 1)
+        gridbox.addWidget(self.write_file_compression_label, 10, 0)
+        gridbox.addWidget(self.write_file_compression_push_btn, 10, 1)
 
-        gridbox.addWidget(self.write_file_save_btn, 12, 5)
+        gridbox.addWidget(self.write_file_padding_label, 8, 3)
+        gridbox.addWidget(self.write_file_padding_slider, 8, 4)
+        gridbox.addWidget(self.write_file_iteration_padding_label, 9, 3)
+        gridbox.addWidget(self.write_file_iteration_padding_slider, 9, 4)
+
+        gridbox.addWidget(self.write_file_version_name_label, 10, 3)
+        gridbox.addWidget(self.write_file_version_name_lineedit, 10, 4)
+
+        gridbox.addWidget(self.write_file_done_btn, 12, 5)
         gridbox.addWidget(self.write_file_cancel_btn, 13, 5)
 
         self.write_file_setup_window.setLayout(gridbox)
@@ -2623,6 +2678,7 @@ class CreateShotFolders(object):
     def custom_shot_from_selected_window(self):
 
         def create_shots():
+            import flame
 
             def save_settings():
 
@@ -2633,45 +2689,72 @@ class CreateShotFolders(object):
 
                 all_clips = root.find('.//all_clips')
                 all_clips.text = str(self.custom_all_clips_btn.isChecked())
+
                 shot_name = root.find('.//shot_name')
                 shot_name.text = str(self.custom_shot_name_btn.isChecked())
+
                 clip_name = root.find('.//clip_name')
                 clip_name.text = str(self.custom_clip_name_btn.isChecked())
+
                 custom_folders = root.find('.//custom_folders')
                 custom_folders.text = str(self.custom_folders_btn.isChecked())
+
                 custom_batch_group = root.find('.//custom_batch_group')
                 custom_batch_group.text = str(self.custom_batch_group_btn.isChecked())
+
                 custom_desktop = root.find('.//custom_desktop')
                 custom_desktop.text = str(self.custom_desktop_btn.isChecked())
+
                 custom_system_folders = root.find('.//custom_system_folders')
                 custom_system_folders.text = str(self.custom_system_folders_btn.isChecked())
+
+                custom_export_plates = root.find('.//custom_export_plates')
+                custom_export_plates.text = str(self.custom_export_plates_btn.isChecked())
+
+                custom_export_preset = root.find('.//custom_export_preset')
+                custom_export_preset.text = self.custom_export_preset_push_btn.text()
+
+                custom_foreground_export = root.find('.//custom_foreground_export')
+                custom_foreground_export.text = str(self.custom_foreground_export_btn.isChecked())
+
                 custom_system_folders_path = root.find('.//custom_system_folders_path')
                 custom_system_folders_path.text = self.custom_system_folders_path_lineedit.text()
+
                 custom_apply_batch_template = root.find('.//custom_apply_batch_template')
                 custom_apply_batch_template.text = str(self.custom_batch_template_btn.isChecked())
+
                 custom_batch_template_path = root.find('.//custom_batch_template_path')
                 custom_batch_template_path.text = self.custom_batch_template_lineedit.text()
+
                 custom_batch_group_dest = root.find('.//custom_batch_group_dest')
                 custom_batch_group_dest.text = self.custom_batch_group_dest_btn.text()
+
                 custom_batch_start_frame = root.find('.//custom_batch_start_frame')
-                custom_batch_start_frame.text = self.custom_batch_start_frame_lineedit.text()
+                custom_batch_start_frame.text = self.custom_batch_start_frame_slider.text()
+
                 custom_batch_additional_naming = root.find('.//custom_batch_additional_naming')
                 custom_batch_additional_naming.text = self.custom_batch_additional_naming_lineedit.text()
 
                 xml_tree.write(self.config_xml)
 
-                print ('\n>>> settings saved <<<\n')
+                print ('\n--> settings saved \n')
 
             # Check that at least on shot creation type is selection
 
             if not any ([self.custom_folders_btn.isChecked(), self.custom_desktop_btn.isChecked(), self.custom_batch_group_btn.isChecked(), self.custom_system_folders_btn.isChecked()]):
-                return message_box('Select shot type to create')
+                return FlameMessageWindow('Error', 'error', 'Select shot type to create')
 
             # If apply batch template is enabled, check batch path is valid
 
             if self.custom_batch_template_btn.isChecked():
                 if not os.path.isfile(self.custom_batch_template_lineedit.text()):
-                    return message_box('Select valid batch setup to use as shot template')
+                    return FlameMessageWindow('Error', 'error', 'Select valid batch setup to use as shot template')
+
+            if self.custom_export_plates_btn.isChecked() and self.custom_export_preset_push_btn.text() == 'Select Preset':
+                return FlameMessageWindow('Error', 'error', 'Select export preset')
+
+            if self.custom_export_plates_btn.isChecked() and self.custom_export_preset_push_btn.text() == 'No Presets Found':
+                return FlameMessageWindow('Error', 'error', 'Save a Flame export preset then try again')
 
             # Save settings
 
@@ -2679,10 +2762,10 @@ class CreateShotFolders(object):
 
             # Create list of shot names
 
-            shot_name_list = []
+            # shot_name_list = []
 
-            # print ('shot_name_list:', shot_name_list)
-            # print ('selection:', self.selection)
+            #print ('shot_name_list:', shot_name_list)
+            #print ('selection:', self.selection)
 
             # Apply button settings to global settings
 
@@ -2690,6 +2773,10 @@ class CreateShotFolders(object):
             self.create_shot_type_desktop = self.custom_desktop_btn.isChecked()
             self.create_shot_type_batch_group = self.custom_batch_group_btn.isChecked()
             self.create_shot_type_system_folders = self.custom_system_folders_btn.isChecked()
+            self.create_shot_export_plates = self.custom_export_plates_btn.isChecked()
+            self.create_shot_export_plate_preset = self.custom_export_preset_push_btn.text()
+            self.create_shot_fg_export = self.custom_foreground_export_btn.isChecked()
+
             self.apply_batch_template = self.custom_batch_template_btn.isChecked()
             self.batch_template_path = str(self.custom_batch_template_lineedit.text())
             self.batch_group_dest = self.custom_batch_group_dest_btn.text()
@@ -2697,31 +2784,61 @@ class CreateShotFolders(object):
                 self.batch_group_dest = 'Library'
             self.system_shot_folders_path = self.custom_system_folders_path_lineedit.text()
 
-            self.batch_start_frame = int(self.custom_batch_start_frame_lineedit.text())
+            self.batch_start_frame = int(self.custom_batch_start_frame_slider.text())
             self.batch_additional_naming = self.custom_batch_additional_naming_lineedit.text()
+
+            delete_temp_library = False
+
+            # If selection is clips on a timeline, match out the clips to a temp library then create selection list from library
+
+            if self.selection[0].type == 'Video Segment':
+
+                delete_temp_library = True
+
+                # Create temp library
+
+                self.temp_lib = self.ws.create_library('Create_Shot_Temp_Library')
+
+                # Match out selected clips from timeline into temporary library
+
+                for clip in self.selection:
+                    clip.match(self.temp_lib)# , include_timeline_fx = timelinefx)
+
+                self.selection = self.temp_lib.clips
 
             # Create shots
 
             if self.custom_all_clips_btn.isChecked() and self.custom_shot_name_btn.isChecked():
-                self.create_shot_name_shots_all_clips()
+                self.shot_name_from = 'Shot Name'
+                self.all_clips_to_shot()
+
             elif self.custom_all_clips_btn.isChecked() and self.custom_clip_name_btn.isChecked():
-                self.create_clip_name_shots_all_clips()
+                self.shot_name_from = 'Clip Name'
+                self.all_clips_to_shot()
+
             elif not self.custom_all_clips_btn.isChecked() and self.custom_shot_name_btn.isChecked():
-                self.create_shot_name_shots()
+                self.shot_name_from = 'Shot Name'
+                self.clips_to_shots()
+
             elif not self.custom_all_clips_btn.isChecked() and self.custom_clip_name_btn.isChecked():
-                self.create_clip_name_shots()
+                self.shot_name_from = 'Clip Name'
+                self.clips_to_shots()
 
             self.custom_selected_window.close()
 
-        def update_system_folder_path():
+            # Delete temp library if one was created matching shots out of timeline
 
+            if delete_temp_library:
+
+                flame.delete(self.temp_lib)
+
+        def update_system_folder_path():
             shot_name = self.selection[0]
             shot_name = str(shot_name.name)[1:-1]
             self.system_shot_folders_path = self.custom_system_folders_path_lineedit.text()
             self.custom_system_folders_path_translated_label.setText(self.translate_system_shot_folder_path(shot_name))
 
         def batch_group_button_toggle():
-
             if self.custom_desktop_btn.isChecked():
                 self.custom_batch_group_btn.setChecked(True)
                 self.custom_batch_group_dest_label.setEnabled(False)
@@ -2747,7 +2864,6 @@ class CreateShotFolders(object):
                 self.custom_batch_group_dest_btn.setEnabled(False)
 
         def folder_toggle():
-
             if self.custom_folders_btn.isChecked():
                 self.custom_batch_group_dest_label.setEnabled(False)
                 self.custom_batch_group_dest_btn.setEnabled(False)
@@ -2776,17 +2892,14 @@ class CreateShotFolders(object):
                     self.custom_batch_group_dest_btn.setEnabled(True)
 
         def shot_name_toggle():
-
             self.custom_shot_name_btn.setChecked(True)
             self.custom_clip_name_btn.setChecked(False)
 
         def clip_name_toggle():
-
             self.custom_clip_name_btn.setChecked(True)
             self.custom_shot_name_btn.setChecked(False)
 
         def batch_template_toggle():
-
             if self.custom_batch_template_btn.isChecked():
                 self.custom_batch_group_template_path_label.setEnabled(True)
                 self.custom_batch_template_lineedit.setEnabled(True)
@@ -2797,127 +2910,118 @@ class CreateShotFolders(object):
                 self.custom_batch_template_browse_btn.setEnabled(False)
 
         def system_folder_toggle():
-
             if self.custom_system_folders_btn.isChecked():
                 self.custom_system_folders_path_translated_label.setEnabled(True)
                 self.custom_system_folders_path_lineedit.setEnabled(True)
                 self.custom_system_folders_browse_btn.setEnabled(True)
                 self.custom_system_path_token_push_button.setEnabled(True)
+                self.custom_export_plates_btn.setEnabled(True)
             else:
                 self.custom_system_folders_path_translated_label.setEnabled(False)
                 self.custom_system_folders_path_lineedit.setEnabled(False)
                 self.custom_system_folders_browse_btn.setEnabled(False)
                 self.custom_system_path_token_push_button.setEnabled(False)
+                self.custom_export_plates_btn.setEnabled(False)
 
-        self.custom_selected_window = QtWidgets.QWidget()
-        self.custom_selected_window.setMinimumSize(QtCore.QSize(1200, 360))
-        self.custom_selected_window.setMaximumSize(QtCore.QSize(1200, 360))
-        self.custom_selected_window.setWindowTitle('Create Shots for Selected Clips %s' % VERSION)
-        self.custom_selected_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.custom_selected_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.custom_selected_window.setFocusPolicy(QtCore.Qt.StrongFocus)
-        self.custom_selected_window.setStyleSheet('background-color: #272727')
+        def export_plate_toggle():
+            if self.custom_export_plates_btn.isChecked():
+                self.custom_export_preset_label.setEnabled(True)
+                self.custom_export_preset_push_btn.setEnabled(True)
+                self.custom_foreground_export_btn.setEnabled(True)
+            else:
+                self.custom_export_preset_label.setEnabled(False)
+                self.custom_export_preset_push_btn.setEnabled(False)
+                self.custom_foreground_export_btn.setEnabled(False)
 
-        # Center window in linux
+        preset_loaded = self.load_preset_values()
+        if not preset_loaded:
+            return
 
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.custom_selected_window.move((resolution.width() / 2) - (self.custom_selected_window.frameSize().width() / 2),
-                                         (resolution.height() / 2) - (self.custom_selected_window.frameSize().height() / 2))
+        grid = QtWidgets.QGridLayout()
+        self.custom_selected_window = FlameWindow(f'Create Shot - Custom for Selected Clips <small>{VERSION}', grid, 1200, 540)
 
         # Labels
 
-        self.custom_batch_options_label = FlameLabel('Batch Group Options', 'background', self.custom_selected_window)
-        self.custom_batch_group_template_path_label = FlameLabel('Template Path', 'normal', self.custom_selected_window)
-        self.custom_batch_group_dest_label = FlameLabel('Batch Group Dest', 'normal', self.custom_selected_window)
-        self.custom_batch_group_start_frame_label = FlameLabel('Batch Start Frame', 'normal', self.custom_selected_window)
-        self.custom_batch_group_additional_naming_label = FlameLabel('Additional Batch Naming', 'normal', self.custom_selected_window)
+        self.custom_batch_options_label = FlameLabel('Batch Group Options', label_type='underline')
+        self.custom_batch_group_template_path_label = FlameLabel('Template Path')
+        self.custom_batch_group_dest_label = FlameLabel('Batch Group Dest')
+        self.custom_batch_group_start_frame_label = FlameLabel('Batch Start Frame')
+        self.custom_batch_group_additional_naming_label = FlameLabel('Additional Batch Naming')
 
-        self.custom_system_folders_path_label = FlameLabel('File System Shot Folders Path', 'background', self.custom_selected_window)
-        self.custom_system_folders_path_translated_label = FlameLabel('', 'outline', self.custom_selected_window)
+        self.custom_system_folders_path_label = FlameLabel('File System Shot Folders Path', label_type='underline')
+        self.custom_system_folders_path_translated_label = FlameLabel('', label_type='background')
 
-        self.custom_settings_label = FlameLabel('Settings', 'background', self.custom_selected_window)
-        self.custom_shot_naming_label = FlameLabel('Shot Naming', 'background', self.custom_selected_window)
-        self.custom_create_label = FlameLabel('Create', 'background', self.custom_selected_window)
+        self.custom_settings_label = FlameLabel('Settings', label_type='underline')
+        self.custom_shot_naming_label = FlameLabel('Shot Naming', label_type='underline')
+        self.custom_create_label = FlameLabel('Create', label_type='underline')
+
+        self.custom_export_plate_options_label = FlameLabel('Export Plate Options', label_type='underline')
+        self.custom_export_preset_label = FlameLabel('Export Preset')
 
         # LineEdits
 
-        self.custom_batch_template_lineedit = FlameLineEdit(self.custom_batch_template_path, self.custom_selected_window)
-        self.custom_batch_additional_naming_lineedit = FlameLineEdit(self.custom_batch_additional_naming, self.custom_selected_window)
-        self.custom_system_folders_path_lineedit = FlameLineEdit(self.custom_system_folders_path, self.custom_selected_window)
+        self.custom_batch_template_lineedit = FlameLineEdit(self.custom_batch_template_path)
+        self.custom_batch_additional_naming_lineedit = FlameLineEdit(self.custom_batch_additional_naming)
+        self.custom_system_folders_path_lineedit = FlameLineEdit(self.custom_system_folders_path)
         self.custom_system_folders_path_lineedit.textChanged.connect(update_system_folder_path)
         update_system_folder_path()
 
         # Batch Start Frame Slider
 
-        self.custom_batch_start_frame_min_value = 1
-        self.custom_batch_start_frame_max_value = 10000
-        self.custom_batch_start_frame_start_value = self.custom_batch_start_frame
-
-        def custom_batch_start_frame_spinbox_move_slider():
-            self.custom_batch_start_frame_slider.setValue(int(self.custom_batch_start_frame_lineedit.text()))
-
-        self.custom_batch_start_frame_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.custom_selected_window)
-        self.custom_batch_start_frame_slider.setMaximumHeight(3)
-        self.custom_batch_start_frame_slider.setMaximumWidth(75)
-        self.custom_batch_start_frame_slider.setMinimum(self.custom_batch_start_frame_min_value)
-        self.custom_batch_start_frame_slider.setMaximum(self.custom_batch_start_frame_max_value)
-        self.custom_batch_start_frame_slider.setValue(self.custom_batch_start_frame_start_value)
-        self.custom_batch_start_frame_slider.setStyleSheet('QSlider {color: #111111}'
-                                                           'QSlider::disabled {color: #6a6a6a; background-color: #373737}'
-                                                           'QSlider::groove:horizontal {background-color: #111111}'
-                                                           'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-        self.custom_batch_start_frame_slider.setDisabled(True)
-
-        self.custom_batch_start_frame_lineedit = CustomSpinBox(CustomSpinBox.IntSpinBox, self.custom_batch_start_frame_start_value, parent=self.custom_selected_window)
-        self.custom_batch_start_frame_lineedit.setMinimum(self.custom_batch_start_frame_min_value)
-        self.custom_batch_start_frame_lineedit.setMaximum(self.custom_batch_start_frame_max_value)
-        self.custom_batch_start_frame_lineedit.setMinimumHeight(28)
-        self.custom_batch_start_frame_lineedit.setMaximumWidth(75)
-        self.custom_batch_start_frame_lineedit.textChanged.connect(custom_batch_start_frame_spinbox_move_slider)
-        self.custom_batch_start_frame_slider.raise_()
+        self.custom_batch_start_frame_slider = FlameSlider(self.custom_batch_start_frame, 1, 10000, False, slider_width=150)
 
         # Push Button Menus
 
         batch_group_dest_options = ['Desktop', 'Library']
-        self.custom_batch_group_dest_btn = FlamePushButtonMenu(self.custom_batch_group_dest, batch_group_dest_options, self.custom_selected_window)
+        self.custom_batch_group_dest_btn = FlamePushButtonMenu(self.custom_batch_group_dest, batch_group_dest_options)
         self.custom_batch_group_dest_btn.setMinimumWidth(150)
 
+        export_preset_list = self.get_export_presets()
+        self.custom_export_preset_push_btn = FlamePushButtonMenu(self.custom_export_preset, export_preset_list)
+
+        # Token push button menu
+
         system_path_token_dict = {'Project Name': '<ProjectName>', 'Project Nickname': '<ProjectNickName>', 'SEQUENCE NAME': '<SEQNAME>', 'Sequence Name': '<SeqName>'}
-        self.custom_system_path_token_push_button = FlameTokenPushButton('Add Token', system_path_token_dict, self.custom_system_folders_path_lineedit, self.custom_selected_window)
+        self.custom_system_path_token_push_button = FlameTokenPushButton('Add Token', system_path_token_dict, self.custom_system_folders_path_lineedit)
 
         # Pushbuttons
 
-        self.custom_batch_template_btn = FlamePushButton(' Batch Template', self.custom_apply_batch_template, self.custom_selected_window)
+        self.custom_batch_template_btn = FlamePushButton('Batch Template', self.custom_apply_batch_template)
         self.custom_batch_template_btn.clicked.connect(batch_template_toggle)
 
-        self.custom_all_clips_btn = FlamePushButton(' All Clips/One Shot', self.all_clips, self.custom_selected_window)
+        self.custom_all_clips_btn = FlamePushButton('All Clips/One Shot', self.all_clips)
 
-        self.custom_shot_name_btn = FlamePushButton(' Shot Name', self.shot_name, self.custom_selected_window)
+        self.custom_shot_name_btn = FlamePushButton('Shot Name', self.shot_name)
         self.custom_shot_name_btn.clicked.connect(shot_name_toggle)
 
-        self.custom_clip_name_btn = FlamePushButton(' Clip Name', self.clip_name, self.custom_selected_window)
+        self.custom_clip_name_btn = FlamePushButton('Clip Name', self.clip_name)
         self.custom_clip_name_btn.clicked.connect(clip_name_toggle)
 
-        self.custom_folders_btn = FlamePushButton(' Folders', self.custom_folders, self.custom_selected_window)
+        self.custom_folders_btn = FlamePushButton('Folders', self.custom_folders)
         self.custom_folders_btn.clicked.connect(folder_toggle)
 
-        self.custom_batch_group_btn = FlamePushButton(' Batch Groups', self.custom_batch_group, self.custom_selected_window)
+        self.custom_batch_group_btn = FlamePushButton('Batch Groups', self.custom_batch_group)
         self.custom_batch_group_btn.clicked.connect(batch_group_button_toggle)
 
-        self.custom_desktop_btn = FlamePushButton(' Desktops', self.custom_desktop, self.custom_selected_window)
+        self.custom_desktop_btn = FlamePushButton('Desktops', self.custom_desktop)
         self.custom_desktop_btn.clicked.connect(desktop_toggle)
 
-        self.custom_system_folders_btn = FlamePushButton(' System Folders', self.custom_system_folders, self.custom_selected_window)
+        self.custom_system_folders_btn = FlamePushButton('System Folders', self.custom_system_folders)
         self.custom_system_folders_btn.clicked.connect(system_folder_toggle)
+
+        self.custom_export_plates_btn = FlamePushButton('Export Plates', self.custom_export_plates)
+        self.custom_export_plates_btn.clicked.connect(export_plate_toggle)
+
+        self.custom_foreground_export_btn = FlamePushButton('Foreground Export', self.custom_foreground_export)
 
         # Buttons
 
-        self.custom_batch_template_browse_btn = FlameButton('Browse', partial(self.batch_template_browse, self.custom_batch_template_lineedit, self.custom_selected_window), self.custom_selected_window)
-        self.custom_system_folders_browse_btn = FlameButton('Browse', partial(self.system_folder_browse, self.custom_system_folders_path_lineedit, self.custom_selected_window), self.custom_selected_window)
+        self.custom_batch_template_browse_btn = FlameButton('Browse', partial(self.batch_template_browse, self.custom_batch_template_lineedit, self.custom_selected_window))
+        self.custom_system_folders_browse_btn = FlameButton('Browse', partial(self.system_folder_browse, self.custom_system_folders_path_lineedit, self.custom_selected_window))
 
-        help_btn = FlameButton('Help', self.help, self.custom_selected_window)
-        create_btn = FlameButton('Create', create_shots, self.custom_selected_window)
-        cancel_btn = FlameButton('Cancel', self.custom_selected_window.close, self.custom_selected_window)
+        help_btn = FlameButton('Help', self.help)
+        create_btn = FlameButton('Create', create_shots)
+        cancel_btn = FlameButton('Cancel', self.custom_selected_window.close)
 
         # Check button states
 
@@ -2925,59 +3029,67 @@ class CreateShotFolders(object):
         batch_group_button_toggle()
         batch_template_toggle()
         system_folder_toggle()
+        export_plate_toggle()
 
         # ------------------------------------------------------------- #
 
-        # Window layout
+        # UI Widget layout
 
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setVerticalSpacing(5)
-        gridbox.setHorizontalSpacing(5)
+        grid.setVerticalSpacing(5)
+        grid.setHorizontalSpacing(5)
+        grid.setMargin(20)
 
-        gridbox.setColumnMinimumWidth(2, 30)
+        grid.setColumnMinimumWidth(2, 30)
 
-        gridbox.addWidget(self.custom_create_label, 0, 0)
-        gridbox.addWidget(self.custom_folders_btn, 1, 0)
-        gridbox.addWidget(self.custom_batch_group_btn, 2, 0)
-        gridbox.addWidget(self.custom_desktop_btn, 3, 0)
-        gridbox.addWidget(self.custom_system_folders_btn, 4, 0)
+        grid.addWidget(self.custom_create_label, 0, 0)
+        grid.addWidget(self.custom_folders_btn, 1, 0)
+        grid.addWidget(self.custom_batch_group_btn, 2, 0)
+        grid.addWidget(self.custom_desktop_btn, 3, 0)
+        grid.addWidget(self.custom_system_folders_btn, 4, 0)
+        grid.addWidget(self.custom_export_plates_btn, 5, 0)
 
-        gridbox.addWidget(self.custom_settings_label, 0, 1)
-        gridbox.addWidget(self.custom_all_clips_btn, 1, 1)
-        gridbox.addWidget(self.custom_batch_template_btn, 2, 1)
+        grid.addWidget(self.custom_settings_label, 0, 1)
+        grid.addWidget(self.custom_all_clips_btn, 1, 1)
+        grid.addWidget(self.custom_batch_template_btn, 2, 1)
 
-        gridbox.addWidget(self.custom_shot_naming_label, 3, 1)
-        gridbox.addWidget(self.custom_shot_name_btn, 4, 1)
-        gridbox.addWidget(self.custom_clip_name_btn, 5, 1)
+        grid.addWidget(self.custom_shot_naming_label, 3, 1)
+        grid.addWidget(self.custom_shot_name_btn, 4, 1)
+        grid.addWidget(self.custom_clip_name_btn, 5, 1)
 
-        gridbox.addWidget(self.custom_batch_options_label, 0, 4, 1, 5)
-        gridbox.addWidget(self.custom_batch_group_template_path_label, 1, 4)
-        gridbox.addWidget(self.custom_batch_template_lineedit, 1, 5, 1, 3)
-        gridbox.addWidget(self.custom_batch_template_browse_btn, 1, 8)
+        grid.addWidget(self.custom_batch_options_label, 0, 4, 1, 5)
+        grid.addWidget(self.custom_batch_group_template_path_label, 1, 4)
+        grid.addWidget(self.custom_batch_template_lineedit, 1, 5, 1, 3)
+        grid.addWidget(self.custom_batch_template_browse_btn, 1, 8)
 
-        gridbox.addWidget(self.custom_batch_group_dest_label, 3, 4)
-        gridbox.addWidget(self.custom_batch_group_dest_btn, 3, 5)
+        grid.addWidget(self.custom_batch_group_dest_label, 3, 4)
+        grid.addWidget(self.custom_batch_group_dest_btn, 3, 5)
 
-        gridbox.addWidget(self.custom_batch_group_start_frame_label, 2, 4)
-        gridbox.addWidget(self.custom_batch_start_frame_slider, 2, 5, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.custom_batch_start_frame_lineedit, 2, 5)
+        grid.addWidget(self.custom_batch_group_start_frame_label, 2, 4)
+        grid.addWidget(self.custom_batch_start_frame_slider, 2, 5)
 
-        gridbox.addWidget(self.custom_batch_group_additional_naming_label, 2, 6)
-        gridbox.addWidget(self.custom_batch_additional_naming_lineedit, 2, 7, 1, 2)
+        grid.addWidget(self.custom_batch_group_additional_naming_label, 2, 6)
+        grid.addWidget(self.custom_batch_additional_naming_lineedit, 2, 7, 1, 2)
 
-        gridbox.addWidget(self.custom_system_folders_path_label, 5, 4, 1, 5)
-        gridbox.addWidget(self.custom_system_folders_path_translated_label, 6, 4, 1, 5)
-        gridbox.addWidget(self.custom_system_folders_path_lineedit, 7, 4, 1, 3)
-        gridbox.addWidget(self.custom_system_folders_browse_btn, 7, 7)
-        gridbox.addWidget(self.custom_system_path_token_push_button, 7, 8)
+        grid.addWidget(self.custom_system_folders_path_label, 5, 4, 1, 5)
+        grid.addWidget(self.custom_system_folders_path_translated_label, 6, 4, 1, 5)
+        grid.addWidget(self.custom_system_folders_path_lineedit, 7, 4, 1, 3)
+        grid.addWidget(self.custom_system_folders_browse_btn, 7, 7)
+        grid.addWidget(self.custom_system_path_token_push_button, 7, 8)
 
-        gridbox.setRowMinimumHeight(8, 30)
+        grid.setRowMinimumHeight(8, 30)
 
-        gridbox.addWidget(help_btn, 9, 0)
-        gridbox.addWidget(cancel_btn, 9, 7)
-        gridbox.addWidget(create_btn, 9, 8)
+        grid.addWidget(self.custom_export_plate_options_label, 9, 4, 1, 5)
+        grid.addWidget(self.custom_export_preset_label, 10, 4)
+        grid.addWidget(self.custom_export_preset_push_btn, 10, 5, 1, 3)
+        grid.addWidget(self.custom_foreground_export_btn, 10, 8)
 
-        self.custom_selected_window.setLayout(gridbox)
+        grid.setRowMinimumHeight(11, 30)
+
+        grid.addWidget(help_btn, 12, 0)
+        grid.addWidget(cancel_btn, 12, 7)
+        grid.addWidget(create_btn, 12, 8)
+
+        self.custom_selected_window.setLayout(grid)
 
         self.custom_selected_window.show()
 
@@ -2994,15 +3106,20 @@ class CreateShotFolders(object):
         # Check for system folder path if creating system folders
 
         if self.create_shot_type_system_folders and not self.system_shot_folders_path:
-                return message_box('<center>Enter path for creating system folders in Setup<br>Flame Main Menu -> pyFlame -> Create Shot Setup')
+            return FlameMessageWindow('Error', 'error', 'Enter path for creating system folders in Setup<br>Flame Main Menu -> pyFlame -> Create Shot Setup')
+
+        if self.create_shot_type_system_folders:
+            write_access = os.access(self.translate_system_shot_folder_path(shot_name_list[0]), os.W_OK)
+            if not write_access:
+                return FlameMessageWindow('Error', 'error', 'No write access to file system path.')
 
         # All clips are not going to single shot so all_clips is false
 
         all_clips = False
 
         if shot_name_list == []:
-            return message_box('No Shots Found')
-        print ('selection:', self.selection)
+            return FlameMessageWindow('Error', 'error', 'No Shots Found')
+
         shot_name_list.sort()
         print ('shot_name_list:', shot_name_list, '\n')
 
@@ -3019,7 +3136,7 @@ class CreateShotFolders(object):
 
         # Create shot type based on saved settings
 
-        print ('>>> creating shots...\n')
+        print ('--> creating shots...\n')
 
         if self.create_shot_type_folders:
             self.create_library('Folders')
@@ -3045,12 +3162,14 @@ class CreateShotFolders(object):
             for shot_name in shot_name_list:
                 root_folder_path = self.translate_system_shot_folder_path(shot_name)
                 self.create_file_system_folders(root_folder_path, shot_name)
+                if self.create_shot_export_plates:
+                    self.export_plate(root_folder_path, shot_name, all_clips)
 
         if self.system_folder_creation_errors:
             problem_shots = ''
             for shot in self.system_folder_creation_errors:
                 problem_shots = problem_shots + shot + ', '
-            return message_box('Could not create folders for %s. Folders may already exists.' % problem_shots[:-2])
+            return FlameMessageWindow('Error', 'error', f'Could not create folders: {problem_shots[:-2]}. Folders may already exists.')
 
         # If desktops were created restore original desktop
 
@@ -3070,12 +3189,12 @@ class CreateShotFolders(object):
         # Check for system folder path if creating system folders
 
         if self.create_shot_type_system_folders and not self.system_shot_folders_path:
-                return message_box('<center>Enter path for creating system folders in Setup<br>Flame Main Menu -> pyFlame -> Create Shot Setup')
+                return FlameMessageWindow('Error', 'error', 'Enter path for creating system folders in Setup<br>Flame Main Menu -> pyFlame -> Create Shot Setup')
 
         all_clips = True
 
         if not shot_name:
-            return message_box('No Shot Found')
+            return FlameMessageWindow('Error', 'error', 'No Shot Found')
 
         # If creating folders, batch groups, or desktops, switch to batch so get access to MediaPanel
 
@@ -3090,7 +3209,7 @@ class CreateShotFolders(object):
 
         # Create shot type based on saved settings
 
-        print ('>>> creating shot...')
+        print ('--> creating shot...')
 
         if self.create_shot_type_folders:
             self.create_library('Folders')
@@ -3114,7 +3233,7 @@ class CreateShotFolders(object):
             self.create_file_system_folders(root_folder_path, shot_name)
 
         if self.system_folder_creation_errors:
-            return message_box('Could not create folders for %s. Folders may already exists.' % shot_name)
+            return FlameMessageWindow('Error', 'error', f'Could not create folders for {shot_name}. Folders may already exists.')
 
         # If desktops were created restore original desktop
 
@@ -3123,159 +3242,195 @@ class CreateShotFolders(object):
 
         print ('\ndone.\n')
 
-    # -------- #
+    # ------------------------------------- #
 
-    def create_shot_name_shots(self):
+    def clips_to_shots(self):
         '''
         Create shots for each shot name found in selected shots. One shot is created for each shot name found.
         All clips with the same shot name will be put into the same shot.
-        Uses shot names assigned to clips. If shot names are not assigned, shot name will be guessed at from clip name.
         '''
 
-        # Build list of shot names from selected clips
+        # Build list of shot names from selected clips using either Shot Name or Clip Name
 
         shot_name_list = []
 
-        for clip in self.selection:
+        if self.shot_name_from == 'Shot Name':
+            for clip in self.selection:
+
+                # Get shot name from assigned clip shot name
+
+                if clip.versions[0].tracks[0].segments[0].shot_name != '':
+                    if clip.versions[0].tracks[0].segments[0].shot_name not in shot_name_list:
+                        shot_name_list.append(str(clip.versions[0].tracks[0].segments[0].shot_name)[1:-1])
+                else:
+
+                    # If shot name not assigned to clip, guess at shot name from clip name
+
+                    new_shot_name = self.get_shot_name_from_clip_name(clip)
+
+                    if new_shot_name not in shot_name_list:
+                        shot_name_list.append(new_shot_name)
+
+        elif self.shot_name_from == 'Clip Name':
+            shot_name_list = [str(clip.name)[1:-1] for clip in self.selection]
+
+        # Create shots from shot name list
+
+        self.create_shots(shot_name_list)
+
+    def all_clips_to_shot(self):
+        '''
+        Create one shot from all selected clips. Shot name taken from first clip in selection
+        '''
+
+        if self.shot_name_from == 'Shot Name':
+
+            # Get first clip from selection
+
+            clip = self.selection[0]
 
             # Get shot name from assigned clip shot name
 
             if clip.versions[0].tracks[0].segments[0].shot_name != '':
-                if clip.versions[0].tracks[0].segments[0].shot_name not in shot_name_list:
-                    shot_name_list.append(str(clip.versions[0].tracks[0].segments[0].shot_name)[1:-1])
+                shot_name = str(clip.versions[0].tracks[0].segments[0].shot_name)[1:-1]
             else:
                 # If shot name not assigned to clip, guess at shot name from clip name
 
+                shot_name = self.get_shot_name_from_clip_name(clip)
+
+        elif self.shot_name_from == 'Clip Name':
+            shot_name = [str(clip.name)[1:-1] for clip in self.selection][0]
+
+        print ('shot_name:', shot_name, '\n')
+
+        # Create shots from shot name list
+
+        self.create_shots_all_clips(shot_name)
+
+    def import_clips_to_shots(self):
+        import flame
+
+        # Turn off creating file system folders and exporting plates when importing from mediahub
+
+        self.create_shot_type_system_folders = False
+        self.create_shot_export_plates = False
+
+        # Create temp library
+
+        self.temp_lib = self.ws.create_library('-- Temp Shot Library --')
+        self.temp_lib.expanded = True
+        self.temp_lib_delete = self.temp_lib
+
+        if self.shot_name_from == 'Shot Name':
+
+            # Import selected clips to library
+
+            for clip in self.selection:
+                clip_path = str(clip.path)
+                print ('clip_path:', clip_path)
+
+                # Import clip to temp library
+
+                flame.import_clips(clip_path, self.temp_lib)
+
+            # Replace selection with clip in temp library
+
+            self.selection = [clip for clip in self.temp_lib.clips]
+
+            # Create shots from all clips in temp library
+
+            shot_name_list = []
+
+            for clip in self.temp_lib.clips:
                 new_shot_name = self.get_shot_name_from_clip_name(clip)
+                print ('NEW SHOT NAME:', new_shot_name)
+                clip.shotname = new_shot_name
 
                 if new_shot_name not in shot_name_list:
                     shot_name_list.append(new_shot_name)
 
-        # Create shots from shot name list
+        elif self.shot_name_from == 'Clip Name':
+
+            # Import selected clips to library
+
+            for clip in self.selection:
+                clip_path = str(clip.path)
+                print ('clip_path:', clip_path)
+
+                # Import clip to temp library
+
+                flame.import_clips(clip_path, self.temp_lib)
+
+            # Replace selection with clip in temp library
+
+            self.selection = [clip for clip in self.temp_lib.clips]
+
+            # Get list of clip names
+
+            shot_name_list = [str(clip.name)[1:-1] for clip in self.selection]
+
+        print ('shot_name_list:', shot_name_list, '\n')
 
         self.create_shots(shot_name_list)
 
-    def create_shot_name_shots_all_clips(self):
-        '''
-        Create shots for each shot name found in selected shots. One shot is created for each shot name found.
-        All clips with the same shot name will be put into the same shot.
-        Uses shot names assigned to clips. If shot names are not assigned, shot name will be guessed at from clip name.
-        '''
+        # Remove temp library
 
-        # Get first clip from selection
+        flame.delete(self.temp_lib_delete)
 
-        clip = self.selection[0]
+    def import_all_clips_to_shot(self):
+        import flame
 
-        # Get shot name from assigned clip shot name
+        # Turn off creating file system folders and exporting plates when importing from mediahub
 
-        if clip.versions[0].tracks[0].segments[0].shot_name != '':
-            shot_name = str(clip.versions[0].tracks[0].segments[0].shot_name)[1:-1]
-        else:
-            # If shot name not assigned to clip, guess at shot name from clip name
+        self.create_shot_type_system_folders = False
+        self.create_shot_export_plates = False
 
+        # Create temp library
+
+        self.temp_lib = self.ws.create_library('-- Temp Shot Library --')
+        self.temp_lib.expanded = True
+        self.temp_lib_delete = self.temp_lib
+
+        if self.shot_name_from == 'Shot Name':
+
+            # Import selected clips to library
+
+            for clip in self.selection:
+                clip_path = str(clip.path)
+                print ('clip_path:', clip_path)
+
+                # Import clip to batchgroup
+
+                flame.import_clips(clip_path, self.temp_lib)
+
+            # Replace selection with clip in temp library
+
+            self.selection = [clip for clip in self.temp_lib.clips]
+
+            # Create shot from clips in temp library
+
+            clip = self.temp_lib.clips[0]
             shot_name = self.get_shot_name_from_clip_name(clip)
 
-        print ('shot_name:', shot_name, '\n')
+        elif self.shot_name_from == 'Clip Name':
 
-        # Create shots from shot name list
+            # Import selected clips to library
 
-        self.create_shots_all_clips(shot_name)
+            for clip in self.selection:
+                clip_path = str(clip.path)
+                print ('clip_path:', clip_path)
 
-    def create_clip_name_shots(self):
-        '''
-        Creates shots for each clip selected. Each shot will be named the same as the selected clip.
-        '''
+                # Import clip to temp library
 
-        # Build list of clip names to create shots from
+                flame.import_clips(clip_path, self.temp_lib)
 
-        shot_name_list = [str(clip.name)[1:-1] for clip in self.selection]
+            # Replace selection with clip in temp library
 
-        print ('shot_name_list:', shot_name_list, '\n')
+            self.selection = [clip for clip in self.temp_lib.clips]
 
-        # Create shots from shot name list
+            # Get list of clip names
 
-        self.create_shots(shot_name_list)
-
-    def create_clip_name_shots_all_clips(self):
-        '''
-        All selected clips to shot named after the clip name of the first clip selected
-        '''
-
-        # Build list of clip names to create shots from
-
-        shot_name = [str(clip.name)[1:-1] for clip in self.selection][0]
-        print ('shot_name:', shot_name, '\n')
-
-        # Create shots from shot name list
-
-        self.create_shots_all_clips(shot_name)
-
-    def import_shot_name_shots(self):
-        import flame
-
-        # Create temp library
-
-        self.temp_lib = self.ws.create_library('-- Temp Shot Library --')
-        self.temp_lib.expanded = True
-
-        # Import selected clips to library
-
-        for clip in self.selection:
-            clip_path = str(clip.path)
-            print ('clip_path:', clip_path)
-
-            # Import clip to temp library
-
-            flame.import_clips(clip_path, self.temp_lib)
-
-        # Replace selection with clip in temp library
-
-        self.selection = [clip for clip in self.temp_lib.clips]
-
-        # Create shots from all clips in temp library
-
-        shot_name_list = []
-
-        for clip in self.temp_lib.clips:
-            new_shot_name = self.get_shot_name_from_clip_name(clip)
-
-            if new_shot_name not in shot_name_list:
-                shot_name_list.append(new_shot_name)
-
-        print ('shot_name_list:', shot_name_list, '\n')
-
-        self.create_shots(shot_name_list)
-
-        # Remove temp library
-
-        flame.delete(self.temp_lib)
-
-    def import_shot_name_all_clips(self):
-        import flame
-
-        # Create temp library
-
-        self.temp_lib = self.ws.create_library('-- Temp Shot Library --')
-        self.temp_lib.expanded = True
-
-        # Import selected clips to library
-
-        for clip in self.selection:
-            clip_path = str(clip.path)
-            print ('clip_path:', clip_path)
-
-            # Import clip to batchgroup
-
-            flame.import_clips(clip_path, self.temp_lib)
-
-        # Replace selection with clip in temp library
-
-        self.selection = [clip for clip in self.temp_lib.clips]
-
-        # Create shot from clips in temp library
-
-        clip = self.temp_lib.clips[0]
-        shot_name = self.get_shot_name_from_clip_name(clip)
+            shot_name = [str(clip.name)[1:-1] for clip in self.selection][0]
 
         print ('shot_name:', shot_name, '\n')
 
@@ -3283,79 +3438,9 @@ class CreateShotFolders(object):
 
         # Remove temp library
 
-        flame.delete(self.temp_lib)
+        flame.delete(self.temp_lib_delete)
 
-    def import_clip_name_shots(self):
-        import flame
-
-        # Create temp library
-
-        self.temp_lib = self.ws.create_library('-- Temp Shot Library --')
-        self.temp_lib.expanded = True
-
-        # Import selected clips to library
-
-        for clip in self.selection:
-            clip_path = str(clip.path)
-            print ('clip_path:', clip_path)
-
-            # Import clip to temp library
-
-            flame.import_clips(clip_path, self.temp_lib)
-
-        # Replace selection with clip in temp library
-
-        self.selection = [clip for clip in self.temp_lib.clips]
-
-        # Get list of clip names
-
-        shot_name_list = [str(clip.name)[1:-1] for clip in self.selection]
-        print ('shot_name_list:', shot_name_list, '\n')
-
-        # Create shots from all clips in temp library
-
-        self.create_shots(shot_name_list)
-
-        # Remove temp library
-
-        flame.delete(self.temp_lib)
-
-    def import_clip_name_shots_all_clips(self):
-        import flame
-
-        # Create temp library
-
-        self.temp_lib = self.ws.create_library('-- Temp Shot Library --')
-        self.temp_lib.expanded = True
-
-        # Import selected clips to library
-
-        for clip in self.selection:
-            clip_path = str(clip.path)
-            print ('clip_path:', clip_path)
-
-            # Import clip to temp library
-
-            flame.import_clips(clip_path, self.temp_lib)
-
-        # Replace selection with clip in temp library
-
-        self.selection = [clip for clip in self.temp_lib.clips]
-
-        # Get list of clip names
-
-        shot_name = [str(clip.name)[1:-1] for clip in self.selection][0]
-        print ('shot_name:', shot_name, '\n')
-
-        # Create shots from all clips in temp library
-
-        self.create_shots_all_clips(shot_name)
-
-        # Remove temp library
-
-        flame.delete(self.temp_lib)
-
-    # -------- #
+    # ------------------------------------- #
 
     def help(self):
 
@@ -3373,28 +3458,27 @@ class CreateShotFolders(object):
             for v in value:
                 converted_list.append(v)
 
-        # print ('converted_list:', converted_list, '\n')
-
         return converted_list
 
     def get_shot_name_from_clip_name(self, clip):
 
         clip_name = str(clip.name)[1:-1]
-        # print ('clip_name:', clip_name)
 
-        # Split clip name into list by numbers in clip name
+        # Try to get shot name from assigned clip shot name
+        # If assigned shot name notr found try to get name from name of clip
 
-        shot_name_split = re.split(r'(\d+)', clip_name)
-        shot_name_split = [s for s in shot_name_split if s != '']
-        # print ('shot_name_split:', shot_name_split)
-
-        # Recombine shot name split list into new batch group name
-        # Else statement is used if clip name starts with number
-
-        if shot_name_split[1].isalnum():
-            new_shot_name = shot_name_split[0] + shot_name_split[1]
+        if clip.versions[0].tracks[0].segments[0].shot_name != '':
+            new_shot_name = str(clip.versions[0].tracks[0].segments[0].shot_name)[1:-1]
         else:
-            new_shot_name = shot_name_split[0] + shot_name_split[1] + shot_name_split[2]
+            shot_name_split = re.split(r'(\d+)', clip_name)
+
+            if len(shot_name_split) > 1:
+                if shot_name_split[1].isalnum():
+                    new_shot_name = shot_name_split[0] + shot_name_split[1]
+                else:
+                    new_shot_name = shot_name_split[0] + shot_name_split[1] + shot_name_split[2]
+            else:
+                new_shot_name = clip_name
 
         return new_shot_name
 
@@ -3451,6 +3535,14 @@ class CreateShotFolders(object):
         flame.media_panel.move(self.desktop_copy, self.ws.desktop)
         flame.delete(self.desktop.batch_groups[0])
         self.ws.desktop.name = self.desktop_name
+
+        print ('TEMP LIB NAME:', self.temp_lib.name)
+
+        for lib in self.ws.libraries:
+            print (lib.name)
+            if str(lib.name) == str(self.temp_lib.name):
+                flame.delete(lib)
+
         flame.delete(self.temp_lib)
 
     def copy_clips(self, shot_name, all_clips, dest):
@@ -3460,10 +3552,10 @@ class CreateShotFolders(object):
 
         for clip in self.selection:
             if all_clips:
-                flame.media_panel.copy(clip, dest)
+                clip_copy = flame.media_panel.copy(clip, dest)
             else:
                 if shot_name in str(clip.versions[0].tracks[0].segments[0].shot_name) or shot_name in str(clip.name):
-                    flame.media_panel.copy(clip, dest)
+                    clip_copy = flame.media_panel.copy(clip, dest)
 
     def batch_template_browse(self, lineedit, parent_window):
 
@@ -3476,7 +3568,73 @@ class CreateShotFolders(object):
         if os.path.isdir(dir_path):
             lineedit.setText(dir_path)
 
-    # -------- #
+    def reveal_path_in_finder(self, path):
+
+        if platform.system() == 'Darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
+
+        print (f'path opened in finder: {path}\n')
+
+    def get_export_presets(self):
+
+        def check_preset_version(preset_path):
+            '''
+            Check export presets for flame version compatibility.
+            If preset requires newer version of flame, don't list it
+            '''
+
+            export_preset_xml_tree = ET.parse(preset_path)
+            root = export_preset_xml_tree.getroot()
+
+            # Get version export preset is currently set to
+
+            for setting in root.iter('preset'):
+                current_export_version = setting.get('version')
+
+            # Get current flame version whole number
+
+            flame_version = str(self.flame_version)[:4]
+
+            # Set export version for verion of flame being used
+
+            if flame_version == '2021':
+                export_version = '10'
+            elif flame_version == '2022':
+                export_version = '11'
+            elif flame_version == '2023':
+                export_version = '11'
+
+            # If preset version if different than current export version then update xml
+
+            if current_export_version == export_version:
+                return True
+            return False
+
+        def add_presets(path, preset_type):
+            for root, dirs, files in os.walk(path):
+                for f in files:
+                    if f.endswith('.xml'):
+                        preset_name = preset_type + f[:-4]
+                        preset_current_version = check_preset_version(os.path.join(root, f))
+                        if preset_current_version:
+                            export_preset_list.append(preset_name)
+
+        export_preset_list = []
+
+        shared_export_presets_path = '/opt/Autodesk/shared/export/presets'
+        project_export_presets_path = os.path.join('/opt/Autodesk/project', self.project_name, 'export/presets/flame')
+
+        add_presets(shared_export_presets_path, 'Shared: ')
+        add_presets(project_export_presets_path, 'Project: ')
+
+        if not export_preset_list:
+            export_preset_list.append('No Presets Found')
+
+        return export_preset_list
+
+    # ------------------------------------- #
     # Create
 
     def create_library(self, create_type):
@@ -3484,11 +3642,11 @@ class CreateShotFolders(object):
         # Create new library if destination is Library
 
         if self.batch_group_dest == 'Library' or create_type == 'Folders':
-            new_lib_name = 'New Shot %s' % create_type
+            new_lib_name = f'New Shot {create_type}'
             self.lib = self.ws.create_library(new_lib_name)
             self.lib.expanded = True
 
-            print ('    library created: %s\n' % new_lib_name)
+            print (f'    library created: {new_lib_name}\n')
 
     def create_media_panel_folders(self, shot_name, all_clips):
         '''
@@ -3506,7 +3664,7 @@ class CreateShotFolders(object):
 
         for key1, value1 in iter(self.folder_dict.items()):
             shot_folder = self.lib.create_folder(shot_name)
-            print ('    shot folder created: %s' % shot_name)
+            print (f'    shot folder created: {shot_name}')
 
             # Check if main folder is clip dest
 
@@ -3539,10 +3697,17 @@ class CreateShotFolders(object):
             render_node.source_timecode = clip_timecode
             render_node.record_timecode = clip_timecode
             render_node.shot_name = shot_name
+            render_node.tape_name = clip_tape_name
+            render_node.range_start = self.batch_start_frame
+            render_node.range_end = self.batch_start_frame + self.batch_group.duration - 1
 
         # Create batch group
 
         self.batch_group = flame.batch.create_batch_group(shot_name, duration=100, reels=self.schematic_reels, shelf_reels=self.shelf_reels)
+
+        # Set batch start frame
+
+        self.batch_group.start_frame = self.batch_start_frame
 
         # If creating batch group from selected clip add clip to batch group, add nodes, modify render nodes
 
@@ -3565,20 +3730,20 @@ class CreateShotFolders(object):
 
             self.batch_group.duration = clip.duration
 
-            self.batch_group.start_frame = self.batch_start_frame
-
             # Get clip timecode and frame rate
 
             imported_clip = self.batch_group.reels[self.clip_reel_index].clips[0]
             clip_timecode = imported_clip.start_time
             clip_frame_rate = imported_clip.frame_rate
-            # print ('clip_timecode:', clip_timecode)
-            # print ('clip_frame_rate:', clip_frame_rate, '\n')
+
+            # Get clip tape name
+
+            clip_tape_name = (((imported_clip.versions[0]).tracks[0]).segments[0]).tape_name
 
             # Force batch group name in case duplicate name already exists in desktop
 
             if self.batch_additional_naming:
-                self.batch_group.name = shot_name + self.batch_additional_naming
+                self.batch_group.name = str(shot_name + self.batch_additional_naming)
             else:
                 self.batch_group.name = shot_name
 
@@ -3596,7 +3761,7 @@ class CreateShotFolders(object):
 
                 if not plate_in_mux_present:
                     flame.delete(self.batch_group)
-                    return message_box('Batch Template should have Mux node named: plate_in')
+                    return FlameMessageWindow('Error', 'error', 'Batch Template should have Mux node named: plate_in')
 
                 # Check for nodes with context set - Context does not carry over when batch setup is appended.
                 # Nodes in template need to have note attached with desired context view: context 1, context 2...
@@ -3637,7 +3802,7 @@ class CreateShotFolders(object):
                 # Apply clip settings to render node
 
                 for node in self.batch_group.nodes:
-                    if node.type == 'Render':
+                    if node.type == 'Render' or node.type == 'Write File':
                         set_render_node_values(node)
 
             else:
@@ -3677,8 +3842,6 @@ class CreateShotFolders(object):
 
                     image_format = self.write_file_image_format.split(' ', 1)[0]
                     bit_depth = self.write_file_image_format.split(' ', 1)[1]
-                    print ('image_format:', image_format)
-                    print ('bit_depth:', bit_depth)
 
                     render_node = flame.batch.create_node('Write File')
                     render_node.media_path = self.write_file_media_path
@@ -3703,13 +3866,14 @@ class CreateShotFolders(object):
                     render_node.source_timecode = clip_timecode
                     render_node.record_timecode = clip_timecode
                     render_node.shot_name = shot_name
-
+                    render_node.range_start = self.batch_start_frame
+                    render_node.range_end = self.batch_start_frame + self.batch_group.duration - 1
                     # render_node.name = '<batch iteration>'
 
                     if self.write_file_create_open_clip:
                         render_node.version_mode = 'Follow Iteration'
-                        render_node.version_name = 'v<version>'
-                        render_node.version_padding = 2
+                        render_node.version_name = self.write_file_version_name
+                        render_node.version_padding = int(self.write_file_iteration_padding)
 
                 render_node.pos_x = render_out_mux.pos_x + 400
                 render_node.pos_y = render_out_mux.pos_y -30
@@ -3730,7 +3894,7 @@ class CreateShotFolders(object):
         if self.batch_group_dest == 'Library':
             flame.media_panel.move(self.batch_group, dest)
 
-        print ('    batch group created: %s' % shot_name)
+        print (f'    batch group created: {shot_name}')
 
     def create_desktop(self, shot_name, all_clips, dest):
         import flame
@@ -3770,7 +3934,7 @@ class CreateShotFolders(object):
 
         self.clear_current_desktop()
 
-        print ('    desktop created: %s' % shot_name)
+        print (f'    desktop created: {shot_name}')
 
     def create_file_system_folders(self, root_folder_path, shot_name):
         import flame
@@ -3783,43 +3947,95 @@ class CreateShotFolders(object):
 
         # Create shot folders
 
-        # print ('>>> creating file system shot folders <<<\n')
-
         for key, value, in iter(self.file_system_folder_dict.items()):
             shot_folder = os.path.join(root_folder_path, shot_name)
             if not os.path.isdir(shot_folder):
-                os.makedirs(shot_folder)
-                print ('    file system shot folder created: %s' % shot_name)
-                folder_loop(value, shot_folder)
+                try:
+                    os.makedirs(shot_folder)
+                    print (f'    file system shot folder created: {shot_name}')
+                    folder_loop(value, shot_folder)
+                except:
+                    self.system_folder_creation_errors.append(shot_name)
             else:
                 self.system_folder_creation_errors.append(shot_name)
 
         flame.execute_shortcut("Refresh the MediaHub's Folders and Files")
 
+    def create_timeline_shots(self, timelinefx):
+        import flame
+
+        # Create temp library
+
+        self.temp_lib = self.ws.create_library('Create_Shot_Temp_Library')
+
+        # Match out selected clips from timeline into temporary library
+
+        for clip in self.selection:
+            clip.match(self.temp_lib, include_timeline_fx = timelinefx)
+
+        self.selection = self.temp_lib.clips
+
+        self.clips_to_shots()
+
+        flame.delete(self.temp_lib)
+
+    # ------------------------------------- #
+    # Export
+
+    def init_exporter(self):
+
+        import flame
+
+        # Initialize Exporter
+
+        self.exporter = flame.PyExporter()
+
+        # Set export to foreground
+
+        self.exporter.foreground = self.create_shot_fg_export
+        print (f'            export in foreground: {self.create_shot_fg_export}')
+
+    def export_plate(self, root_folder_path, shot_name, all_clips):
+
+        print ('\n        exporting plates:')
+
+        # Initialize Flame exporter
+
+        self.init_exporter()
+
+        # Get selected export preset
+
+        preset_split = self.create_shot_export_plate_preset.split(' ', 1)
+        preset_type = preset_split[0]
+        preset_name = preset_split[1] + '.xml'
+
+        if preset_type == 'Shared:':
+            preset_path = '/opt/Autodesk/shared/export/presets'
+        else:
+            preset_path = os.path.join('/opt/Autodesk/project', self.project_name, 'export/presets/flame')
+        print ('            preset_path:', preset_path)
+
+        for root, dirs, files in os.walk(preset_path):
+            for f in files:
+                if f == preset_name:
+                    full_preset_path = os.path.join(root, f)
+                    print ('            full_preset_path:', full_preset_path)
+
+        # Get shot export path
+
+        shot_export_path = os.path.join(root_folder_path, shot_name, self.export_dest_folder.split('/', 1)[1])
+        print ('            shot_export_path:', shot_export_path, '\n')
+
+        # Export clips to shot folder(s)
+
+        for clip in self.selection:
+            if all_clips:
+                self.exporter.export(clip, full_preset_path, shot_export_path)
+            else:
+                if shot_name in str(clip.versions[0].tracks[0].segments[0].shot_name) or shot_name in str(clip.name):
+                    self.exporter.export(clip, full_preset_path, shot_export_path)
+
 # ------------------------------------- #
-
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131}'
-                          'QLabel {color: #9a9a9a; font: 14pt "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14pt "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
-
-#-------------------------------------#
 
 def setup(selection):
     '''
@@ -3827,7 +4043,7 @@ def setup(selection):
     '''
 
     script = CreateShotFolders(selection)
-    script.setup()
+    script.preset_selector()
 
 def create_shot_folders(selection):
     '''
@@ -3835,6 +4051,9 @@ def create_shot_folders(selection):
     '''
 
     script = CreateShotFolders(selection)
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
     script.create_shot_folder_window()
 
 def create_custom_selected_shots(selection):
@@ -3843,6 +4062,9 @@ def create_custom_selected_shots(selection):
     '''
 
     script = CreateShotFolders(selection)
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
     script.custom_shot_from_selected_window()
 
 def clip_shot_name_to_shot(selection):
@@ -3853,7 +4075,10 @@ def clip_shot_name_to_shot(selection):
     '''
 
     script = CreateShotFolders(selection)
-    script.create_shot_name_shots()
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
+    script.clips_to_shots()
 
 def clip_shot_name_to_shot_all_clips(selection):
     '''
@@ -3863,25 +4088,11 @@ def clip_shot_name_to_shot_all_clips(selection):
     '''
 
     script = CreateShotFolders(selection)
-    script.create_shot_name_shots_all_clips()
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
 
-def clip_name_to_shot(selection):
-    '''
-    Create shots based on name of clip
-    One batch will be created for each clip
-    '''
-
-    script = CreateShotFolders(selection)
-    script.create_clip_name_shots()
-
-def clip_name_to_shot_all_clips(selection):
-    '''
-    Create shots based on name of clip
-    All selected clips will go into the same shot folder/batch group/desktop.
-    '''
-
-    script = CreateShotFolders(selection)
-    script.create_clip_name_shots_all_clips()
+    script.all_clips_to_shot()
 
 def import_shot_name_to_shot(selection):
     '''
@@ -3889,7 +4100,10 @@ def import_shot_name_to_shot(selection):
     '''
 
     script = CreateShotFolders(selection)
-    script.import_shot_name_shots()
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
+    script.import_clips_to_shots()
 
 def import_shot_name_to_shot_all(selection):
     '''
@@ -3898,24 +4112,33 @@ def import_shot_name_to_shot_all(selection):
     '''
 
     script = CreateShotFolders(selection)
-    script.import_shot_name_all_clips()
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
+    script.import_all_clips_to_shot()
 
-def import_clip_name_to_shot(selection):
+def timeline_clips_to_shot(selection):
     '''
-    Import selected to clip to separate shots with clip name
+    Create shots from selected clips on timeline
+    '''
+    import flame
+
+    script = CreateShotFolders(selection)
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
+    script.create_timeline_shots(False)
+
+def timeline_clips_to_shot_timeline_fx(selection):
+    '''
+    Create shots from selected clips on timeline with timelinefx included
     '''
 
     script = CreateShotFolders(selection)
-    script.import_clip_name_shots()
-
-def import_clip_name_to_shot_all_clips(selection):
-    '''
-    Import all selected clips to single shot with clip name
-    Shot name comes from clip name of first selected clip
-    '''
-
-    script = CreateShotFolders(selection)
-    script.import_clip_name_shots_all_clips()
+    preset_loaded = script.load_preset_values()
+    if not preset_loaded:
+        return
+    script.create_timeline_shots(True)
 
 #-------------------------------------#
 # SCOPES
@@ -3927,6 +4150,14 @@ def scope_clip(selection):
         if isinstance(item, flame.PyClip):
             if not isinstance(item.parent, flame.PyReel):
                 return True
+    return False
+
+def scope_segment(selection):
+    import flame
+
+    for item in selection:
+        if isinstance(item, flame.PySegment):
+            return True
     return False
 
 def scope_file(selection):
@@ -3950,7 +4181,7 @@ def get_main_menu_custom_ui_actions():
                 {
                     'name': 'Create Shot Setup',
                     'execute': setup,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 }
             ]
         }
@@ -3966,31 +4197,19 @@ def get_mediahub_files_custom_ui_actions():
                 {
                     'name': 'Folders',
                     'execute': create_shot_folders,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 },
                 {
-                    'name': 'Import to Shot - Shot Name',
+                    'name': 'Import to Shot',
                     'isVisible': scope_file,
                     'execute': import_shot_name_to_shot,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 },
                 {
-                    'name': 'Import to Shot - Shot Name - All Clips / One Shot',
+                    'name': 'Import to Shot - All Clips / One Shot',
                     'isVisible': scope_file,
                     'execute': import_shot_name_to_shot_all,
-                    'minimumVersion': '2021.2'
-                },
-                {
-                    'name': 'Import to Shot - Clip Name',
-                    'isVisible': scope_file,
-                    'execute': import_clip_name_to_shot,
-                    'minimumVersion': '2021.2'
-                },
-                {
-                    'name': 'Import to Shot - Clip Name - All Clips / One Shot',
-                    'isVisible': scope_file,
-                    'execute': import_clip_name_to_shot_all_clips,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 }
             ]
         }
@@ -4005,37 +4224,53 @@ def get_media_panel_custom_ui_actions():
                 {
                     'name': 'Folders',
                     'execute': create_shot_folders,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
+                },
+                {
+                    'name': 'Clips to Shot',
+                    'isVisible': scope_clip,
+                    'execute': clip_shot_name_to_shot,
+                    'minimumVersion': '2022'
+                },
+                {
+                    'name': 'Clips to Shot - All Clips / One Shot',
+                    'isVisible': scope_clip,
+                    'execute': clip_shot_name_to_shot_all_clips,
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Custom Shots',
                     'isVisible': scope_clip,
                     'execute': create_custom_selected_shots,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
+                }
+            ]
+        }
+    ]
+
+def get_timeline_custom_ui_actions():
+
+    return [
+        {
+            'name': 'Create Shot...',
+            'actions': [
+                {
+                    'name': 'Clips to Shot',
+                    'isVisible': scope_segment,
+                    'execute': timeline_clips_to_shot,
+                    'minimumVersion': '2023'
                 },
                 {
-                    'name': 'Clips to Shot - Shot Name',
-                    'isVisible': scope_clip,
-                    'execute': clip_shot_name_to_shot,
-                    'minimumVersion': '2021.2'
+                    'name': 'Clips to Shot w/Timeline FX',
+                    'isVisible': scope_segment,
+                    'execute': timeline_clips_to_shot_timeline_fx,
+                    'minimumVersion': '2023'
                 },
                 {
-                    'name': 'Clips to Shot - Shot Name - All Clips / One Shot',
-                    'isVisible': scope_clip,
-                    'execute': clip_shot_name_to_shot_all_clips,
-                    'minimumVersion': '2021.2'
-                },
-                {
-                    'name': 'Clips to Shot - Clip Name',
-                    'isVisible': scope_clip,
-                    'execute': clip_name_to_shot,
-                    'minimumVersion': '2021.2'
-                },
-                {
-                    'name': 'Clips to Shot - Clip Name - All Clips / One shot',
-                    'isVisible': scope_clip,
-                    'execute': clip_name_to_shot_all_clips,
-                    'minimumVersion': '2021.2'
+                    'name': 'Custom Shots',
+                    'isVisible': scope_segment,
+                    'execute': create_custom_selected_shots,
+                    'minimumVersion': '2023'
                 }
             ]
         }

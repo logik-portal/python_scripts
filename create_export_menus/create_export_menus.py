@@ -1,10 +1,10 @@
 '''
 Script Name: Create Export Menus
-Script Version: 3.6
-Flame Version: 2021.2
+Script Version: 4.1
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 03.29.20
-Update Date: 11.02.21
+Update Date: 03.19.22
 
 Custom Action Type: Media Panel
 
@@ -12,20 +12,45 @@ Description:
 
     Create custom right-click export menu's from saved export presets
 
-    To create menus:
+Menus:
 
-    Flame Main Menu -> pyFlame -> Create Export Menus
+    To create or edit export menus:
+
+        Flame Main Menu -> pyFlame -> Create Export Menus
 
     To access newly created menus:
 
-    Right-click on clip -> Project Export Presets... -> Select export
-    Right-click on clip -> Shared Export Presets... -> Select export
+        Right-click on clip -> Project Export Presets... -> Select export
+        Right-click on clip -> Shared Export Presets... -> Select export
 
 To install:
 
     Copy script into /opt/Autodesk/shared/python/create_export_menus
 
 Updates:
+
+    v4.1 03.19.22
+
+        Moved UI widgets to external file
+
+        Added confirmation window when deleting an existing preset
+
+    v4.0 03.02.22
+
+        Updated UI for Flame 2023
+
+        Code optimization
+
+        Misc bug fixes
+
+    v3.7 01.03.22
+
+        Shared export menus now only work with the major version of Flame they're created with. This avoids errors when using
+        a menu with a new version of Flame. For example a menu created with Flame 2022.2 will work with all versions
+        of Flame 2022 but not 2021 or 2023. Shared export menus will now also only show up in versions of Flame that they will
+        work with.
+
+        Added token for Tape Name to be used if clip has a clip name assigned
 
     v3.6 11.02.21
 
@@ -108,603 +133,15 @@ Updates:
         Fixed problem when checking for project presets to delete
 '''
 
-from __future__ import print_function
-from PySide2 import QtCore, QtWidgets, QtGui
+from PySide2 import QtCore, QtWidgets
 import xml.etree.ElementTree as ET
 from functools import partial
 import os, re, ast
+from flame_widgets_create_export_menus import FlameLabel, FlameLineEdit, FlameButton, FlamePushButton, FlamePushButtonMenu, FlameTokenPushButton, FlameMessageWindow, FlameWindow
 
-VERSION = 'v3.6'
+VERSION = 'v4.1'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/create_export_menus'
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-
-    For different label looks set label_type as: 'normal', 'background', or 'outline'
-
-    To use:
-
-    label = FlameLabel('Label Name', 'normal', window)
-    """
-
-    def __init__(self, label_name, label_type, parent_window, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(150, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #393939; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'outline':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-
-class FlameLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Line Edit Widget
-
-    Main window should include this: window.setFocusPolicy(QtCore.Qt.StrongFocus)
-
-    To use:
-
-    line_edit = FlameLineEdit('Some text here', window)
-    """
-
-    def __init__(self, text, parent_window, *args, **kwargs):
-        super(FlameLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        # self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:focus {background-color: #474e58}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-
-    To use:
-
-    button = FlameButton('Button Name', do_when_pressed, window)
-    """
-
-    def __init__(self, button_name, do_when_pressed, parent_window, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(QtCore.QSize(160, 28))
-        self.setMaximumSize(QtCore.QSize(160, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(do_when_pressed)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlamePushButtonMenu(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Menu Push Button Widget
-
-    To use:
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu('push_button_name', push_button_menu_options, window)
-
-    or
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu(push_button_menu_options[0], push_button_menu_options, window)
-    """
-
-    def __init__(self, button_name, menu_options, parent_window, *args, **kwargs):
-        super(FlamePushButtonMenu, self).__init__(*args, **kwargs)
-        from functools import partial
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        def create_menu(option):
-            self.setText(option)
-
-        pushbutton_menu = QtWidgets.QMenu(parent_window)
-        pushbutton_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        pushbutton_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-        for option in menu_options:
-            pushbutton_menu.addAction(option, partial(create_menu, option))
-
-        self.setMenu(pushbutton_menu)
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-
-    To use:
-
-    pushbutton = FlamePushButton(' Button Name', bool, window)
-    """
-
-    def __init__(self, button_name, button_checked, parent_window, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setCheckable(True)
-        self.setChecked(button_checked)
-        self.setMinimumSize(160, 28)
-        self.setMaximumSize(160, 28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #424142, stop: .91 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #4f4f4f, stop: .91 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #383838, stop: .91 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlameTokenPushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Token Push Button Widget
-
-    To use:
-
-    token_dict = {'Token 1': '<Token1>', 'Token2': '<Token2>'}
-    token_push_button = FlameTokenPushButton('Add Token', token_dict, token_dest, window)
-
-    token_dict: Key in dictionary is what will show in button menu.
-                Value in dictionary is what will be applied to the button destination
-    token_dest: Where the Value of the item selected will be applied such as a LineEdit
-    """
-
-    def __init__(self, button_name, token_dict, token_dest, parent, *args, **kwargs):
-        super(FlameTokenPushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #6a6a6a}')
-
-        def token_action_menu():
-            from functools import partial
-
-            def insert_token(token):
-                for key, value in token_dict.items():
-                    if key == token:
-                        token_name = value
-                        token_dest.insert(token_name)
-
-            for key, value in token_dict.items():
-                token_menu.addAction(key, partial(insert_token, key))
-
-        token_menu = QtWidgets.QMenu(parent)
-        token_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        token_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-        self.setMenu(token_menu)
-
-        token_action_menu()
-
-class CustomSpinBox(QtWidgets.QLineEdit):
-
-    IntSpinBox = 0
-    DoubleSpinBox = 1
-
-    def __init__(self, spinbox_type, value, parent=None):
-
-        super(CustomSpinBox, self).__init__(parent)
-
-        if spinbox_type == CustomSpinBox.IntSpinBox:
-            self.setValidator(QtGui.QIntValidator(parent=self))
-        else:
-            self.setValidator(QtGui.QDoubleValidator(parent=self))
-
-        self.spinbox_type = spinbox_type
-        self.min = None
-        self.max = None
-        self.steps = 1
-        self.value_at_press = None
-        self.pos_at_press = None
-
-        self.setValue(value)
-        self.setReadOnly(True)
-        self.textChanged.connect(self.value_changed)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-        self.clearFocus()
-
-    def calculator(self):
-        from PySide2 import QtCore, QtWidgets, QtGui
-        from functools import partial
-
-        def clear():
-            calc_lineedit.setText('')
-
-        def button_press(key):
-
-            if self.clean_line == True:
-                calc_lineedit.setText('')
-
-            calc_lineedit.insert(key)
-
-            self.clean_line = False
-
-        def plus_minus():
-
-            if calc_lineedit.text():
-                calc_lineedit.setText(str(float(calc_lineedit.text()) * -1))
-
-        def add_sub(key):
-
-            if calc_lineedit.text() == '':
-                calc_lineedit.setText('0')
-
-            if '**' not in calc_lineedit.text():
-                try:
-                    calc_num = eval(calc_lineedit.text().lstrip('0'))
-
-                    calc_lineedit.setText(str(calc_num))
-
-                    calc_num = float(calc_lineedit.text())
-
-                    if calc_num == 0:
-                        calc_num = 1
-                    if key == 'add':
-                        self.setValue(float(self.text()) + float(calc_num))
-                    else:
-                        self.setValue(float(self.text()) - float(calc_num))
-
-                    self.clean_line = True
-                except:
-                    pass
-
-        def enter():
-
-            if self.clean_line == True:
-                return calc_window.close()
-
-            if calc_lineedit.text():
-                try:
-
-                    # If only single number set slider value to that number
-
-                    self.setValue(float(calc_lineedit.text()))
-                except:
-
-                    # Do math
-
-                    new_value = calculate_entry()
-                    self.setValue(float(new_value))
-
-            close_calc()
-
-        def equals():
-
-            if calc_lineedit.text() == '':
-                calc_lineedit.setText('0')
-
-            if calc_lineedit.text() != '0':
-
-                calc_line = calc_lineedit.text().lstrip('0')
-            else:
-                calc_line = calc_lineedit.text()
-
-            if '**' not in calc_lineedit.text():
-                try:
-                    calc = eval(calc_line)
-                except:
-                    calc = 0
-
-                calc_lineedit.setText(str(calc))
-            else:
-                calc_lineedit.setText('1')
-
-        def calculate_entry():
-
-            calc_line = calc_lineedit.text().lstrip('0')
-
-            if '**' not in calc_lineedit.text():
-                try:
-                    if calc_line.startswith('+'):
-                        calc = float(self.text()) + eval(calc_line[-1:])
-                    elif calc_line.startswith('-'):
-                        calc = float(self.text()) - eval(calc_line[-1:])
-                    elif calc_line.startswith('*'):
-                        calc = float(self.text()) * eval(calc_line[-1:])
-                    elif calc_line.startswith('/'):
-                        calc = float(self.text()) / eval(calc_line[-1:])
-                    else:
-                        calc = eval(calc_line)
-                except:
-                    calc = 0
-            else:
-                calc = 1
-
-            calc_lineedit.setText(str(float(calc)))
-
-            return calc
-
-        def close_calc():
-            calc_window.close()
-            self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-        def revert_color():
-            self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-        calc_version = '1.1'
-        self.clean_line = False
-
-        calc_window = QtWidgets.QWidget()
-        calc_window.setMinimumSize(QtCore.QSize(210, 280))
-        calc_window.setMaximumSize(QtCore.QSize(210, 280))
-        calc_window.setWindowTitle('pyFlame Calc %s' % calc_version)
-        calc_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.Popup)
-        calc_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        calc_window.destroyed.connect(revert_color)
-        calc_window.move(QtGui.QCursor.pos().x() - 110, QtGui.QCursor.pos().y() - 290)
-        calc_window.setStyleSheet('background-color: #282828')
-
-        # Labels
-
-        calc_label = QtWidgets.QLabel('Calculator', calc_window)
-        calc_label.setAlignment(QtCore.Qt.AlignCenter)
-        calc_label.setMinimumHeight(28)
-        calc_label.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-
-        #  LineEdit
-
-        calc_lineedit = QtWidgets.QLineEdit('', calc_window)
-        calc_lineedit.setMinimumHeight(28)
-        calc_lineedit.setFocus()
-        calc_lineedit.returnPressed.connect(enter)
-        calc_lineedit.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}')
-
-        # Limit characters that can be entered into lineedit
-
-        regex = QtCore.QRegExp('[0-9_,=,/,*,+,\-,.]+')
-        validator = QtGui.QRegExpValidator(regex)
-        calc_lineedit.setValidator(validator)
-
-        # Buttons
-
-        def calc_null():
-            # For blank button - this does nothing
-            pass
-
-        class FlameButton(QtWidgets.QPushButton):
-            """
-            Custom Qt Flame Button Widget
-            """
-
-            def __init__(self, button_name, size_x, size_y, connect, parent, *args, **kwargs):
-                super(FlameButton, self).__init__(*args, **kwargs)
-
-                self.setText(button_name)
-                self.setParent(parent)
-                self.setMinimumSize(size_x, size_y)
-                self.setMaximumSize(size_x, size_y)
-                self.setFocusPolicy(QtCore.Qt.NoFocus)
-                self.clicked.connect(connect)
-                self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                   'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                                   'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        blank_btn = FlameButton('', 40, 28, calc_null, calc_window)
-        blank_btn.setDisabled(True)
-        plus_minus_btn = FlameButton('+/-', 40, 28, plus_minus, calc_window)
-        plus_minus_btn.setStyleSheet('color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"')
-        add_btn = FlameButton('Add', 40, 28, (partial(add_sub, 'add')), calc_window)
-        sub_btn = FlameButton('Sub', 40, 28, (partial(add_sub, 'sub')), calc_window)
-
-        #  --------------------------------------- #
-
-        clear_btn = FlameButton('C', 40, 28, clear, calc_window)
-        equal_btn = FlameButton('=', 40, 28, equals, calc_window)
-        div_btn = FlameButton('/', 40, 28, (partial(button_press, '/')), calc_window)
-        mult_btn = FlameButton('/', 40, 28, (partial(button_press, '*')), calc_window)
-
-        #  --------------------------------------- #
-
-        _7_btn = FlameButton('7', 40, 28, (partial(button_press, '7')), calc_window)
-        _8_btn = FlameButton('8', 40, 28, (partial(button_press, '8')), calc_window)
-        _9_btn = FlameButton('9', 40, 28, (partial(button_press, '9')), calc_window)
-        minus_btn = FlameButton('-', 40, 28, (partial(button_press, '-')), calc_window)
-
-        #  --------------------------------------- #
-
-        _4_btn = FlameButton('4', 40, 28, (partial(button_press, '4')), calc_window)
-        _5_btn = FlameButton('5', 40, 28, (partial(button_press, '5')), calc_window)
-        _6_btn = FlameButton('6', 40, 28, (partial(button_press, '6')), calc_window)
-        plus_btn = FlameButton('+', 40, 28, (partial(button_press, '+')), calc_window)
-
-        #  --------------------------------------- #
-
-        _1_btn = FlameButton('1', 40, 28, (partial(button_press, '1')), calc_window)
-        _2_btn = FlameButton('2', 40, 28, (partial(button_press, '2')), calc_window)
-        _3_btn = FlameButton('3', 40, 28, (partial(button_press, '3')), calc_window)
-        enter_btn = FlameButton('Enter', 40, 61, enter, calc_window)
-
-        #  --------------------------------------- #
-
-        _0_btn = FlameButton('0', 80, 28, (partial(button_press, '0')), calc_window)
-        point_btn = FlameButton('.', 40, 28, (partial(button_press, '.')), calc_window)
-
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setVerticalSpacing(5)
-        gridbox.setHorizontalSpacing(5)
-
-        gridbox.addWidget(calc_label, 0, 0, 1, 4)
-
-        gridbox.addWidget(calc_lineedit, 1, 0, 1, 4)
-
-        gridbox.addWidget(blank_btn, 2, 0)
-        gridbox.addWidget(plus_minus_btn, 2, 1)
-        gridbox.addWidget(add_btn, 2, 2)
-        gridbox.addWidget(sub_btn, 2, 3)
-
-        gridbox.addWidget(clear_btn, 3, 0)
-        gridbox.addWidget(equal_btn, 3, 1)
-        gridbox.addWidget(div_btn, 3, 2)
-        gridbox.addWidget(mult_btn, 3, 3)
-
-        gridbox.addWidget(_7_btn, 4, 0)
-        gridbox.addWidget(_8_btn, 4, 1)
-        gridbox.addWidget(_9_btn, 4, 2)
-        gridbox.addWidget(minus_btn, 4, 3)
-
-        gridbox.addWidget(_4_btn, 5, 0)
-        gridbox.addWidget(_5_btn, 5, 1)
-        gridbox.addWidget(_6_btn, 5, 2)
-        gridbox.addWidget(plus_btn, 5, 3)
-
-        gridbox.addWidget(_1_btn, 6, 0)
-        gridbox.addWidget(_2_btn, 6, 1)
-        gridbox.addWidget(_3_btn, 6, 2)
-        gridbox.addWidget(enter_btn, 6, 3, 2, 1)
-
-        gridbox.addWidget(_0_btn, 7, 0, 1, 2)
-        gridbox.addWidget(point_btn, 7, 2)
-
-        calc_window.setLayout(gridbox)
-
-        calc_window.show()
-
-    def value_changed(self):
-
-        # If value is greater or less than min/max values set values to min/max
-
-        if int(self.value()) < self.min:
-            self.setText(str(self.min))
-        if int(self.value()) > self.max:
-            self.setText(str(self.max))
-
-    def mousePressEvent(self, event):
-        from PySide2 import QtGui
-
-        if event.buttons() == QtCore.Qt.LeftButton:
-            self.value_at_press = self.value()
-            self.pos_at_press = event.pos()
-            self.setCursor(QtGui.QCursor(QtCore.Qt.SizeHorCursor))
-            self.setStyleSheet('color: #d9d9d9; background-color: #474e58; selection-color: #d9d9d9; selection-background-color: #474e58; font: 14pt "Discreet"')
-
-    def mouseReleaseEvent(self, event):
-        from PySide2 import QtGui
-
-        if event.button() == QtCore.Qt.LeftButton:
-
-            # Open calculator if button is released within 10 pixels of button click
-
-            if event.pos().x() in range((self.pos_at_press.x() - 10), (self.pos_at_press.x() + 10)) and event.pos().y() in range((self.pos_at_press.y() - 10), (self.pos_at_press.y() + 10)):
-                self.calculator()
-            else:
-                self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14pt "Discreet"')
-
-            self.value_at_press = None
-            self.pos_at_press = None
-            self.setCursor(QtGui.QCursor(QtCore.Qt.IBeamCursor))
-            return
-
-        super(CustomSpinBox, self).mouseReleaseEvent(event)
-
-    def mouseMoveEvent(self, event):
-
-        if event.buttons() != QtCore.Qt.LeftButton:
-            return
-
-        if self.pos_at_press is None:
-            return
-
-        steps_mult = self.getStepsMultiplier(event)
-
-        delta = event.pos().x() - self.pos_at_press.x()
-        delta /= 20  # Make movement less sensitive.
-        delta *= self.steps * steps_mult
-
-        value = self.value_at_press + delta
-        self.setValue(value)
-
-        super(CustomSpinBox, self).mouseMoveEvent(event)
-
-    def getStepsMultiplier(self, event):
-
-        steps_mult = 1
-
-        if event.modifiers() == QtCore.Qt.CTRL:
-            steps_mult = 10
-        elif event.modifiers() == QtCore.Qt.SHIFT:
-            steps_mult = 0.10
-
-        return steps_mult
-
-    def setMinimum(self, value):
-
-        self.min = value
-
-    def setMaximum(self, value):
-
-        self.max = value
-
-    def setSteps(self, steps):
-
-        if self.spinbox_type == CustomSpinBox.IntSpinBox:
-            self.steps = max(steps, 1)
-        else:
-            self.steps = steps
-
-    def value(self):
-
-        if self.spinbox_type == CustomSpinBox.IntSpinBox:
-            return int(self.text())
-        else:
-            return float(self.text())
-
-    def setValue(self, value):
-
-        if self.min is not None:
-            value = max(value, self.min)
-
-        if self.max is not None:
-            value = min(value, self.max)
-
-        if self.spinbox_type == CustomSpinBox.IntSpinBox:
-            self.setText(str(int(value)))
-        else:
-            # Keep float values to two decimal places
-
-            value_string = str(float(value))
-
-            if len(value_string.rsplit('.', 1)[1]) < 2:
-                value_string = value_string + '0'
-
-            if len(value_string.rsplit('.', 1)[1]) > 2:
-                value_string = value_string[:-1]
-
-            self.setText(value_string)
 
 # ------------------------------------ #
 
@@ -713,7 +150,17 @@ class ExportSetup(object):
     def __init__(self, selection):
         import flame
 
-        print ('\n', '>' * 20, 'create export menus %s' % VERSION, '<' * 20, '\n')
+        print ('''
+   _____                _       ______                       _   __  __
+  / ____|              | |     |  ____|                     | | |  \/  |
+ | |     _ __ ___  __ _| |_ ___| |__  __  ___ __   ___  _ __| |_| \  / | ___ _ __  _   _ ___
+ | |    | '__/ _ \/ _` | __/ _ \  __| \ \/ / '_ \ / _ \| '__| __| |\/| |/ _ \ '_ \| | | / __|
+ | |____| | |  __/ (_| | ||  __/ |____ >  <| |_) | (_) | |  | |_| |  | |  __/ | | | |_| \__ \\
+  \_____|_|  \___|\__,_|\__\___|______/_/\_\ .__/ \___/|_|   \__|_|  |_|\___|_| |_|\__,_|___/
+                                           | |
+                                           |_|''')
+
+        print ('>' * 33, f'create export menus {VERSION}', '<' * 34, '\n')
 
         # Define Paths
 
@@ -742,7 +189,7 @@ class ExportSetup(object):
         # Export token menu
 
         self.export_token_dict = {'Project Name': '<ProjectName>', 'Project Nick Name': '<ProjectNickName>', 'Shot Name': '<ShotName>',
-                                  'SEQUENCE NAME': '<SEQNAME>','Sequence Name': '<SeqName>', 'User Name': '<UserName>',
+                                  'SEQUENCE NAME': '<SEQNAME>','Sequence Name': '<SeqName>', 'Tape Name': '<TapeName>', 'User Name': '<UserName>',
                                   'User Nickname': '<UserNickName>', 'Clip Name': '<ClipName>', 'Clip Resolution': '<Resolution>',
                                   'Clip Height': '<ClipHeight>', 'Clip Width': '<ClipWidth>', 'Year (YYYY)': '<YYYY>',
                                   'Year (YY)': '<YY>', 'Month': '<MM>', 'Day': '<DD>', 'Hour': '<Hour>', 'Minute': '<Minute>',
@@ -846,7 +293,7 @@ class ExportSetup(object):
                 self.reveal_in_mediahub = ast.literal_eval(setting.find('reveal_in_mediahub').text)
                 self.reveal_in_finder = ast.literal_eval(setting.find('reveal_in_finder').text)
 
-            print ('>>> config loaded <<<\n')
+            print ('--> config loaded \n')
 
         def create_config_file():
 
@@ -854,10 +301,10 @@ class ExportSetup(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br><br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('>>> config file does not exist, creating new config file <<<')
+                print ('--> config file does not exist, creating new config file ')
 
                 config = """
 <settings>
@@ -889,16 +336,23 @@ class ExportSetup(object):
 
         self.flame_version = flame.get_version()
 
+        if 'pr' in self.flame_version:
+            self.flame_version = self.flame_version.rsplit('.pr', 1)[0]
+
         if len(self.flame_version) > 6:
             self.flame_version = self.flame_version[:6]
         self.flame_version = float(self.flame_version)
-        print ('flame version:', self.flame_version, '\n')
+        print ('flame version:', self.flame_version)
+
+        self.flame_min_max_version = flame.get_version_major()
+        if self.flame_min_max_version == '2021':
+            self.flame_min_max_version = '2021.2'
+        print ('flame_min_max_version:', self.flame_min_max_version, '\n')
 
     def check_preset_version(self, preset_path):
         '''
         Check export presets for flame version compatibility.
         If preset requires newer version of flame, don't list it
-        Flame 2021 is version 10. Every new full version of Flame adds one. 2022 is 11.
         '''
 
         export_preset_xml_tree = ET.parse(preset_path)
@@ -913,9 +367,14 @@ class ExportSetup(object):
 
         flame_version = str(self.flame_version)[:4]
 
-        # Get export version for verion of flame being used. 2021 is version 10.
+        # Set export version for verion of flame being used
 
-        export_version = str(int(flame_version) - 2021 + 10)
+        if flame_version == '2021':
+            export_version = '10'
+        elif flame_version == '2022':
+            export_version = '11'
+        elif flame_version == '2023':
+            export_version = '11'
 
         # If preset version if different than current export version then update xml
 
@@ -925,42 +384,217 @@ class ExportSetup(object):
 
     def setup_window(self):
 
-        self.window = QtWidgets.QWidget()
         self.main_tabs = QtWidgets.QTabWidget()
         self.preset_tabs = QtWidgets.QTabWidget()
 
-        self.window.setMinimumSize(QtCore.QSize(1200, 500))
-        self.window.setMaximumSize(QtCore.QSize(1200, 500))
-        self.window.setWindowTitle('Create Export Menus %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setStyleSheet('background-color: #212121')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        gridbox = QtWidgets.QGridLayout()
+        self.window = FlameWindow(f'Create Export Menus <small>{VERSION}', gridbox, 1200, 530)
 
         # Main Tabs
 
         self.window.create_tab = QtWidgets.QWidget()
         self.window.edit_tab = QtWidgets.QWidget()
 
-        self.main_tabs.setStyleSheet('QTabWidget {background-color: #313131; font: 14px "Discreet"}'
+        self.main_tabs.setStyleSheet('QTabWidget {background-color: rgb(36, 36, 36); border: none; font: 14px "Discreet"}'
                                      'QTabWidget::tab-bar {alignment: center}'
-                                     'QTabBar::tab {color: #9a9a9a; background-color: #212121; border: 1px solid #3a3a3a; border-bottom-color: #555555; min-width: 20ex; padding: 5px}'
-                                     'QTabBar::tab:selected {color: #bababa; border: 1px solid #555555; border-bottom: 1px solid #212121}'
-                                     'QTabWidget::pane {border-top: 1px solid #555555; top: -0.05em}')
+                                     'QTabBar::tab {color: rgb(154, 154, 154); background-color: rgb(36, 36, 36); min-width: 20ex; padding: 5px;}'
+                                     'QTabBar::tab:selected {color: rgb(186, 186, 186); background-color: rgb(31, 31, 31); border: 1px solid rgb(31, 31, 31); border-bottom: 1px solid rgb(51, 102, 173)}'
+                                     'QTabBar::tab:!selected {color: rgb(186, 186, 186); background-color: rgb(36, 36, 36); border: none}'
+                                     'QTabWidget::pane {border-top: 1px solid rgb(49, 49, 49)}')
 
         self.main_tabs.addTab(self.window.create_tab, 'Create')
         self.main_tabs.addTab(self.window.edit_tab, 'Edit')
 
         self.main_tabs.setFocusPolicy(QtCore.Qt.NoFocus)
 
+        def export_preset_tab(tab, tab_number, export_path, top_layer, export_foreground, export_between_marks):
+
+            def toggle_ui():
+
+                if enable_preset_pushbutton.isChecked():
+                    switch = True
+                else:
+                    switch = False
+
+                saved_preset_type_label.setEnabled(switch)
+                saved_presets_label.setEnabled(switch)
+                export_path_label.setEnabled(switch)
+                export_path_lineedit.setEnabled(switch)
+                top_layer_pushbutton.setEnabled(switch)
+                foreground_pushbutton.setEnabled(switch)
+                between_marks_pushbutton.setEnabled(switch)
+                token_push_btn.setEnabled(switch)
+                preset_type_menu_pushbutton.setEnabled(switch)
+                server_browse_btn.setEnabled(switch)
+                presets_menu_pushbutton.setEnabled(switch)
+
+            # Labels
+
+            saved_preset_type_label = FlameLabel('Saved Preset Type', 'normal')
+            saved_presets_label = FlameLabel('Saved Presets', 'normal')
+            export_path_label = FlameLabel('Export Path', 'normal')
+
+            # LineEdits
+
+            export_path_lineedit = FlameLineEdit(export_path)
+
+            # Pushbuttons
+
+            if tab_number != 'one':
+                enable_preset_pushbutton = FlamePushButton('Enable Preset', False, connect=toggle_ui, button_width=160)
+            else:
+                enable_preset_pushbutton = None
+
+            top_layer_pushbutton = FlamePushButton('Use Top Layer', top_layer, button_width=160)
+            foreground_pushbutton = FlamePushButton('Foreground Export', export_foreground, button_width=160)
+            between_marks_pushbutton = FlamePushButton('Export Between Marks', export_between_marks, button_width=160)
+
+            # Token Pushbutton
+
+            token_push_btn = FlameTokenPushButton('Add Token', self.export_token_dict, export_path_lineedit)
+
+            # Export Pushbutton Menu
+
+            def set_export_push_button():
+
+                if self.project_movie_preset_list != []:
+                    preset_name = str(self.project_movie_preset_list[0])[:-4]
+                    preset_type_menu_pushbutton.setText('Project: Movie')
+                    presets_menu_pushbutton.setText(preset_name)
+                    build_format_preset_menus(self.project_movie_preset_list)
+                elif self.shared_movie_preset_list != []:
+                    preset_name = str(self.shared_movie_preset_list[0])[:-4]
+                    preset_type_menu_pushbutton.setText('Shared: Movie')
+                    presets_menu_pushbutton.setText(preset_name)
+                    build_format_preset_menus(self.shared_movie_preset_list)
+                elif self.project_file_seq_preset_list != []:
+                    preset_name = str(self.project_file_seq_preset_list[0])[:-4]
+                    preset_type_menu_pushbutton.setText('Project: File Sequence')
+                    presets_menu_pushbutton.setText(preset_name)
+                    build_format_preset_menus(self.project_file_seq_preset_list)
+                elif self.shared_file_seq_preset_list != []:
+                    preset_name = str(self.shared_file_seq_preset_list[0])[:-4]
+                    preset_type_menu_pushbutton.setText('Shared: File Sequence')
+                    presets_menu_pushbutton.setText(preset_name)
+                    build_format_preset_menus(self.shared_file_seq_preset_list)
+                else:
+                    preset_type_menu_pushbutton.setText('No Saved Export Presets')
+                    presets_menu_pushbutton.setText('No Saved Export Presets')
+
+            def project_movie_menu():
+                preset_type_menu_pushbutton.setText('Project: Movie')
+                build_format_preset_menus(self.project_movie_preset_list)
+
+            def project_file_seq_menu():
+                preset_type_menu_pushbutton.setText('Project: File Sequence')
+                build_format_preset_menus(self.project_file_seq_preset_list)
+
+            def shared_movie_menu():
+                preset_type_menu_pushbutton.setText('Shared: Movie')
+                build_format_preset_menus(self.shared_movie_preset_list)
+
+            def shared_file_seq_menu():
+                preset_type_menu_pushbutton.setText('Shared: File Sequence')
+                build_format_preset_menus(self.shared_file_seq_preset_list)
+
+            preset_type_menu = QtWidgets.QMenu(self.window)
+            preset_type_menu.addAction('Project: Movie', project_movie_menu)
+            preset_type_menu.addAction('Project: File Sequence', project_file_seq_menu)
+            preset_type_menu.addAction('Shared: Movie', shared_movie_menu)
+            preset_type_menu.addAction('Shared: File Sequence', shared_file_seq_menu)
+            preset_type_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#2d3744; border: none; font: 14px "Discreet"}'
+                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+
+            preset_type_menu_pushbutton = QtWidgets.QPushButton(self.export_menu_text)
+            preset_type_menu_pushbutton.setMenu(preset_type_menu)
+            preset_type_menu_pushbutton.setMinimumSize(QtCore.QSize(200, 28))
+            preset_type_menu_pushbutton.setMaximumSize(QtCore.QSize(200, 28))
+            preset_type_menu_pushbutton.setFocusPolicy(QtCore.Qt.NoFocus)
+            preset_type_menu_pushbutton.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #2d3744; border: none; font: 14px "Discreet"}'
+                                                      'QPushButton:disabled {color: #747474; background-color: #2d3744; border: none}'
+                                                      'QPushButton:hover {border: 1px solid #5a5a5a}'
+                                                      'QPushButton::menu-indicator {image: none}')
+
+            # Presets Pushbutton
+
+            def build_format_preset_menus(preset_list):
+                from functools import partial
+
+                def menu(menu_name):
+                    presets_menu_pushbutton.setText(menu_name)
+
+                # Clear Format Preset menu list
+
+                preset_menu.clear()
+
+                # Set button to first preset in list
+
+                if preset_list != []:
+                    presets_menu_pushbutton.setText(str(preset_list[0])[:-4])
+                else:
+                    presets_menu_pushbutton.setText('No Saved Presets Found')
+
+                # Dynamically create button menus
+
+                for item in preset_list:
+                    menu_name = item[:-4]
+                    preset_menu.addAction(menu_name, partial(menu, menu_name))
+
+            preset_menu = QtWidgets.QMenu(self.window)
+            preset_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#2d3744; border: none; font: 14px "Discreet"}'
+                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+
+            presets_menu_pushbutton = QtWidgets.QPushButton(self.format_preset_text)
+            presets_menu_pushbutton.setMenu(preset_menu)
+            presets_menu_pushbutton.setMinimumSize(QtCore.QSize(200, 28))
+            presets_menu_pushbutton.setFocusPolicy(QtCore.Qt.NoFocus)
+            presets_menu_pushbutton.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #2d3744; border: none; font: 14px "Discreet"}'
+                                                  'QPushButton:disabled {color: #747474; background-color: #2d3744; border: none}'
+                                                  'QPushButton:hover {border: 1px solid #5a5a5a}'
+                                                  'QPushButton::menu-indicator {image: none}')
+            # Buttons
+
+            server_browse_btn = FlameButton('Browse', partial(self.server_path_browse, export_path_lineedit))
+
+            set_export_push_button()
+
+            try:
+                toggle_ui()
+            except:
+                pass
+
+            # Tab Layout
+
+            gridbox_tab = QtWidgets.QGridLayout()
+            gridbox_tab.setMargin(30)
+            gridbox_tab.setVerticalSpacing(5)
+            gridbox_tab.setHorizontalSpacing(5)
+            gridbox_tab.setColumnMinimumWidth(4, 100)
+
+            gridbox_tab.addWidget(saved_preset_type_label, 0, 0)
+            gridbox_tab.addWidget(preset_type_menu_pushbutton, 0, 1)
+
+            gridbox_tab.addWidget(saved_presets_label, 1, 0)
+            gridbox_tab.addWidget(presets_menu_pushbutton, 1, 1)
+
+            gridbox_tab.addWidget(export_path_label, 2, 0)
+            gridbox_tab.addWidget(export_path_lineedit, 2, 1)
+            gridbox_tab.addWidget(server_browse_btn, 2, 2)
+            gridbox_tab.addWidget(token_push_btn, 2, 3)
+
+            if tab_number != 'one':
+                gridbox_tab.addWidget(enable_preset_pushbutton, 0, 5)
+            gridbox_tab.addWidget(top_layer_pushbutton, 1, 5)
+            gridbox_tab.addWidget(foreground_pushbutton, 2, 5)
+            gridbox_tab.addWidget(between_marks_pushbutton, 3, 5)
+
+            tab.setLayout(gridbox_tab)
+
+            return preset_type_menu_pushbutton, presets_menu_pushbutton, preset_menu, export_path_lineedit, enable_preset_pushbutton, top_layer_pushbutton, foreground_pushbutton, between_marks_pushbutton, saved_preset_type_label, saved_presets_label, export_path_label, server_browse_btn, token_push_btn
+
         def create_tab():
 
-            def create_presets(self):
+            def create_presets():
 
                 # Menus for preset tabs two thru five
 
@@ -1039,767 +673,6 @@ class ExportSetup(object):
 
                 # -------------------------------------------------------
 
-                def export_preset_one_tab():
-
-                    # Labels
-
-                    self.saved_preset_type_label_01 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.saved_presets_label_01 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.export_path_label_01 = FlameLabel('Export Path', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.export_path_lineedit_01 = FlameLineEdit(self.export_path, self.window)
-
-                    # Checkable Pushbuttons
-
-                    self.top_layer_pushbutton_01 = FlamePushButton(' Use Top Layer', self.top_layer_checked, self.window)
-                    self.foreground_pushbutton_01 = FlamePushButton(' Foreground Export', self.export_foreground_checked, self.window)
-                    self.between_marks_pushbutton_01 = FlamePushButton(' Export Between Marks', self.export_between_marks, self.window)
-
-                    # Token Pushbutton
-
-                    self.token_push_btn_01 = FlameTokenPushButton('Add Token', self.export_token_dict, self.export_path_lineedit_01, self.window)
-
-                    # Export Pushbutton Menu
-
-                    def set_export_push_button_01():
-
-                        if self.project_movie_preset_list != []:
-                            preset_name = str(self.project_movie_preset_list[0])[:-4]
-                            self.preset_type_menu_pushbutton_01.setText('Project: Movie')
-                            self.presets_menu_pushbutton_01.setText(preset_name)
-                            build_format_preset_menus(self.project_movie_preset_list)
-                        elif self.shared_movie_preset_list != []:
-                            preset_name = str(self.shared_movie_preset_list[0])[:-4]
-                            self.preset_type_menu_pushbutton_01.setText('Shared: Movie')
-                            self.presets_menu_pushbutton_01.setText(preset_name)
-                            build_format_preset_menus(self.shared_movie_preset_list)
-                        elif self.project_file_seq_preset_list != []:
-                            preset_name = str(self.project_file_seq_preset_list[0])[:-4]
-                            self.preset_type_menu_pushbutton_01.setText('Project: File Sequence')
-                            self.presets_menu_pushbutton_01.setText(preset_name)
-                            build_format_preset_menus(self.project_file_seq_preset_list)
-                        elif self.shared_file_seq_preset_list != []:
-                            preset_name = str(self.shared_file_seq_preset_list[0])[:-4]
-                            self.preset_type_menu_pushbutton_01.setText('Shared: File Sequence')
-                            self.presets_menu_pushbutton_01.setText(preset_name)
-                            build_format_preset_menus(self.shared_file_seq_preset_list)
-                        else:
-                            self.preset_type_menu_pushbutton_01.setText('No Saved Export Presets')
-                            self.presets_menu_pushbutton_01.setText('No Saved Export Presets')
-
-                    def project_movie_menu_01():
-                        self.preset_type_menu_pushbutton_01.setText('Project: Movie')
-                        build_format_preset_menus(self.project_movie_preset_list)
-
-                    def project_file_seq_menu_01():
-                        self.preset_type_menu_pushbutton_01.setText('Project: File Sequence')
-                        build_format_preset_menus(self.project_file_seq_preset_list)
-
-                    def shared_movie_menu_01():
-                        self.preset_type_menu_pushbutton_01.setText('Shared: Movie')
-                        build_format_preset_menus(self.shared_movie_preset_list)
-
-                    def shared_file_seq_menu_01():
-                        self.preset_type_menu_pushbutton_01.setText('Shared: File Sequence')
-                        build_format_preset_menus(self.shared_file_seq_preset_list)
-
-                    self.preset_type_menu_01 = QtWidgets.QMenu(self.window)
-                    self.preset_type_menu_01.addAction('Project: Movie', project_movie_menu_01)
-                    self.preset_type_menu_01.addAction('Project: File Sequence', project_file_seq_menu_01)
-                    self.preset_type_menu_01.addAction('Shared: Movie', shared_movie_menu_01)
-                    self.preset_type_menu_01.addAction('Shared: File Sequence', shared_file_seq_menu_01)
-                    self.preset_type_menu_01.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.preset_type_menu_pushbutton_01 = QtWidgets.QPushButton(self.export_menu_text, self.window)
-                    self.preset_type_menu_pushbutton_01.setMenu(self.preset_type_menu_01)
-                    self.preset_type_menu_pushbutton_01.setMinimumSize(QtCore.QSize(200, 28))
-                    self.preset_type_menu_pushbutton_01.setMaximumSize(QtCore.QSize(200, 28))
-                    self.preset_type_menu_pushbutton_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.preset_type_menu_pushbutton_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                      'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # Presets Pushbutton
-
-                    def build_format_preset_menus(preset_list):
-                        from functools import partial
-
-                        def menu(menu_name):
-                            self.presets_menu_pushbutton_01.setText(menu_name)
-
-                        # Clear Format Preset menu list
-
-                        self.preset_menu_01.clear()
-
-                        # Set button to first preset in list
-
-                        if preset_list != []:
-                            self.presets_menu_pushbutton_01.setText(str(preset_list[0])[:-4])
-                        else:
-                            self.presets_menu_pushbutton_01.setText('No Saved Presets Found')
-
-                        # Dynamically create button menus
-
-                        for item in preset_list:
-                            menu_name = item[:-4]
-                            self.preset_menu_01.addAction(menu_name, partial(menu, menu_name))
-
-                    self.preset_menu_01 = QtWidgets.QMenu(self.window)
-                    self.preset_menu_01.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.presets_menu_pushbutton_01 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.presets_menu_pushbutton_01.setMenu(self.preset_menu_01)
-                    self.presets_menu_pushbutton_01.setMinimumSize(QtCore.QSize(450, 28))
-                    self.presets_menu_pushbutton_01.setMaximumSize(QtCore.QSize(450, 28))
-                    self.presets_menu_pushbutton_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.presets_menu_pushbutton_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                  'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # Buttons
-
-                    self.server_browse_btn_01 = FlameButton('Browse', partial(self.server_path_browse, self.export_path_lineedit_01), self.window)
-                    self.server_browse_btn_01.setMinimumSize(QtCore.QSize(110, 28))
-                    self.server_browse_btn_01.setMaximumSize(QtCore.QSize(110, 28))
-
-                    set_export_push_button_01()
-
-                    # Tab Layout
-
-                    gridbox_tab1 = QtWidgets.QGridLayout()
-                    gridbox_tab1.setMargin(30)
-                    gridbox_tab1.setVerticalSpacing(5)
-                    gridbox_tab1.setHorizontalSpacing(5)
-                    gridbox_tab1.setColumnMinimumWidth(4, 100)
-
-                    gridbox_tab1.addWidget(self.saved_preset_type_label_01, 0, 0)
-                    gridbox_tab1.addWidget(self.preset_type_menu_pushbutton_01, 0, 1)
-
-                    gridbox_tab1.addWidget(self.saved_presets_label_01, 1, 0)
-                    gridbox_tab1.addWidget(self.presets_menu_pushbutton_01, 1, 1)
-
-                    gridbox_tab1.addWidget(self.export_path_label_01, 2, 0)
-                    gridbox_tab1.addWidget(self.export_path_lineedit_01, 2, 1)
-                    gridbox_tab1.addWidget(self.server_browse_btn_01, 2, 2)
-                    gridbox_tab1.addWidget(self.token_push_btn_01, 2, 3)
-
-                    gridbox_tab1.addWidget(self.top_layer_pushbutton_01, 1, 5)
-                    gridbox_tab1.addWidget(self.foreground_pushbutton_01, 2, 5)
-                    gridbox_tab1.addWidget(self.between_marks_pushbutton_01, 3, 5)
-
-                    self.window.tab1.setLayout(gridbox_tab1)
-
-                def export_preset_two_tab():
-
-                    def toggle_ui():
-
-                        if self.enable_preset_pushbutton_02.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.saved_preset_type_label_02.setEnabled(switch)
-                        self.saved_presets_label_02.setEnabled(switch)
-                        self.export_path_label_02.setEnabled(switch)
-                        self.export_path_lineedit_02.setEnabled(switch)
-                        self.top_layer_pushbutton_02.setEnabled(switch)
-                        self.foreground_pushbutton_02.setEnabled(switch)
-                        self.between_marks_pushbutton_02.setEnabled(switch)
-                        self.token_push_btn_02.setEnabled(switch)
-                        self.export_push_btn_02.setEnabled(switch)
-                        self.server_browse_btn_02.setEnabled(switch)
-                        self.saved_presets_push_btn_02.setEnabled(switch)
-
-                    # Labels
-
-                    self.saved_preset_type_label_02 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.saved_presets_label_02 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.export_path_label_02 = FlameLabel('Export Path', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.export_path_lineedit_02 = FlameLineEdit(self.export_path, self.window)
-
-                    # Checkable Pushbuttons
-
-                    self.enable_preset_pushbutton_02 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.enable_preset_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_02.setCheckable(True)
-                    self.enable_preset_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.enable_preset_pushbutton_02.clicked.connect(toggle_ui)
-                    self.enable_preset_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.top_layer_pushbutton_02 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.top_layer_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_02.setCheckable(True)
-                    self.top_layer_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.top_layer_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                               'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                               'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-
-                    self.foreground_pushbutton_02 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.foreground_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_02.setCheckable(True)
-                    self.foreground_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.foreground_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.between_marks_pushbutton_02 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.between_marks_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_02.setCheckable(True)
-                    self.between_marks_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.between_marks_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.token_push_btn_02 = FlameTokenPushButton('Add Token', self.export_token_dict, self.export_path_lineedit_02, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.export_menu_02 = QtWidgets.QMenu(self.window)
-                    self.export_menu_02.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.export_push_btn_02 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.export_push_btn_02.setMenu(self.export_menu_02)
-                    self.export_push_btn_02.setMinimumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_02.setMaximumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.export_push_btn_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                          'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.saved_preset_menu_02 = QtWidgets.QMenu(self.window)
-                    self.saved_preset_menu_02.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                            'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.saved_presets_push_btn_02 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.saved_presets_push_btn_02.setMenu(self.saved_preset_menu_02)
-                    self.saved_presets_push_btn_02.setMinimumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_02.setMaximumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.saved_presets_push_btn_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    set_export_push_button(self.export_push_btn_02, self.saved_presets_push_btn_02, self.saved_preset_menu_02)
-
-                    # -------------------------------------------------------------
-
-                    self.server_browse_btn_02 = FlameButton('Browse', partial(self.server_path_browse, self.export_path_lineedit_02), self.window)
-                    self.server_browse_btn_02.setMinimumSize(QtCore.QSize(110, 28))
-                    self.server_browse_btn_02.setMaximumSize(QtCore.QSize(110, 28))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.export_menu_02.addAction('Project: Movie', partial(project_movie_menu, self.export_push_btn_02, self.saved_presets_push_btn_02, self.saved_preset_menu_02))
-                    self.export_menu_02.addAction('Project: File Sequence', partial(project_file_seq_menu, self.export_push_btn_02, self.saved_presets_push_btn_02, self.saved_preset_menu_02))
-                    self.export_menu_02.addAction('Shared: Movie', partial(shared_movie_menu, self.export_push_btn_02, self.saved_presets_push_btn_02, self.saved_preset_menu_02))
-                    self.export_menu_02.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.export_push_btn_02, self.saved_presets_push_btn_02, self.saved_preset_menu_02))
-
-                    # Tab Layout
-
-                    gridbox_tab2 = QtWidgets.QGridLayout()
-                    gridbox_tab2.setMargin(30)
-                    gridbox_tab2.setVerticalSpacing(5)
-                    gridbox_tab2.setHorizontalSpacing(5)
-                    gridbox_tab2.setColumnMinimumWidth(4, 100)
-
-                    gridbox_tab2.addWidget(self.saved_preset_type_label_02, 0, 0)
-                    gridbox_tab2.addWidget(self.export_push_btn_02, 0, 1)
-
-                    gridbox_tab2.addWidget(self.saved_presets_label_02, 1, 0)
-                    gridbox_tab2.addWidget(self.saved_presets_push_btn_02, 1, 1)
-
-                    gridbox_tab2.addWidget(self.export_path_label_02, 2, 0)
-                    gridbox_tab2.addWidget(self.export_path_lineedit_02, 2, 1)
-                    gridbox_tab2.addWidget(self.server_browse_btn_02, 2, 2)
-                    gridbox_tab2.addWidget(self.token_push_btn_02, 2, 3)
-
-                    gridbox_tab2.addWidget(self.enable_preset_pushbutton_02, 0, 5)
-                    gridbox_tab2.addWidget(self.top_layer_pushbutton_02, 1, 5)
-                    gridbox_tab2.addWidget(self.foreground_pushbutton_02, 2, 5)
-                    gridbox_tab2.addWidget(self.between_marks_pushbutton_02, 3, 5)
-
-                    self.window.tab2.setLayout(gridbox_tab2)
-
-                def export_preset_three_tab():
-
-                    def toggle_ui():
-
-                        if self.enable_preset_pushbutton_03.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.saved_preset_type_label_03.setEnabled(switch)
-                        self.saved_presets_label_03.setEnabled(switch)
-                        self.export_path_label_03.setEnabled(switch)
-                        self.export_path_lineedit_03.setEnabled(switch)
-                        self.top_layer_pushbutton_03.setEnabled(switch)
-                        self.foreground_pushbutton_03.setEnabled(switch)
-                        self.between_marks_pushbutton_03.setEnabled(switch)
-                        self.token_push_btn_03.setEnabled(switch)
-                        self.export_push_btn_03.setEnabled(switch)
-                        self.server_browse_btn_03.setEnabled(switch)
-                        self.saved_presets_push_btn_03.setEnabled(switch)
-
-                    # Labels
-
-                    self.saved_preset_type_label_03 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.saved_presets_label_03 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.export_path_label_03 = FlameLabel('Export Path', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.export_path_lineedit_03 = FlameLineEdit(self.export_path, self.window)
-
-                    # Checkable Pushbuttons
-
-                    self.enable_preset_pushbutton_03 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.enable_preset_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_03.setCheckable(True)
-                    self.enable_preset_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.enable_preset_pushbutton_03.clicked.connect(toggle_ui)
-                    self.enable_preset_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.top_layer_pushbutton_03 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.top_layer_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_03.setCheckable(True)
-                    self.top_layer_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.top_layer_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                               'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                               'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.foreground_pushbutton_03 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.foreground_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_03.setCheckable(True)
-                    self.foreground_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.foreground_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.between_marks_pushbutton_03 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.between_marks_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_03.setCheckable(True)
-                    self.between_marks_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.between_marks_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.token_push_btn_03 = FlameTokenPushButton('Add Token', self.export_token_dict, self.export_path_lineedit_03, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.export_menu_03 = QtWidgets.QMenu(self.window)
-                    self.export_menu_03.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.export_push_btn_03 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.export_push_btn_03.setMenu(self.export_menu_03)
-                    self.export_push_btn_03.setMinimumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_03.setMaximumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.export_push_btn_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                          'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.saved_preset_menu_03 = QtWidgets.QMenu(self.window)
-                    self.saved_preset_menu_03.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                            'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.saved_presets_push_btn_03 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.saved_presets_push_btn_03.setMenu(self.saved_preset_menu_03)
-                    self.saved_presets_push_btn_03.setMinimumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_03.setMaximumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.saved_presets_push_btn_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    set_export_push_button(self.export_push_btn_03, self.saved_presets_push_btn_03, self.saved_preset_menu_03)
-
-                    # -------------------------------------------------------------
-
-                    self.server_browse_btn_03 = FlameButton('Browse', partial(self.server_path_browse, self.export_path_lineedit_03), self.window)
-                    self.server_browse_btn_03.setMinimumSize(QtCore.QSize(110, 28))
-                    self.server_browse_btn_03.setMaximumSize(QtCore.QSize(110, 28))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.export_menu_03.addAction('Project: Movie', partial(project_movie_menu, self.export_push_btn_03, self.saved_presets_push_btn_03, self.saved_preset_menu_03))
-                    self.export_menu_03.addAction('Project: File Sequence', partial(project_file_seq_menu, self.export_push_btn_03, self.saved_presets_push_btn_03, self.saved_preset_menu_03))
-                    self.export_menu_03.addAction('Shared: Movie', partial(shared_movie_menu, self.export_push_btn_03, self.saved_presets_push_btn_03, self.saved_preset_menu_03))
-                    self.export_menu_03.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.export_push_btn_03, self.saved_presets_push_btn_03, self.saved_preset_menu_03))
-
-                    # Tab Layout
-
-                    gridbox_tab3 = QtWidgets.QGridLayout()
-                    gridbox_tab3.setMargin(30)
-                    gridbox_tab3.setVerticalSpacing(5)
-                    gridbox_tab3.setHorizontalSpacing(5)
-                    gridbox_tab3.setColumnMinimumWidth(4, 100)
-
-                    gridbox_tab3.addWidget(self.saved_preset_type_label_03, 0, 0)
-                    gridbox_tab3.addWidget(self.export_push_btn_03, 0, 1)
-
-                    gridbox_tab3.addWidget(self.saved_presets_label_03, 1, 0)
-                    gridbox_tab3.addWidget(self.saved_presets_push_btn_03, 1, 1)
-
-                    gridbox_tab3.addWidget(self.export_path_label_03, 2, 0)
-                    gridbox_tab3.addWidget(self.export_path_lineedit_03, 2, 1)
-                    gridbox_tab3.addWidget(self.server_browse_btn_03, 2, 2)
-                    gridbox_tab3.addWidget(self.token_push_btn_03, 2, 3)
-
-                    gridbox_tab3.addWidget(self.enable_preset_pushbutton_03, 0, 5)
-                    gridbox_tab3.addWidget(self.top_layer_pushbutton_03, 1, 5)
-                    gridbox_tab3.addWidget(self.foreground_pushbutton_03, 2, 5)
-                    gridbox_tab3.addWidget(self.between_marks_pushbutton_03, 3, 5)
-
-                    self.window.tab3.setLayout(gridbox_tab3)
-
-                def export_preset_four_tab():
-
-                    def toggle_ui():
-
-                        if self.enable_preset_pushbutton_04.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.saved_preset_type_label_04.setEnabled(switch)
-                        self.saved_presets_label_04.setEnabled(switch)
-                        self.export_path_label_04.setEnabled(switch)
-                        self.export_path_lineedit_04.setEnabled(switch)
-                        self.top_layer_pushbutton_04.setEnabled(switch)
-                        self.foreground_pushbutton_04.setEnabled(switch)
-                        self.between_marks_pushbutton_04.setEnabled(switch)
-                        self.token_push_btn_04.setEnabled(switch)
-                        self.export_push_btn_04.setEnabled(switch)
-                        self.server_browse_btn_04.setEnabled(switch)
-                        self.saved_presets_push_btn_04.setEnabled(switch)
-
-                    # Labels
-
-                    self.saved_preset_type_label_04 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.saved_presets_label_04 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.export_path_label_04 = FlameLabel('Export Path', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.export_path_lineedit_04 = FlameLineEdit(self.export_path, self.window)
-
-                    # Checkable Pushbuttons
-
-                    self.enable_preset_pushbutton_04 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.enable_preset_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_04.setCheckable(True)
-                    self.enable_preset_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.enable_preset_pushbutton_04.clicked.connect(toggle_ui)
-                    self.enable_preset_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.top_layer_pushbutton_04 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.top_layer_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_04.setCheckable(True)
-                    self.top_layer_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.top_layer_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                               'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                               'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.foreground_pushbutton_04 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.foreground_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_04.setCheckable(True)
-                    self.foreground_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.foreground_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.between_marks_pushbutton_04 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.between_marks_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_04.setCheckable(True)
-                    self.between_marks_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.between_marks_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.token_push_btn_04 = FlameTokenPushButton('Add Token', self.export_token_dict, self.export_path_lineedit_04, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.export_menu_04 = QtWidgets.QMenu(self.window)
-                    self.export_menu_04.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.export_push_btn_04 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.export_push_btn_04.setMenu(self.export_menu_04)
-                    self.export_push_btn_04.setMinimumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_04.setMaximumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.export_push_btn_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                          'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.saved_preset_menu_04 = QtWidgets.QMenu(self.window)
-                    self.saved_preset_menu_04.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                            'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.saved_presets_push_btn_04 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.saved_presets_push_btn_04.setMenu(self.saved_preset_menu_04)
-                    self.saved_presets_push_btn_04.setMinimumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_04.setMaximumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.saved_presets_push_btn_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    set_export_push_button(self.export_push_btn_04, self.saved_presets_push_btn_04, self.saved_preset_menu_04)
-
-                    # -------------------------------------------------------------
-
-                    self.server_browse_btn_04 = FlameButton('Browse', partial(self.server_path_browse, self.export_path_lineedit_04), self.window)
-                    self.server_browse_btn_04.setMinimumSize(QtCore.QSize(110, 28))
-                    self.server_browse_btn_04.setMaximumSize(QtCore.QSize(110, 28))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.export_menu_04.addAction('Project: Movie', partial(project_movie_menu, self.export_push_btn_04, self.saved_presets_push_btn_04, self.saved_preset_menu_04))
-                    self.export_menu_04.addAction('Project: File Sequence', partial(project_file_seq_menu, self.export_push_btn_04, self.saved_presets_push_btn_04, self.saved_preset_menu_04))
-                    self.export_menu_04.addAction('Shared: Movie', partial(shared_movie_menu, self.export_push_btn_04, self.saved_presets_push_btn_04, self.saved_preset_menu_04))
-                    self.export_menu_04.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.export_push_btn_04, self.saved_presets_push_btn_04, self.saved_preset_menu_04))
-
-                    # Tab Layout
-
-                    gridbox_tab4 = QtWidgets.QGridLayout()
-                    gridbox_tab4.setMargin(30)
-                    gridbox_tab4.setVerticalSpacing(5)
-                    gridbox_tab4.setHorizontalSpacing(5)
-                    gridbox_tab4.setColumnMinimumWidth(4, 100)
-
-                    gridbox_tab4.addWidget(self.saved_preset_type_label_04, 0, 0)
-                    gridbox_tab4.addWidget(self.export_push_btn_04, 0, 1)
-
-                    gridbox_tab4.addWidget(self.saved_presets_label_04, 1, 0)
-                    gridbox_tab4.addWidget(self.saved_presets_push_btn_04, 1, 1)
-
-                    gridbox_tab4.addWidget(self.export_path_label_04, 2, 0)
-                    gridbox_tab4.addWidget(self.export_path_lineedit_04, 2, 1)
-                    gridbox_tab4.addWidget(self.server_browse_btn_04, 2, 2)
-                    gridbox_tab4.addWidget(self.token_push_btn_04, 2, 3)
-
-                    gridbox_tab4.addWidget(self.enable_preset_pushbutton_04, 0, 5)
-                    gridbox_tab4.addWidget(self.top_layer_pushbutton_04, 1, 5)
-                    gridbox_tab4.addWidget(self.foreground_pushbutton_04, 2, 5)
-                    gridbox_tab4.addWidget(self.between_marks_pushbutton_04, 3, 5)
-
-                    self.window.tab4.setLayout(gridbox_tab4)
-
-                def export_preset_five_tab():
-
-                    def toggle_ui():
-
-                        if self.enable_preset_pushbutton_05.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.saved_preset_type_label_05.setEnabled(switch)
-                        self.saved_presets_label_05.setEnabled(switch)
-                        self.export_path_label_05.setEnabled(switch)
-                        self.export_path_lineedit_05.setEnabled(switch)
-                        self.top_layer_pushbutton_05.setEnabled(switch)
-                        self.foreground_pushbutton_05.setEnabled(switch)
-                        self.between_marks_pushbutton_05.setEnabled(switch)
-                        self.token_push_btn_05.setEnabled(switch)
-                        self.export_push_btn_05.setEnabled(switch)
-                        self.server_browse_btn_05.setEnabled(switch)
-                        self.saved_presets_push_btn_05.setEnabled(switch)
-
-                    # Labels
-
-                    self.saved_preset_type_label_05 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.saved_presets_label_05 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.export_path_label_05 = FlameLabel('Export Path', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.export_path_lineedit_05 = FlameLineEdit(self.export_path, self.window)
-
-                    # Pushbuttons
-
-                    self.enable_preset_pushbutton_05 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.enable_preset_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.enable_preset_pushbutton_05.setCheckable(True)
-                    self.enable_preset_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.enable_preset_pushbutton_05.clicked.connect(toggle_ui)
-                    self.enable_preset_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.top_layer_pushbutton_05 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.top_layer_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.top_layer_pushbutton_05.setCheckable(True)
-                    self.top_layer_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.top_layer_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                               'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                               'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.foreground_pushbutton_05 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.foreground_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.foreground_pushbutton_05.setCheckable(True)
-                    self.foreground_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.foreground_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.between_marks_pushbutton_05 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.between_marks_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.between_marks_pushbutton_05.setCheckable(True)
-                    self.between_marks_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.between_marks_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                   'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                   'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.token_push_btn_05 = FlameTokenPushButton('Add Token', self.export_token_dict, self.export_path_lineedit_05, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.export_menu_05 = QtWidgets.QMenu(self.window)
-                    self.export_menu_05.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.export_push_btn_05 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.export_push_btn_05.setMenu(self.export_menu_05)
-                    self.export_push_btn_05.setMinimumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_05.setMaximumSize(QtCore.QSize(200, 28))
-                    self.export_push_btn_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.export_push_btn_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                          'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.saved_preset_menu_05 = QtWidgets.QMenu(self.window)
-                    self.saved_preset_menu_05.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                            'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.saved_presets_push_btn_05 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.saved_presets_push_btn_05.setMenu(self.saved_preset_menu_05)
-                    self.saved_presets_push_btn_05.setMinimumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_05.setMaximumSize(QtCore.QSize(450, 28))
-                    self.saved_presets_push_btn_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.saved_presets_push_btn_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    set_export_push_button(self.export_push_btn_05, self.saved_presets_push_btn_05, self.saved_preset_menu_05)
-
-                    # -------------------------------------------------------------
-
-                    self.server_browse_btn_05 = FlameButton('Browse', partial(self.server_path_browse, self.export_path_lineedit_05), self.window)
-                    self.server_browse_btn_05.setMinimumSize(QtCore.QSize(110, 28))
-                    self.server_browse_btn_05.setMaximumSize(QtCore.QSize(110, 28))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.export_menu_05.addAction('Project: Movie', partial(project_movie_menu, self.export_push_btn_05, self.saved_presets_push_btn_05, self.saved_preset_menu_05))
-                    self.export_menu_05.addAction('Project: File Sequence', partial(project_file_seq_menu, self.export_push_btn_05, self.saved_presets_push_btn_05, self.saved_preset_menu_05))
-                    self.export_menu_05.addAction('Shared: Movie', partial(shared_movie_menu, self.export_push_btn_05, self.saved_presets_push_btn_05, self.saved_preset_menu_05))
-                    self.export_menu_05.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.export_push_btn_05, self.saved_presets_push_btn_05, self.saved_preset_menu_05))
-
-                    # Tab Layout
-
-                    gridbox_tab5 = QtWidgets.QGridLayout()
-                    gridbox_tab5.setMargin(30)
-                    gridbox_tab5.setVerticalSpacing(5)
-                    gridbox_tab5.setHorizontalSpacing(5)
-                    gridbox_tab5.setColumnMinimumWidth(4, 100)
-
-                    gridbox_tab5.addWidget(self.saved_preset_type_label_05, 0, 0)
-                    gridbox_tab5.addWidget(self.export_push_btn_05, 0, 1)
-
-                    gridbox_tab5.addWidget(self.saved_presets_label_05, 1, 0)
-                    gridbox_tab5.addWidget(self.saved_presets_push_btn_05, 1, 1)
-
-                    gridbox_tab5.addWidget(self.export_path_label_05, 2, 0)
-                    gridbox_tab5.addWidget(self.export_path_lineedit_05, 2, 1)
-                    gridbox_tab5.addWidget(self.server_browse_btn_05, 2, 2)
-                    gridbox_tab5.addWidget(self.token_push_btn_05, 2, 3)
-
-                    gridbox_tab5.addWidget(self.enable_preset_pushbutton_05, 0, 5)
-                    gridbox_tab5.addWidget(self.top_layer_pushbutton_05, 1, 5)
-                    gridbox_tab5.addWidget(self.foreground_pushbutton_05, 2, 5)
-                    gridbox_tab5.addWidget(self.between_marks_pushbutton_05, 3, 5)
-
-                    self.window.tab5.setLayout(gridbox_tab5)
-
                 self.preset_tabs = QtWidgets.QTabWidget()
 
                 # Preset Tabs
@@ -1812,12 +685,12 @@ class ExportSetup(object):
 
                 self.preset_tabs.setFocusPolicy(QtCore.Qt.NoFocus)
 
-                self.preset_tabs.setStyleSheet('QTabWidget {background-color: #313131; font: 14px "Discreet"}'
+                self.preset_tabs.setStyleSheet('QTabWidget {background-color: rgb(36, 36, 36); border: none; font: 14px "Discreet"}'
                                                'QTabWidget::tab-bar {alignment: center}'
-                                               'QTabBar::tab {color: #777777; background: #212121; border: 1px solid #000000; border-bottom-color: #000000; min-width: 20ex; padding: 5px}'
-                                               'QTabBar::tab:selected {color: #bababa; background-color: #2e2e2e; border: 1px solid #000000; border-bottom: 1px solid #2e2e2e}'
-                                               'QTabWidget::pane {border: 1px solid #000000; top: -0.05em}'
-                                               'QWidget {background-color: #2e2e2e}')
+                                               'QTabBar::tab {color: rgb(154, 154, 154); background-color: rgb(36, 36, 36); min-width: 20ex; padding: 5px;}'
+                                               'QTabBar::tab:selected {color: rgb(186, 186, 186); background-color: rgb(31, 31, 31); border: 1px solid rgb(31, 31, 31); border-bottom: 1px solid rgb(51, 102, 173)}'
+                                               'QTabBar::tab:!selected {color: rgb(186, 186, 186); background-color: rgb(36, 36, 36); border: none}'
+                                               'QTabWidget::pane {border-top: 1px solid rgb(49, 49, 49)}')
 
                 self.preset_tabs.addTab(self.window.tab1, 'Export Preset One')
                 self.preset_tabs.addTab(self.window.tab2, 'Export Preset Two')
@@ -1825,43 +698,51 @@ class ExportSetup(object):
                 self.preset_tabs.addTab(self.window.tab4, 'Export Preset Four')
                 self.preset_tabs.addTab(self.window.tab5, 'Export Preset Five')
 
-                export_preset_one_tab()
-                export_preset_two_tab()
-                export_preset_three_tab()
-                export_preset_four_tab()
-                export_preset_five_tab()
+                # Create tabs
+
+                export_preset_one_tab = export_preset_tab(self.window.tab1, 'one', self.export_path, self.top_layer_checked, self.export_foreground_checked, self.export_between_marks)
+                export_preset_two_tab = export_preset_tab(self.window.tab2, 'two', '', False, False, False)
+                export_preset_three_tab = export_preset_tab(self.window.tab3, 'three', '', False, False, False)
+                export_preset_four_tab = export_preset_tab(self.window.tab4, 'four', '', False, False, False)
+                export_preset_five_tab = export_preset_tab(self.window.tab5, 'five', '', False, False, False)
+
+                # Get values from tabs
+
+                self.preset_type_menu_pushbutton_01, self.presets_menu_pushbutton_01, self.preset_menu_01, self.export_path_lineedit_01, self.enable_preset_pushbutton_01, self.top_layer_pushbutton_01, self.foreground_pushbutton_01, self.between_marks_pushbutton_01, self.saved_preset_type_label_01, self.saved_presets_label_01, self.export_path_label_01, self.server_browse_btn_01, self.token_push_btn_01 = export_preset_one_tab
+                self.preset_type_menu_pushbutton_02, self.presets_menu_pushbutton_02, self.preset_menu_02, self.export_path_lineedit_02, self.enable_preset_pushbutton_02, self.top_layer_pushbutton_02, self.foreground_pushbutton_02, self.between_marks_pushbutton_02, self.saved_preset_type_label_02, self.saved_presets_label_02, self.export_path_label_02, self.server_browse_btn_02, self.token_push_btn_02 = export_preset_two_tab
+                self.preset_type_menu_pushbutton_03, self.presets_menu_pushbutton_03, self.preset_menu_03, self.export_path_lineedit_03, self.enable_preset_pushbutton_03, self.top_layer_pushbutton_03, self.foreground_pushbutton_03, self.between_marks_pushbutton_03, self.saved_preset_type_label_03, self.saved_presets_label_03, self.export_path_label_03, self.server_browse_btn_03, self.token_push_btn_03 = export_preset_three_tab
+                self.preset_type_menu_pushbutton_04, self.presets_menu_pushbutton_04, self.preset_menu_04, self.export_path_lineedit_04, self.enable_preset_pushbutton_04, self.top_layer_pushbutton_04, self.foreground_pushbutton_04, self.between_marks_pushbutton_04, self.saved_preset_type_label_04, self.saved_presets_label_04, self.export_path_label_04, self.server_browse_btn_04, self.token_push_btn_04 = export_preset_four_tab
+                self.preset_type_menu_pushbutton_05, self.presets_menu_pushbutton_05, self.preset_menu_05, self.export_path_lineedit_05, self.enable_preset_pushbutton_05, self.top_layer_pushbutton_05, self.foreground_pushbutton_05, self.between_marks_pushbutton_05, self.saved_preset_type_label_05, self.saved_presets_label_05, self.export_path_label_05, self.server_browse_btn_05, self.token_push_btn_05 = export_preset_five_tab
 
             # Labels
 
-            self.menu_visibility_label =FlameLabel('Menu Visibility', 'normal', self.window)
-            self.menu_name_label =FlameLabel('Menu Name', 'normal', self.window)
+            self.menu_visibility_label = FlameLabel('Menu Visibility')
+            self.menu_name_label = FlameLabel('Menu Name')
 
             # LineEdits
 
-            self.menu_name_lineedit = FlameLineEdit('', self.window)
-            self.menu_name_lineedit.setMinimumSize(QtCore.QSize(200, 28))
-            self.menu_name_lineedit.setMaximumSize(QtCore.QSize(450, 28))
+            self.menu_name_lineedit = FlameLineEdit('', width=200, max_width=450)
 
-            # -------------------------------------------------------------
+            # Menu Pushbutton
 
             export_type_options = ['Project', 'Shared']
-            self.menu_visibility_push_btn = FlamePushButtonMenu('Project', export_type_options, self.window)
+            self.menu_visibility_push_btn = FlamePushButtonMenu('Project', export_type_options)
 
             # -------------------------------------------------------------
 
             # Push Button
 
-            self.reveal_in_mediahub_pushbutton = FlamePushButton(' Reveal in Mediahub', self.reveal_in_mediahub, self.window)
-            self.reveal_in_finder_pushbutton = FlamePushButton(' Reveal in Finder', self.reveal_in_finder, self.window)
+            self.reveal_in_mediahub_pushbutton = FlamePushButton('Reveal in Mediahub', self.reveal_in_mediahub, button_width=160)
+            self.reveal_in_finder_pushbutton = FlamePushButton('Reveal in Finder', self.reveal_in_finder, button_width=160)
 
             # Buttons
 
-            self.create_btn = FlameButton('Create', self.create_menu, self.window)
-            self.done_btn = FlameButton('Done', self.window.close, self.window)
+            self.create_btn = FlameButton('Create', partial(self.save_menus, 'Create'), button_width=160)
+            self.done_btn = FlameButton('Done', self.window.close, button_width=160)
 
             # -------------------------------------------------------------
 
-            create_presets(self)
+            create_presets()
 
             # Window Layout
 
@@ -1873,7 +754,7 @@ class ExportSetup(object):
             create_gridbox.addWidget(self.menu_visibility_label, 1, 0)
             create_gridbox.addWidget(self.menu_visibility_push_btn, 1, 1)
             create_gridbox.addWidget(self.menu_name_label, 2, 0)
-            create_gridbox.addWidget(self.menu_name_lineedit, 2, 1, 1, 2)
+            create_gridbox.addWidget(self.menu_name_lineedit, 2, 1, 1, 4)
 
             create_gridbox.addWidget(self.reveal_in_mediahub_pushbutton, 2, 5)
             create_gridbox.addWidget(self.reveal_in_finder_pushbutton, 3, 5)
@@ -1886,6 +767,69 @@ class ExportSetup(object):
             self.window.create_tab.setLayout(create_gridbox)
 
         def edit_tab():
+
+            def edit_presets():
+
+                # Build button menus for preset tabs
+
+                def project_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                    export_btn.setText('Project: Movie')
+                    build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+
+                def project_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                    export_btn.setText('Project: File Sequence')
+                    build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+
+                def shared_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                    export_btn.setText('Shared: Movie')
+                    build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+
+                def shared_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                    export_btn.setText('Shared: File Sequence')
+                    build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+
+                # -------------------------------------------------------
+
+                self.edit_preset_tabs = QtWidgets.QTabWidget()
+
+                # Preset Tabs
+
+                self.window.edit_tab1 = QtWidgets.QWidget()
+                self.window.edit_tab2 = QtWidgets.QWidget()
+                self.window.edit_tab3 = QtWidgets.QWidget()
+                self.window.edit_tab4 = QtWidgets.QWidget()
+                self.window.edit_tab5 = QtWidgets.QWidget()
+
+                self.edit_preset_tabs.setFocusPolicy(QtCore.Qt.NoFocus)
+
+                self.edit_preset_tabs.setStyleSheet('QTabWidget {background-color: #242424; border: none; font: 14px "Discreet"}'
+                                                    'QTabWidget::tab-bar {alignment: center}'
+                                                    'QTabBar::tab {color: #9a9a9a; background-color: #242424; min-width: 20ex; padding: 5px;}'
+                                                    'QTabBar::tab:selected {color: #bababa; background-color: #1f1f1f; border: 1px solid #1f1f1f; border-bottom: 1px solid #3366AD}'
+                                                    'QTabBar::tab:!selected {color: #bababa; background-color: #242424; border: none}'
+                                                    'QTabWidget::pane {border-top: 1px solid #313131}')
+
+                self.edit_preset_tabs.addTab(self.window.edit_tab1, 'Export Preset One')
+                self.edit_preset_tabs.addTab(self.window.edit_tab2, 'Export Preset Two')
+                self.edit_preset_tabs.addTab(self.window.edit_tab3, 'Export Preset Three')
+                self.edit_preset_tabs.addTab(self.window.edit_tab4, 'Export Preset Four')
+                self.edit_preset_tabs.addTab(self.window.edit_tab5, 'Export Preset Five')
+
+                # Create tabs
+
+                edit_preset_one_tab = export_preset_tab(self.window.edit_tab1, 'one', self.export_path, self.top_layer_checked, self.export_foreground_checked, self.export_between_marks)
+                edit_preset_two_tab = export_preset_tab(self.window.edit_tab2, 'two', '', False, False, False)
+                edit_preset_three_tab = export_preset_tab(self.window.edit_tab3, 'three', '', False, False, False)
+                edit_preset_four_tab = export_preset_tab(self.window.edit_tab4, 'four', '', False, False, False)
+                edit_preset_five_tab = export_preset_tab(self.window.edit_tab5, 'five', '', False, False, False)
+
+                # Get values from tabs
+
+                self.edit_preset_type_menu_pushbutton_01, self.edit_presets_menu_pushbutton_01, self.edit_preset_menu_01, self.edit_export_path_lineedit_01, self.edit_enable_preset_pushbutton_01, self.edit_top_layer_pushbutton_01, self.edit_foreground_pushbutton_01, self.edit_between_marks_pushbutton_01, self.edit_saved_preset_type_label_01, self.edit_saved_presets_label_01, self.edit_export_path_label_01, self.edit_server_browse_btn_01, self.edit_token_push_btn_01 = edit_preset_one_tab
+                self.edit_preset_type_menu_pushbutton_02, self.edit_presets_menu_pushbutton_02, self.edit_preset_menu_02, self.edit_export_path_lineedit_02, self.edit_enable_preset_pushbutton_02, self.edit_top_layer_pushbutton_02, self.edit_foreground_pushbutton_02, self.edit_between_marks_pushbutton_02, self.edit_saved_preset_type_label_02, self.edit_saved_presets_label_02, self.edit_export_path_label_02, self.edit_server_browse_btn_02, self.edit_token_push_btn_02 = edit_preset_two_tab
+                self.edit_preset_type_menu_pushbutton_03, self.edit_presets_menu_pushbutton_03, self.edit_preset_menu_03, self.edit_export_path_lineedit_03, self.edit_enable_preset_pushbutton_03, self.edit_top_layer_pushbutton_03, self.edit_foreground_pushbutton_03, self.edit_between_marks_pushbutton_03, self.edit_saved_preset_type_label_03, self.edit_saved_presets_label_03, self.edit_export_path_label_03, self.edit_server_browse_btn_03, self.edit_token_push_btn_03 = edit_preset_three_tab
+                self.edit_preset_type_menu_pushbutton_04, self.edit_presets_menu_pushbutton_04, self.edit_preset_menu_04, self.edit_export_path_lineedit_04, self.edit_enable_preset_pushbutton_04, self.edit_top_layer_pushbutton_04, self.edit_foreground_pushbutton_04, self.edit_between_marks_pushbutton_04, self.edit_saved_preset_type_label_04, self.edit_saved_presets_label_04, self.edit_export_path_label_04, self.edit_server_browse_btn_04, self.edit_token_push_btn_04 = edit_preset_four_tab
+                self.edit_preset_type_menu_pushbutton_05, self.edit_presets_menu_pushbutton_05, self.edit_preset_menu_05, self.edit_export_path_lineedit_05, self.edit_enable_preset_pushbutton_05, self.edit_top_layer_pushbutton_05, self.edit_foreground_pushbutton_05, self.edit_between_marks_pushbutton_05, self.edit_saved_preset_type_label_05, self.edit_saved_presets_label_05, self.edit_export_path_label_05, self.edit_server_browse_btn_05, self.edit_token_push_btn_05 = edit_preset_five_tab
 
             def set_export_push_button(export_btn, saved_presets_btn, saved_presets_menu):
 
@@ -1923,837 +867,9 @@ class ExportSetup(object):
                     menu_name = item[:-4]
                     saved_presets_menu.addAction(menu_name, partial(menu, menu_name))
 
-            def edit_presets():
-
-                # Build button menus for preset tabs
-
-                def project_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Project: Movie')
-                    build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
-
-                def project_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Project: File Sequence')
-                    build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
-
-                def shared_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Shared: Movie')
-                    build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
-
-                def shared_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Shared: File Sequence')
-                    build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
-
-                # -------------------------------------------------------
-
-                def edit_preset_one_tab():
-
-                    # Labels
-
-                    self.edit_saved_preset_type_label_01 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.edit_saved_presets_label_01 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.edit_export_path_label_01 = FlameLabel('Export Path ', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.edit_export_path_lineedit_01 = QtWidgets.QLineEdit(self.export_path, self.window)
-                    self.edit_export_path_lineedit_01.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_path_lineedit_01.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_export_path_lineedit_01.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                                                    'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-                    self.edit_export_path_lineedit_01.setText('/')
-
-                    # Checkable Pushbuttons
-
-                    self.edit_top_layer_pushbutton_01 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.edit_top_layer_pushbutton_01.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_01.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_01.setCheckable(True)
-                    self.edit_top_layer_pushbutton_01.setChecked(self.top_layer_checked)
-                    self.edit_top_layer_pushbutton_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_top_layer_pushbutton_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                    'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                    'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_foreground_pushbutton_01 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.edit_foreground_pushbutton_01.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_01.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_01.setCheckable(True)
-                    self.edit_foreground_pushbutton_01.setChecked(self.export_foreground_checked)
-                    self.edit_foreground_pushbutton_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_foreground_pushbutton_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                     'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                     'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_between_marks_pushbutton_01 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.edit_between_marks_pushbutton_01.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_01.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_01.setCheckable(True)
-                    self.edit_between_marks_pushbutton_01.setChecked(self.export_between_marks)
-                    self.edit_between_marks_pushbutton_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_between_marks_pushbutton_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.edit_token_push_btn_01 = FlameTokenPushButton('Add Token', self.export_token_dict, self.edit_export_path_lineedit_01, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Saved Presets Type Pushbutton
-                    # -------------------------
-
-                    self.edit_export_menu_01 = QtWidgets.QMenu(self.window)
-                    self.edit_export_menu_01.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_export_push_btn_01 = QtWidgets.QPushButton(self.export_menu_text, self.window)
-                    self.edit_export_push_btn_01.setMenu(self.edit_export_menu_01)
-                    self.edit_export_push_btn_01.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_01.setMaximumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_export_push_btn_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                               'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.edit_saved_preset_menu_01 = QtWidgets.QMenu(self.window)
-                    self.edit_saved_preset_menu_01.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_saved_presets_push_btn_01 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.edit_saved_presets_push_btn_01.setMenu(self.edit_saved_preset_menu_01)
-                    self.edit_saved_presets_push_btn_01.setMinimumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_01.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_saved_presets_push_btn_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                      'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-                    # -------------------------------------------------------------
-
-                    self.edit_server_browse_btn_01 = QtWidgets.QPushButton('Browse', self.window)
-                    self.edit_server_browse_btn_01.setMinimumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_01.setMaximumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_01.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_server_browse_btn_01.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                 'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-                    self.edit_server_browse_btn_01.clicked.connect(partial(self.server_path_browse, self.edit_export_path_lineedit_01))
-
-                    # Export pushbutton menus
-
-                    self.edit_export_menu_01.addAction('Project: Movie', partial(project_movie_menu, self.edit_export_push_btn_01, self.edit_saved_presets_push_btn_01, self.edit_saved_preset_menu_01))
-                    self.edit_export_menu_01.addAction('Project: File Sequence', partial(project_file_seq_menu, self.edit_export_push_btn_01, self.edit_saved_presets_push_btn_01, self.edit_saved_preset_menu_01))
-                    self.edit_export_menu_01.addAction('Shared: Movie', partial(shared_movie_menu, self.edit_export_push_btn_01, self.edit_saved_presets_push_btn_01, self.edit_saved_preset_menu_01))
-                    self.edit_export_menu_01.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.edit_export_push_btn_01, self.edit_saved_presets_push_btn_01, self.edit_saved_preset_menu_01))
-
-                    # Tab Layout
-
-                    edit_gridbox_tab1 = QtWidgets.QGridLayout()
-                    edit_gridbox_tab1.setMargin(30)
-                    edit_gridbox_tab1.setVerticalSpacing(5)
-                    edit_gridbox_tab1.setHorizontalSpacing(5)
-                    edit_gridbox_tab1.setColumnMinimumWidth(4, 100)
-
-                    edit_gridbox_tab1.addWidget(self.edit_saved_preset_type_label_01, 0, 0)
-                    edit_gridbox_tab1.addWidget(self.edit_export_push_btn_01, 0, 1)
-
-                    edit_gridbox_tab1.addWidget(self.edit_saved_presets_label_01, 1, 0)
-                    edit_gridbox_tab1.addWidget(self.edit_saved_presets_push_btn_01, 1, 1)
-
-                    edit_gridbox_tab1.addWidget(self.edit_export_path_label_01, 2, 0)
-                    edit_gridbox_tab1.addWidget(self.edit_export_path_lineedit_01, 2, 1)
-                    edit_gridbox_tab1.addWidget(self.edit_server_browse_btn_01, 2, 2)
-                    edit_gridbox_tab1.addWidget(self.edit_token_push_btn_01, 2, 3)
-
-                    edit_gridbox_tab1.addWidget(self.edit_top_layer_pushbutton_01, 1, 5)
-                    edit_gridbox_tab1.addWidget(self.edit_foreground_pushbutton_01, 2, 5)
-                    edit_gridbox_tab1.addWidget(self.edit_between_marks_pushbutton_01, 3, 5)
-
-                    self.window.edit_tab1.setLayout(edit_gridbox_tab1)
-
-                def edit_preset_two_tab():
-
-                    def toggle_ui():
-
-                        if self.edit_enable_preset_pushbutton_02.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.edit_saved_preset_type_label_02.setEnabled(switch)
-                        self.edit_saved_presets_label_02.setEnabled(switch)
-                        self.edit_export_path_label_02.setEnabled(switch)
-                        self.edit_export_path_lineedit_02.setEnabled(switch)
-                        self.edit_top_layer_pushbutton_02.setEnabled(switch)
-                        self.edit_foreground_pushbutton_02.setEnabled(switch)
-                        self.edit_between_marks_pushbutton_02.setEnabled(switch)
-                        self.edit_token_push_btn_02.setEnabled(switch)
-                        self.edit_export_push_btn_02.setEnabled(switch)
-                        self.edit_server_browse_btn_02.setEnabled(switch)
-                        self.edit_saved_presets_push_btn_02.setEnabled(switch)
-
-                    # Labels
-
-                    self.edit_saved_preset_type_label_02 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.edit_saved_presets_label_02 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.edit_export_path_label_02 = FlameLabel('Export Path ', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.edit_export_path_lineedit_02 = QtWidgets.QLineEdit(self.export_path, self.window)
-                    self.edit_export_path_lineedit_02.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_path_lineedit_02.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_export_path_lineedit_02.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                                                    'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-                    self.edit_export_path_lineedit_02.setText('/')
-
-                    # Checkable Pushbuttons
-
-                    self.edit_enable_preset_pushbutton_02 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.edit_enable_preset_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_02.setCheckable(True)
-                    self.edit_enable_preset_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_enable_preset_pushbutton_02.clicked.connect(toggle_ui)
-                    self.edit_enable_preset_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_top_layer_pushbutton_02 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.edit_top_layer_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_02.setCheckable(True)
-                    self.edit_top_layer_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_top_layer_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                    'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                    'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_foreground_pushbutton_02 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.edit_foreground_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_02.setCheckable(True)
-                    self.edit_foreground_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_foreground_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                     'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                     'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_between_marks_pushbutton_02 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.edit_between_marks_pushbutton_02.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_02.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_02.setCheckable(True)
-                    self.edit_between_marks_pushbutton_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_between_marks_pushbutton_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.edit_token_push_btn_02 = FlameTokenPushButton('Add Token', self.export_token_dict, self.edit_export_path_lineedit_02, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.edit_export_menu_02 = QtWidgets.QMenu(self.window)
-                    self.edit_export_menu_02.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_export_push_btn_02 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.edit_export_push_btn_02.setMenu(self.edit_export_menu_02)
-                    self.edit_export_push_btn_02.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_02.setMaximumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_export_push_btn_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                               'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.edit_saved_preset_menu_02 = QtWidgets.QMenu(self.window)
-                    self.edit_saved_preset_menu_02.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_saved_presets_push_btn_02 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.edit_saved_presets_push_btn_02.setMenu(self.edit_saved_preset_menu_02)
-                    self.edit_saved_presets_push_btn_02.setMinimumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_02.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_saved_presets_push_btn_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                      'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    self.edit_server_browse_btn_02 = QtWidgets.QPushButton('Browse', self.window)
-                    self.edit_server_browse_btn_02.setMinimumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_02.setMaximumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_02.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_server_browse_btn_02.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                 'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font:italic}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-                    self.edit_server_browse_btn_02.clicked.connect(partial(self.server_path_browse, self.edit_export_path_lineedit_02))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.edit_export_menu_02.addAction('Project: Movie', partial(project_movie_menu, self.edit_export_push_btn_02, self.edit_saved_presets_push_btn_02, self.edit_saved_preset_menu_02))
-                    self.edit_export_menu_02.addAction('Project: File Sequence', partial(project_file_seq_menu, self.edit_export_push_btn_02, self.edit_saved_presets_push_btn_02, self.edit_saved_preset_menu_02))
-                    self.edit_export_menu_02.addAction('Shared: Movie', partial(shared_movie_menu, self.edit_export_push_btn_02, self.edit_saved_presets_push_btn_02, self.edit_saved_preset_menu_02))
-                    self.edit_export_menu_02.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.edit_export_push_btn_02, self.edit_saved_presets_push_btn_02, self.edit_saved_preset_menu_02))
-
-                    # Tab Layout
-
-                    edit_gridbox_tab2 = QtWidgets.QGridLayout()
-                    edit_gridbox_tab2.setMargin(30)
-                    edit_gridbox_tab2.setVerticalSpacing(5)
-                    edit_gridbox_tab2.setHorizontalSpacing(5)
-                    edit_gridbox_tab2.setColumnMinimumWidth(4, 100)
-
-                    edit_gridbox_tab2.addWidget(self.edit_saved_preset_type_label_02, 0, 0)
-                    edit_gridbox_tab2.addWidget(self.edit_export_push_btn_02, 0, 1)
-
-                    edit_gridbox_tab2.addWidget(self.edit_saved_presets_label_02, 1, 0)
-                    edit_gridbox_tab2.addWidget(self.edit_saved_presets_push_btn_02, 1, 1)
-
-                    edit_gridbox_tab2.addWidget(self.edit_export_path_label_02, 2, 0)
-                    edit_gridbox_tab2.addWidget(self.edit_export_path_lineedit_02, 2, 1)
-                    edit_gridbox_tab2.addWidget(self.edit_server_browse_btn_02, 2, 2)
-                    edit_gridbox_tab2.addWidget(self.edit_token_push_btn_02, 2, 3)
-
-                    edit_gridbox_tab2.addWidget(self.edit_enable_preset_pushbutton_02, 0, 5)
-                    edit_gridbox_tab2.addWidget(self.edit_top_layer_pushbutton_02, 1, 5)
-                    edit_gridbox_tab2.addWidget(self.edit_foreground_pushbutton_02, 2, 5)
-                    edit_gridbox_tab2.addWidget(self.edit_between_marks_pushbutton_02, 3, 5)
-
-                    self.window.edit_tab2.setLayout(edit_gridbox_tab2)
-
-                def edit_preset_three_tab():
-
-                    def toggle_ui():
-
-                        if self.edit_enable_preset_pushbutton_03.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.edit_saved_preset_type_label_03.setEnabled(switch)
-                        self.edit_saved_presets_label_03.setEnabled(switch)
-                        self.edit_export_path_label_03.setEnabled(switch)
-                        self.edit_export_path_lineedit_03.setEnabled(switch)
-                        self.edit_top_layer_pushbutton_03.setEnabled(switch)
-                        self.edit_foreground_pushbutton_03.setEnabled(switch)
-                        self.edit_between_marks_pushbutton_03.setEnabled(switch)
-                        self.edit_token_push_btn_03.setEnabled(switch)
-                        self.edit_export_push_btn_03.setEnabled(switch)
-                        self.edit_server_browse_btn_03.setEnabled(switch)
-                        self.edit_saved_presets_push_btn_03.setEnabled(switch)
-
-                    # Labels
-
-                    self.edit_saved_preset_type_label_03 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.edit_saved_presets_label_03 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.edit_export_path_label_03 = FlameLabel('Export Path ', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.edit_export_path_lineedit_03 = QtWidgets.QLineEdit(self.export_path, self.window)
-                    self.edit_export_path_lineedit_03.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_path_lineedit_03.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_export_path_lineedit_03.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                                                    'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-                    self.edit_export_path_lineedit_03.setText('/')
-
-                    # Checkable Pushbuttons
-
-                    self.edit_enable_preset_pushbutton_03 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.edit_enable_preset_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_03.setCheckable(True)
-                    self.edit_enable_preset_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_enable_preset_pushbutton_03.clicked.connect(toggle_ui)
-                    self.edit_enable_preset_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_top_layer_pushbutton_03 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.edit_top_layer_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_03.setCheckable(True)
-                    self.edit_top_layer_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_top_layer_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                    'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                    'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_foreground_pushbutton_03 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.edit_foreground_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_03.setCheckable(True)
-                    self.edit_foreground_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_foreground_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                     'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                     'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_between_marks_pushbutton_03 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.edit_between_marks_pushbutton_03.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_03.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_03.setCheckable(True)
-                    self.edit_between_marks_pushbutton_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_between_marks_pushbutton_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.edit_token_push_btn_03 = FlameTokenPushButton('Add Token', self.export_token_dict, self.edit_export_path_lineedit_03, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.edit_export_menu_03 = QtWidgets.QMenu(self.window)
-                    self.edit_export_menu_03.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_export_push_btn_03 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.edit_export_push_btn_03.setMenu(self.edit_export_menu_03)
-                    self.edit_export_push_btn_03.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_03.setMaximumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_export_push_btn_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                               'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.edit_saved_preset_menu_03 = QtWidgets.QMenu(self.window)
-                    self.edit_saved_preset_menu_03.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_saved_presets_push_btn_03 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.edit_saved_presets_push_btn_03.setMenu(self.edit_saved_preset_menu_03)
-                    self.edit_saved_presets_push_btn_03.setMinimumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_03.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_saved_presets_push_btn_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                      'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    self.edit_server_browse_btn_03 = QtWidgets.QPushButton('Browse', self.window)
-                    self.edit_server_browse_btn_03.setMinimumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_03.setMaximumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_03.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_server_browse_btn_03.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                 'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font:italic}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-                    self.edit_server_browse_btn_03.clicked.connect(partial(self.server_path_browse, self.edit_export_path_lineedit_03))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.edit_export_menu_03.addAction('Project: Movie', partial(project_movie_menu, self.edit_export_push_btn_03, self.edit_saved_presets_push_btn_03, self.edit_saved_preset_menu_03))
-                    self.edit_export_menu_03.addAction('Project: File Sequence', partial(project_file_seq_menu, self.edit_export_push_btn_03, self.edit_saved_presets_push_btn_03, self.edit_saved_preset_menu_03))
-                    self.edit_export_menu_03.addAction('Shared: Movie', partial(shared_movie_menu, self.edit_export_push_btn_03, self.edit_saved_presets_push_btn_03, self.edit_saved_preset_menu_03))
-                    self.edit_export_menu_03.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.edit_export_push_btn_03, self.edit_saved_presets_push_btn_03, self.edit_saved_preset_menu_03))
-
-                    # Tab Layout
-
-                    edit_gridbox_tab3 = QtWidgets.QGridLayout()
-                    edit_gridbox_tab3.setMargin(30)
-                    edit_gridbox_tab3.setVerticalSpacing(5)
-                    edit_gridbox_tab3.setHorizontalSpacing(5)
-                    edit_gridbox_tab3.setColumnMinimumWidth(4, 100)
-
-                    edit_gridbox_tab3.addWidget(self.edit_saved_preset_type_label_03, 0, 0)
-                    edit_gridbox_tab3.addWidget(self.edit_export_push_btn_03, 0, 1)
-
-                    edit_gridbox_tab3.addWidget(self.edit_saved_presets_label_03, 1, 0)
-                    edit_gridbox_tab3.addWidget(self.edit_saved_presets_push_btn_03, 1, 1)
-
-                    edit_gridbox_tab3.addWidget(self.edit_export_path_label_03, 2, 0)
-                    edit_gridbox_tab3.addWidget(self.edit_export_path_lineedit_03, 2, 1)
-                    edit_gridbox_tab3.addWidget(self.edit_server_browse_btn_03, 2, 2)
-                    edit_gridbox_tab3.addWidget(self.edit_token_push_btn_03, 2, 3)
-
-                    edit_gridbox_tab3.addWidget(self.edit_enable_preset_pushbutton_03, 0, 5)
-                    edit_gridbox_tab3.addWidget(self.edit_top_layer_pushbutton_03, 1, 5)
-                    edit_gridbox_tab3.addWidget(self.edit_foreground_pushbutton_03, 2, 5)
-                    edit_gridbox_tab3.addWidget(self.edit_between_marks_pushbutton_03, 3, 5)
-
-                    self.window.edit_tab3.setLayout(edit_gridbox_tab3)
-
-                def edit_preset_four_tab():
-
-                    def toggle_ui():
-
-                        if self.edit_enable_preset_pushbutton_04.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.edit_saved_preset_type_label_04.setEnabled(switch)
-                        self.edit_saved_presets_label_04.setEnabled(switch)
-                        self.edit_export_path_label_04.setEnabled(switch)
-                        self.edit_export_path_lineedit_04.setEnabled(switch)
-                        self.edit_top_layer_pushbutton_04.setEnabled(switch)
-                        self.edit_foreground_pushbutton_04.setEnabled(switch)
-                        self.edit_between_marks_pushbutton_04.setEnabled(switch)
-                        self.edit_token_push_btn_04.setEnabled(switch)
-                        self.edit_export_push_btn_04.setEnabled(switch)
-                        self.edit_server_browse_btn_04.setEnabled(switch)
-                        self.edit_saved_presets_push_btn_04.setEnabled(switch)
-
-                    # Labels
-
-                    self.edit_saved_preset_type_label_04 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.edit_saved_presets_label_04 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.edit_export_path_label_04 = FlameLabel('Export Path ', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.edit_export_path_lineedit_04 = QtWidgets.QLineEdit(self.export_path, self.window)
-                    self.edit_export_path_lineedit_04.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_path_lineedit_04.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_export_path_lineedit_04.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                                                    'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-                    self.edit_export_path_lineedit_04.setText('/')
-
-                    # Checkable Pushbuttons
-
-                    self.edit_enable_preset_pushbutton_04 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.edit_enable_preset_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_04.setCheckable(True)
-                    self.edit_enable_preset_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_enable_preset_pushbutton_04.clicked.connect(toggle_ui)
-                    self.edit_enable_preset_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_top_layer_pushbutton_04 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.edit_top_layer_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_04.setCheckable(True)
-                    self.edit_top_layer_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_top_layer_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                    'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                    'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_foreground_pushbutton_04 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.edit_foreground_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_04.setCheckable(True)
-                    self.edit_foreground_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_foreground_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                     'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                     'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_between_marks_pushbutton_04 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.edit_between_marks_pushbutton_04.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_04.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_04.setCheckable(True)
-                    self.edit_between_marks_pushbutton_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_between_marks_pushbutton_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.edit_token_push_btn_04 = FlameTokenPushButton('Add Token', self.export_token_dict, self.edit_export_path_lineedit_04, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.edit_export_menu_04 = QtWidgets.QMenu(self.window)
-                    self.edit_export_menu_04.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_export_push_btn_04 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.edit_export_push_btn_04.setMenu(self.edit_export_menu_04)
-                    self.edit_export_push_btn_04.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_04.setMaximumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_export_push_btn_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                               'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.edit_saved_preset_menu_04 = QtWidgets.QMenu(self.window)
-                    self.edit_saved_preset_menu_04.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_saved_presets_push_btn_04 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.edit_saved_presets_push_btn_04.setMenu(self.edit_saved_preset_menu_04)
-                    self.edit_saved_presets_push_btn_04.setMinimumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_04.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_saved_presets_push_btn_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                      'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # set_export_push_button(self.edit_export_push_btn_04, self.edit_saved_presets_push_btn_04, self.edit_saved_preset_menu_04)
-
-                    # -------------------------------------------------------------
-
-                    self.edit_server_browse_btn_04 = QtWidgets.QPushButton('Browse', self.window)
-                    self.edit_server_browse_btn_04.setMinimumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_04.setMaximumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_04.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_server_browse_btn_04.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                 'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font:italic}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-                    self.edit_server_browse_btn_04.clicked.connect(partial(self.server_path_browse, self.edit_export_path_lineedit_04))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.edit_export_menu_04.addAction('Project: Movie', partial(project_movie_menu, self.edit_export_push_btn_04, self.edit_saved_presets_push_btn_04, self.edit_saved_preset_menu_04))
-                    self.edit_export_menu_04.addAction('Project: File Sequence', partial(project_file_seq_menu, self.edit_export_push_btn_04, self.edit_saved_presets_push_btn_04, self.edit_saved_preset_menu_04))
-                    self.edit_export_menu_04.addAction('Shared: Movie', partial(shared_movie_menu, self.edit_export_push_btn_04, self.edit_saved_presets_push_btn_04, self.edit_saved_preset_menu_04))
-                    self.edit_export_menu_04.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.edit_export_push_btn_04, self.edit_saved_presets_push_btn_04, self.edit_saved_preset_menu_04))
-
-                    # Tab Layout
-
-                    edit_gridbox_tab4 = QtWidgets.QGridLayout()
-                    edit_gridbox_tab4.setMargin(30)
-                    edit_gridbox_tab4.setVerticalSpacing(5)
-                    edit_gridbox_tab4.setHorizontalSpacing(5)
-                    edit_gridbox_tab4.setColumnMinimumWidth(4, 100)
-
-                    edit_gridbox_tab4.addWidget(self.edit_saved_preset_type_label_04, 0, 0)
-                    edit_gridbox_tab4.addWidget(self.edit_export_push_btn_04, 0, 1)
-
-                    edit_gridbox_tab4.addWidget(self.edit_saved_presets_label_04, 1, 0)
-                    edit_gridbox_tab4.addWidget(self.edit_saved_presets_push_btn_04, 1, 1)
-
-                    edit_gridbox_tab4.addWidget(self.edit_export_path_label_04, 2, 0)
-                    edit_gridbox_tab4.addWidget(self.edit_export_path_lineedit_04, 2, 1)
-                    edit_gridbox_tab4.addWidget(self.edit_server_browse_btn_04, 2, 2)
-                    edit_gridbox_tab4.addWidget(self.edit_token_push_btn_04, 2, 3)
-
-                    edit_gridbox_tab4.addWidget(self.edit_enable_preset_pushbutton_04, 0, 5)
-                    edit_gridbox_tab4.addWidget(self.edit_top_layer_pushbutton_04, 1, 5)
-                    edit_gridbox_tab4.addWidget(self.edit_foreground_pushbutton_04, 2, 5)
-                    edit_gridbox_tab4.addWidget(self.edit_between_marks_pushbutton_04, 3, 5)
-
-                    self.window.edit_tab4.setLayout(edit_gridbox_tab4)
-
-                def edit_preset_five_tab():
-
-                    def toggle_ui():
-
-                        if self.edit_enable_preset_pushbutton_05.isChecked():
-                            switch = True
-                        else:
-                            switch = False
-
-                        self.edit_saved_preset_type_label_05.setEnabled(switch)
-                        self.edit_saved_presets_label_05.setEnabled(switch)
-                        self.edit_export_path_label_05.setEnabled(switch)
-                        self.edit_export_path_lineedit_05.setEnabled(switch)
-                        self.edit_top_layer_pushbutton_05.setEnabled(switch)
-                        self.edit_foreground_pushbutton_05.setEnabled(switch)
-                        self.edit_between_marks_pushbutton_05.setEnabled(switch)
-                        self.edit_token_push_btn_05.setEnabled(switch)
-                        self.edit_export_push_btn_05.setEnabled(switch)
-                        self.edit_server_browse_btn_05.setEnabled(switch)
-                        self.edit_saved_presets_push_btn_05.setEnabled(switch)
-
-                    # Labels
-
-                    self.edit_saved_preset_type_label_05 = FlameLabel('Saved Preset Type', 'normal', self.window)
-                    self.edit_saved_presets_label_05 = FlameLabel('Saved Presets', 'normal', self.window)
-                    self.edit_export_path_label_05 = FlameLabel('Export Path ', 'normal', self.window)
-
-                    # LineEdits
-
-                    self.edit_export_path_lineedit_05 = QtWidgets.QLineEdit(self.export_path, self.window)
-                    self.edit_export_path_lineedit_05.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_path_lineedit_05.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_export_path_lineedit_05.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                                                    'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-                    self.edit_export_path_lineedit_05.setText('/')
-
-                    # Checkable Pushbuttons
-
-                    self.edit_enable_preset_pushbutton_05 = QtWidgets.QPushButton(' Enable Preset', self.window)
-                    self.edit_enable_preset_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_enable_preset_pushbutton_05.setCheckable(True)
-                    self.edit_enable_preset_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_enable_preset_pushbutton_05.clicked.connect(toggle_ui)
-                    self.edit_enable_preset_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_top_layer_pushbutton_05 = QtWidgets.QPushButton(' Use Top Layer', self.window)
-                    self.edit_top_layer_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_top_layer_pushbutton_05.setCheckable(True)
-                    self.edit_top_layer_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_top_layer_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                    'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                    'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_foreground_pushbutton_05 = QtWidgets.QPushButton(' Foreground Export', self.window)
-                    self.edit_foreground_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_foreground_pushbutton_05.setCheckable(True)
-                    self.edit_foreground_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_foreground_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                     'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                     'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    self.edit_between_marks_pushbutton_05 = QtWidgets.QPushButton(' Export Between Marks', self.window)
-                    self.edit_between_marks_pushbutton_05.setMinimumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_05.setMaximumSize(QtCore.QSize(160, 28))
-                    self.edit_between_marks_pushbutton_05.setCheckable(True)
-                    self.edit_between_marks_pushbutton_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_between_marks_pushbutton_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                        'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                                                                        'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-                    # -------------------------------------------------------------
-
-                    # Token pushbutton
-
-                    self.edit_token_push_btn_05 = FlameTokenPushButton('Add Token', self.export_token_dict, self.edit_export_path_lineedit_05, self.window)
-
-                    # -------------------------------------------------------------
-
-                    # Export Pushbutton
-                    # -------------------------
-
-                    self.edit_export_menu_05 = QtWidgets.QMenu(self.window)
-                    self.edit_export_menu_05.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                           'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_export_push_btn_05 = QtWidgets.QPushButton('None Selected', self.window)
-                    self.edit_export_push_btn_05.setMenu(self.edit_export_menu_05)
-                    self.edit_export_push_btn_05.setMinimumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_05.setMaximumSize(QtCore.QSize(200, 28))
-                    self.edit_export_push_btn_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_export_push_btn_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                               'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    self.edit_export_push_btn_05.setText('None')
-
-                    # -------------------------------------------------------------
-
-                    # Saved Format Presets Pushbutton
-
-                    self.edit_saved_preset_menu_05 = QtWidgets.QMenu(self.window)
-                    self.edit_saved_preset_menu_05.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-                    self.edit_saved_presets_push_btn_05 = QtWidgets.QPushButton(self.format_preset_text, self.window)
-                    self.edit_saved_presets_push_btn_05.setMenu(self.edit_saved_preset_menu_05)
-                    self.edit_saved_presets_push_btn_05.setMinimumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_05.setMaximumSize(QtCore.QSize(450, 28))
-                    self.edit_saved_presets_push_btn_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_saved_presets_push_btn_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                                      'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                    # set_export_push_button(self.edit_export_push_btn_05, self.edit_saved_presets_push_btn_05, self.edit_saved_preset_menu_05)
-
-                    # -------------------------------------------------------------
-
-                    self.edit_server_browse_btn_05 = QtWidgets.QPushButton('Browse', self.window)
-                    self.edit_server_browse_btn_05.setMinimumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_05.setMaximumSize(QtCore.QSize(110, 28))
-                    self.edit_server_browse_btn_05.setFocusPolicy(QtCore.Qt.NoFocus)
-                    self.edit_server_browse_btn_05.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                                                 'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font:italic}'
-                                                                 'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-                    self.edit_server_browse_btn_05.clicked.connect(partial(self.server_path_browse, self.edit_export_path_lineedit_05))
-
-                    toggle_ui()
-
-                    # Export pushbutton menus
-
-                    self.edit_export_menu_05.addAction('Project: Movie', partial(project_movie_menu, self.edit_export_push_btn_05, self.edit_saved_presets_push_btn_05, self.edit_saved_preset_menu_05))
-                    self.edit_export_menu_05.addAction('Project: File Sequence', partial(project_file_seq_menu, self.edit_export_push_btn_05, self.edit_saved_presets_push_btn_05, self.edit_saved_preset_menu_05))
-                    self.edit_export_menu_05.addAction('Shared: Movie', partial(shared_movie_menu, self.edit_export_push_btn_05, self.edit_saved_presets_push_btn_05, self.edit_saved_preset_menu_05))
-                    self.edit_export_menu_05.addAction('Shared: File Sequence', partial(shared_file_seq_menu, self.edit_export_push_btn_05, self.edit_saved_presets_push_btn_05, self.edit_saved_preset_menu_05))
-
-                    # Tab Layout
-
-                    edit_gridbox_tab5 = QtWidgets.QGridLayout()
-                    edit_gridbox_tab5.setMargin(30)
-                    edit_gridbox_tab5.setVerticalSpacing(5)
-                    edit_gridbox_tab5.setHorizontalSpacing(5)
-                    edit_gridbox_tab5.setColumnMinimumWidth(4, 100)
-
-                    edit_gridbox_tab5.addWidget(self.edit_saved_preset_type_label_05, 0, 0)
-                    edit_gridbox_tab5.addWidget(self.edit_export_push_btn_05, 0, 1)
-
-                    edit_gridbox_tab5.addWidget(self.edit_saved_presets_label_05, 1, 0)
-                    edit_gridbox_tab5.addWidget(self.edit_saved_presets_push_btn_05, 1, 1)
-
-                    edit_gridbox_tab5.addWidget(self.edit_export_path_label_05, 2, 0)
-                    edit_gridbox_tab5.addWidget(self.edit_export_path_lineedit_05, 2, 1)
-                    edit_gridbox_tab5.addWidget(self.edit_server_browse_btn_05, 2, 2)
-                    edit_gridbox_tab5.addWidget(self.edit_token_push_btn_05, 2, 3)
-
-                    edit_gridbox_tab5.addWidget(self.edit_enable_preset_pushbutton_05, 0, 5)
-                    edit_gridbox_tab5.addWidget(self.edit_top_layer_pushbutton_05, 1, 5)
-                    edit_gridbox_tab5.addWidget(self.edit_foreground_pushbutton_05, 2, 5)
-                    edit_gridbox_tab5.addWidget(self.edit_between_marks_pushbutton_05, 3, 5)
-
-                    self.window.edit_tab5.setLayout(edit_gridbox_tab5)
-
-                self.edit_preset_tabs = QtWidgets.QTabWidget()
-
-                # Preset Tabs
-
-                self.window.edit_tab1 = QtWidgets.QWidget()
-                self.window.edit_tab2 = QtWidgets.QWidget()
-                self.window.edit_tab3 = QtWidgets.QWidget()
-                self.window.edit_tab4 = QtWidgets.QWidget()
-                self.window.edit_tab5 = QtWidgets.QWidget()
-
-                self.edit_preset_tabs.setFocusPolicy(QtCore.Qt.NoFocus)
-
-                self.edit_preset_tabs.setStyleSheet('QTabWidget {background-color: #313131; font: 14px "Discreet"}'
-                                                    'QTabWidget::tab-bar {alignment: center}'
-                                                    'QTabBar::tab {color: #777777; background: #212121; border: 1px solid #000000; border-bottom-color: #000000; min-width: 20ex; padding: 5px}'
-                                                    'QTabBar::tab:selected {color: #bababa; background-color: #2e2e2e; border: 1px solid #000000; border-bottom: 1px solid #2e2e2e}'
-                                                    'QTabWidget::pane {border: 1px solid #000000; top: -0.05em}'
-                                                    'QWidget {background-color: #2e2e2e}')
-
-                self.edit_preset_tabs.addTab(self.window.edit_tab1, 'Export Preset One')
-                self.edit_preset_tabs.addTab(self.window.edit_tab2, 'Export Preset Two')
-                self.edit_preset_tabs.addTab(self.window.edit_tab3, 'Export Preset Three')
-                self.edit_preset_tabs.addTab(self.window.edit_tab4, 'Export Preset Four')
-                self.edit_preset_tabs.addTab(self.window.edit_tab5, 'Export Preset Five')
-
-                edit_preset_one_tab()
-                edit_preset_two_tab()
-                edit_preset_three_tab()
-                edit_preset_four_tab()
-                edit_preset_five_tab()
-
             def load_preset():
 
-                print ('\nchecking for existing presets...\n')
+                print ('checking for existing presets...\n')
 
                 if self.edit_menu_push_btn.text() != 'No Saved Presets Found':
 
@@ -2883,178 +999,63 @@ class ExportSetup(object):
                         elif 'open_in_mediahub = False' in line:
                             self.edit_reveal_in_mediahub_pushbutton.setChecked(False)
 
-                    try:
+                    # Get preset UI settings. If none are found, disable UI for that tab
 
-                        get_preset_info('One',
-                                        None,
-                                        self.edit_saved_presets_label_01,
-                                        self.edit_saved_presets_label_01,
-                                        self.edit_export_path_label_01,
-                                        self.edit_export_path_lineedit_01,
-                                        self.edit_top_layer_pushbutton_01,
-                                        self.edit_foreground_pushbutton_01,
-                                        self.edit_between_marks_pushbutton_01,
-                                        self.edit_token_push_btn_01,
-                                        self.edit_export_push_btn_01,
-                                        self.edit_server_browse_btn_01,
-                                        self.edit_saved_presets_push_btn_01)
-                        preset_01_push_btn_text = self.edit_saved_presets_push_btn_01.text()
-                    except:
-                        pass
+                    get_preset_info('One', None, self.edit_saved_presets_label_01, self.edit_saved_presets_label_01, self.edit_export_path_label_01, self.edit_export_path_lineedit_01, self.edit_top_layer_pushbutton_01, self.edit_foreground_pushbutton_01, self.edit_between_marks_pushbutton_01, self.edit_token_push_btn_01, self.edit_preset_type_menu_pushbutton_01, self.edit_server_browse_btn_01, self.edit_presets_menu_pushbutton_01)
+                    preset_01_push_btn_text = self.edit_presets_menu_pushbutton_01.text()
 
                     try:
-                        get_preset_info('Two',
-                                        self.edit_enable_preset_pushbutton_02,
-                                        self.edit_saved_preset_type_label_02,
-                                        self.edit_saved_presets_label_02,
-                                        self.edit_export_path_label_02,
-                                        self.edit_export_path_lineedit_02,
-                                        self.edit_top_layer_pushbutton_02,
-                                        self.edit_foreground_pushbutton_02,
-                                        self.edit_between_marks_pushbutton_02,
-                                        self.edit_token_push_btn_02,
-                                        self.edit_export_push_btn_02,
-                                        self.edit_server_browse_btn_02,
-                                        self.edit_saved_presets_push_btn_02)
-                        preset_02_push_btn_text = self.edit_saved_presets_push_btn_02.text()
+                        get_preset_info('Two', self.edit_enable_preset_pushbutton_02, self.edit_saved_preset_type_label_02, self.edit_saved_presets_label_02, self.edit_export_path_label_02, self.edit_export_path_lineedit_02, self.edit_top_layer_pushbutton_02, self.edit_foreground_pushbutton_02, self.edit_between_marks_pushbutton_02, self.edit_token_push_btn_02, self.edit_preset_type_menu_pushbutton_02, self.edit_server_browse_btn_02, self.edit_presets_menu_pushbutton_02)
+                        preset_02_push_btn_text = self.edit_presets_menu_pushbutton_02.text()
                     except:
-
                         # Disable UI elements if nothing loaded for preset two
-
-                        disable_ui_elements(self.edit_enable_preset_pushbutton_02,
-                                            self.edit_saved_preset_type_label_02,
-                                            self.edit_saved_presets_label_02,
-                                            self.edit_export_path_label_02,
-                                            self.edit_export_path_lineedit_02,
-                                            self.edit_top_layer_pushbutton_02,
-                                            self.edit_foreground_pushbutton_02,
-                                            self.edit_between_marks_pushbutton_02,
-                                            self.edit_token_push_btn_02,
-                                            self.edit_export_push_btn_02,
-                                            self.edit_server_browse_btn_02,
-                                            self.edit_saved_presets_push_btn_02)
-
+                        disable_ui_elements(self.edit_enable_preset_pushbutton_02, self.edit_saved_preset_type_label_02, self.edit_saved_presets_label_02, self.edit_export_path_label_02, self.edit_export_path_lineedit_02, self.edit_top_layer_pushbutton_02, self.edit_foreground_pushbutton_02, self.edit_between_marks_pushbutton_02, self.edit_token_push_btn_02, self.edit_preset_type_menu_pushbutton_02, self.edit_server_browse_btn_02, self.edit_presets_menu_pushbutton_02)
                     try:
-                        get_preset_info('Three',
-                                        self.edit_enable_preset_pushbutton_03,
-                                        self.edit_saved_preset_type_label_03,
-                                        self.edit_saved_presets_label_03,
-                                        self.edit_export_path_label_03,
-                                        self.edit_export_path_lineedit_03,
-                                        self.edit_top_layer_pushbutton_03,
-                                        self.edit_foreground_pushbutton_03,
-                                        self.edit_between_marks_pushbutton_03,
-                                        self.edit_token_push_btn_03,
-                                        self.edit_export_push_btn_03,
-                                        self.edit_server_browse_btn_03,
-                                        self.edit_saved_presets_push_btn_03)
-                        preset_03_push_btn_text = self.edit_saved_presets_push_btn_03.text()
+                        get_preset_info('Three', self.edit_enable_preset_pushbutton_03, self.edit_saved_preset_type_label_03, self.edit_saved_presets_label_03, self.edit_export_path_label_03, self.edit_export_path_lineedit_03, self.edit_top_layer_pushbutton_03, self.edit_foreground_pushbutton_03, self.edit_between_marks_pushbutton_03, self.edit_token_push_btn_03, self.edit_preset_type_menu_pushbutton_03, self.edit_server_browse_btn_03, self.edit_presets_menu_pushbutton_03)
+                        preset_03_push_btn_text = self.edit_presets_menu_pushbutton_03.text()
                     except:
-
                         # Disable UI elements if nothing loaded for preset three
-
-                        disable_ui_elements(self.edit_enable_preset_pushbutton_03,
-                                            self.edit_saved_preset_type_label_03,
-                                            self.edit_saved_presets_label_03,
-                                            self.edit_export_path_label_03,
-                                            self.edit_export_path_lineedit_03,
-                                            self.edit_top_layer_pushbutton_03,
-                                            self.edit_foreground_pushbutton_03,
-                                            self.edit_between_marks_pushbutton_03,
-                                            self.edit_token_push_btn_03,
-                                            self.edit_export_push_btn_03,
-                                            self.edit_server_browse_btn_03,
-                                            self.edit_saved_presets_push_btn_03)
-
+                        disable_ui_elements(self.edit_enable_preset_pushbutton_03, self.edit_saved_preset_type_label_03, self.edit_saved_presets_label_03, self.edit_export_path_label_03, self.edit_export_path_lineedit_03, self.edit_top_layer_pushbutton_03, self.edit_foreground_pushbutton_03, self.edit_between_marks_pushbutton_03, self.edit_token_push_btn_03, self.edit_preset_type_menu_pushbutton_03, self.edit_server_browse_btn_03, self.edit_presets_menu_pushbutton_03)
                     try:
-                        get_preset_info('Four',
-                                        self.edit_enable_preset_pushbutton_04,
-                                        self.edit_saved_preset_type_label_04,
-                                        self.edit_saved_presets_label_04,
-                                        self.edit_export_path_label_04,
-                                        self.edit_export_path_lineedit_04,
-                                        self.edit_top_layer_pushbutton_04,
-                                        self.edit_foreground_pushbutton_04,
-                                        self.edit_between_marks_pushbutton_04,
-                                        self.edit_token_push_btn_04,
-                                        self.edit_export_push_btn_04,
-                                        self.edit_server_browse_btn_04,
-                                        self.edit_saved_presets_push_btn_04)
-                        preset_04_push_btn_text = self.edit_saved_presets_push_btn_04.text()
+                        get_preset_info('Four', self.edit_enable_preset_pushbutton_04, self.edit_saved_preset_type_label_04, self.edit_saved_presets_label_04, self.edit_export_path_label_04, self.edit_export_path_lineedit_04, self.edit_top_layer_pushbutton_04, self.edit_foreground_pushbutton_04, self.edit_between_marks_pushbutton_04, self.edit_token_push_btn_04, self.edit_preset_type_menu_pushbutton_04, self.edit_server_browse_btn_04, self.edit_presets_menu_pushbutton_04)
+                        preset_04_push_btn_text = self.edit_presets_menu_pushbutton_04.text()
                     except:
-
                         # Disable UI elements if nothing loaded for preset four
-
-                        disable_ui_elements(self.edit_enable_preset_pushbutton_04,
-                                            self.edit_saved_preset_type_label_04,
-                                            self.edit_saved_presets_label_04,
-                                            self.edit_export_path_label_04,
-                                            self.edit_export_path_lineedit_04,
-                                            self.edit_top_layer_pushbutton_04,
-                                            self.edit_foreground_pushbutton_04,
-                                            self.edit_between_marks_pushbutton_04,
-                                            self.edit_token_push_btn_04,
-                                            self.edit_export_push_btn_04,
-                                            self.edit_server_browse_btn_04,
-                                            self.edit_saved_presets_push_btn_04)
-
+                        disable_ui_elements(self.edit_enable_preset_pushbutton_04, self.edit_saved_preset_type_label_04, self.edit_saved_presets_label_04, self.edit_export_path_label_04, self.edit_export_path_lineedit_04, self.edit_top_layer_pushbutton_04, self.edit_foreground_pushbutton_04, self.edit_between_marks_pushbutton_04, self.edit_token_push_btn_04, self.edit_preset_type_menu_pushbutton_04, self.edit_server_browse_btn_04, self.edit_presets_menu_pushbutton_04)
                     try:
-                        get_preset_info('Five',
-                                        self.edit_enable_preset_pushbutton_05,
-                                        self.edit_saved_preset_type_label_05,
-                                        self.edit_saved_presets_label_05,
-                                        self.edit_export_path_label_05,
-                                        self.edit_export_path_lineedit_05,
-                                        self.edit_top_layer_pushbutton_05,
-                                        self.edit_foreground_pushbutton_05,
-                                        self.edit_between_marks_pushbutton_05,
-                                        self.edit_token_push_btn_05,
-                                        self.edit_export_push_btn_05,
-                                        self.edit_server_browse_btn_05,
-                                        self.edit_saved_presets_push_btn_05)
-                        preset_05_push_btn_text = self.edit_saved_presets_push_btn_05.text()
+                        get_preset_info('Five', self.edit_enable_preset_pushbutton_05, self.edit_saved_preset_type_label_05, self.edit_saved_presets_label_05, self.edit_export_path_label_05, self.edit_export_path_lineedit_05, self.edit_top_layer_pushbutton_05, self.edit_foreground_pushbutton_05, self.edit_between_marks_pushbutton_05, self.edit_token_push_btn_05, self.edit_preset_type_menu_pushbutton_05, self.edit_server_browse_btn_05, self.edit_presets_menu_pushbutton_05)
+                        preset_05_push_btn_text = self.edit_presets_menu_pushbutton_05.text()
                     except:
-
                         # Disable UI elements if nothing loaded for preset five
+                        disable_ui_elements(self.edit_enable_preset_pushbutton_05, self.edit_saved_preset_type_label_05, self.edit_saved_presets_label_05, self.edit_export_path_label_05, self.edit_export_path_lineedit_05, self.edit_top_layer_pushbutton_05, self.edit_foreground_pushbutton_05, self.edit_between_marks_pushbutton_05, self.edit_token_push_btn_05, self.edit_preset_type_menu_pushbutton_05, self.edit_server_browse_btn_05, self.edit_presets_menu_pushbutton_05)
 
-                        disable_ui_elements(self.edit_enable_preset_pushbutton_05,
-                                            self.edit_saved_preset_type_label_05,
-                                            self.edit_saved_presets_label_05,
-                                            self.edit_export_path_label_05,
-                                            self.edit_export_path_lineedit_05,
-                                            self.edit_top_layer_pushbutton_05,
-                                            self.edit_foreground_pushbutton_05,
-                                            self.edit_between_marks_pushbutton_05,
-                                            self.edit_token_push_btn_05,
-                                            self.edit_export_push_btn_05,
-                                            self.edit_server_browse_btn_05,
-                                            self.edit_saved_presets_push_btn_05)
+                    # Fill Saved Presets Pushbutton with list of available saved presets for chosen Saved Preset Type
 
-                    set_export_push_button(self.edit_export_push_btn_01, self.edit_saved_presets_push_btn_01, self.edit_saved_preset_menu_01)
-                    set_export_push_button(self.edit_export_push_btn_02, self.edit_saved_presets_push_btn_02, self.edit_saved_preset_menu_02)
-                    set_export_push_button(self.edit_export_push_btn_03, self.edit_saved_presets_push_btn_03, self.edit_saved_preset_menu_03)
-                    set_export_push_button(self.edit_export_push_btn_04, self.edit_saved_presets_push_btn_04, self.edit_saved_preset_menu_04)
-                    set_export_push_button(self.edit_export_push_btn_05, self.edit_saved_presets_push_btn_05, self.edit_saved_preset_menu_05)
+                    set_export_push_button(self.edit_preset_type_menu_pushbutton_01, self.edit_presets_menu_pushbutton_01, self.edit_preset_menu_01)
+                    set_export_push_button(self.edit_preset_type_menu_pushbutton_02, self.edit_presets_menu_pushbutton_02, self.edit_preset_menu_02)
+                    set_export_push_button(self.edit_preset_type_menu_pushbutton_03, self.edit_presets_menu_pushbutton_03, self.edit_preset_menu_03)
+                    set_export_push_button(self.edit_preset_type_menu_pushbutton_04, self.edit_presets_menu_pushbutton_04, self.edit_preset_menu_04)
+                    set_export_push_button(self.edit_preset_type_menu_pushbutton_05, self.edit_presets_menu_pushbutton_05, self.edit_preset_menu_05)
 
-                    self.edit_saved_presets_push_btn_01.setText(preset_01_push_btn_text)
+                    self.edit_presets_menu_pushbutton_01.setText(preset_01_push_btn_text)
                     try:
-                        self.edit_saved_presets_push_btn_02.setText(preset_02_push_btn_text)
+                        self.edit_presets_menu_pushbutton_02.setText(preset_02_push_btn_text)
                     except:
                         pass
                     try:
-                        self.edit_saved_presets_push_btn_03.setText(preset_03_push_btn_text)
+                        self.edit_presets_menu_pushbutton_03.setText(preset_03_push_btn_text)
                     except:
                         pass
                     try:
-                        self.edit_saved_presets_push_btn_04.setText(preset_04_push_btn_text)
+                        self.edit_presets_menu_pushbutton_04.setText(preset_04_push_btn_text)
                     except:
                         pass
                     try:
-                        self.edit_saved_presets_push_btn_05.setText(preset_05_push_btn_text)
+                        self.edit_presets_menu_pushbutton_05.setText(preset_05_push_btn_text)
                     except:
                         pass
 
-                    print ('\n>>> existing export presets loaded <<<\n')
+                    print ('\n--> existing export presets loaded \n')
 
                 else:
                     self.edit_menu_label.setEnabled(False)
@@ -3066,8 +1067,8 @@ class ExportSetup(object):
                     self.edit_saved_preset_type_label_01.setEnabled(False)
                     self.edit_saved_presets_label_01.setEnabled(False)
                     self.edit_export_path_label_01.setEnabled(False)
-                    self.edit_export_push_btn_01.setEnabled(False)
-                    self.edit_saved_presets_push_btn_01.setEnabled(False)
+                    self.edit_preset_type_menu_pushbutton_01.setEnabled(False)
+                    self.edit_presets_menu_pushbutton_01.setEnabled(False)
                     self.edit_export_path_lineedit_01.setEnabled(False)
                     self.edit_server_browse_btn_01.setEnabled(False)
                     self.edit_token_push_btn_01.setEnabled(False)
@@ -3081,38 +1082,40 @@ class ExportSetup(object):
                     self.edit_delete_btn.setEnabled(False)
 
                     self.edit_menu_visibility_push_btn.setText('')
-                    self.edit_export_push_btn_01.setText('')
-                    self.edit_export_push_btn_02.setText('')
-                    self.edit_export_push_btn_03.setText('')
-                    self.edit_export_push_btn_04.setText('')
-                    self.edit_export_push_btn_05.setText('')
+                    self.edit_preset_type_menu_pushbutton_01.setText('')
+                    self.edit_preset_type_menu_pushbutton_02.setText('')
+                    self.edit_preset_type_menu_pushbutton_03.setText('')
+                    self.edit_preset_type_menu_pushbutton_04.setText('')
+                    self.edit_preset_type_menu_pushbutton_05.setText('')
 
-                    print ('\n>>> no existing presets found <<<\n')
+                    print ('--> no existing presets found \n')
 
             def delete_preset():
 
-                script_name = self.edit_menu_push_btn.text().split(' ', 1)[1]
+                if FlameMessageWindow('Confirm Operation', 'warning', 'Delete current preset?'):
 
-                if 'Shared: ' in self.edit_menu_push_btn.text():
-                    script_path = os.path.join(self.shared_menus_dir, script_name)
-                else:
-                    script_path = os.path.join(self.project_menus_dir, self.current_project, script_name)
-                print ('\nscript_path:', script_path)
+                    script_name = self.edit_menu_push_btn.text().split(' ', 1)[1]
 
-                os.remove(script_path + '.py')
-                try:
-                    os.remove(script_path + '.pyc')
-                except:
-                    pass
+                    if 'Shared: ' in self.edit_menu_push_btn.text():
+                        script_path = os.path.join(self.shared_menus_dir, script_name)
+                    else:
+                        script_path = os.path.join(self.project_menus_dir, self.current_project, script_name)
+                    print ('script_path:', script_path, '\n')
 
-                print ('\n>>> deleted menu for %s <<<\n' % script_name)
+                    os.remove(script_path + '.py')
+                    try:
+                        os.remove(script_path + '.pyc')
+                    except:
+                        pass
 
-                # Reload button menus
+                    print ('--> menu deleted: %s \n' % script_name)
 
-                build_main_menu_preset_menu(self.edit_menu_push_btn, self.edit_export_name_menu)
-                load_preset()
+                    # Reload button menus
 
-                self.refresh_hooks()
+                    build_main_menu_preset_menu(self.edit_menu_push_btn, self.edit_export_name_menu)
+                    load_preset()
+
+                    self.refresh_hooks()
 
             def build_main_menu_preset_menu(created_menu_btn, created_presets_menu):
 
@@ -3153,361 +1156,54 @@ class ExportSetup(object):
                 for menu_name in menu_list:
                     created_presets_menu.addAction(menu_name, partial(add_menu, menu_name))
 
-            def save_edited_menu():
-                import flame
-
-                def preset_check():
-
-                    if self.edit_saved_presets_push_btn_01.text() == 'No Saved Presets Found':
-                        return 'Export Preset One - Select a saved export preset'
-
-                    if not self.edit_export_path_lineedit_01.text():
-                        return 'Export Preset One - Add export path'
-
-                    # Preset two field check
-
-                    if self.edit_enable_preset_pushbutton_02.isChecked():
-
-                        if self.edit_saved_presets_push_btn_02.text() == 'No Saved Export Presets':
-                            return 'Export Preset Two - Select a saved export preset'
-
-                        if self.edit_saved_presets_push_btn_02.text() == 'No Saved Presets Found':
-                            return 'Export Preset Two - Select a saved export preset'
-
-                        if not self.edit_export_path_lineedit_02.text():
-                            return 'Export Preset Two - Add export path'
-
-                    # Preset three field check
-
-                    if self.edit_enable_preset_pushbutton_03.isChecked():
-
-                        if self.edit_saved_presets_push_btn_03.text() == 'No Saved Export Presets':
-                            return 'Export Preset Three - Select a saved export preset'
-
-                        if self.edit_saved_presets_push_btn_03.text() == 'No Saved Presets Found':
-                            return 'Export Preset Two - Select a saved export preset'
-
-                        if not self.edit_export_path_lineedit_03.text():
-                            return 'Export Preset Three - Add export path666'
-
-                    # Preset four field check
-
-                    if self.edit_enable_preset_pushbutton_04.isChecked():
-
-                        if self.edit_saved_presets_push_btn_04.text() == 'No Saved Export Presets':
-                            return 'Export Preset Four - Select a saved export preset'
-
-                        if self.edit_saved_presets_push_btn_04.text() == 'No Saved Presets Found':
-                            return 'Export Preset Two - Select a saved export preset'
-
-                        if not self.edit_export_path_lineedit_04.text():
-                            return 'Export Preset Four - Add export path'
-
-                    # Preset five field check
-
-                    if self.edit_enable_preset_pushbutton_05.isChecked():
-
-                        if self.edit_saved_presets_push_btn_05.text() == 'No Saved Export Presets':
-                            return 'Export Preset Five - Select a saved export preset'
-
-                        if self.edit_saved_presets_push_btn_05.text() == 'No Saved Presets Found':
-                            return 'Export Preset Two - Select a saved export preset'
-
-                        if not self.edit_export_path_lineedit_05.text():
-                            return 'Export Preset Five - Add export path'
-
-                def set_menu_save_path():
-
-                    # Set path for new menu file
-
-                    if self.edit_menu_visibility_push_btn.text() == 'Project':
-                        menu_save_dir = os.path.join(self.project_menus_dir, self.current_project)
-                        self.script_project = self.current_project
-                    else:
-                        menu_save_dir = self.shared_menus_dir
-                        self.script_project = 'None'
-
-                    if not os.path.isdir(menu_save_dir):
-                        os.makedirs(menu_save_dir)
-
-                    self.menu_name = self.edit_menu_name_lineedit.text()
-                    self.menu_name = self.menu_name.replace('.', '_')
-                    self.menu_name = self.menu_name + '.py'
-
-                    self.menu_save_file = os.path.join(menu_save_dir, self.menu_name)# + '.py'
-
-                    print ('menu_save_file:', self.menu_save_file)
-
-                def menu_template_replace_tokens():
-
-                    # Replace tokens in menu template file
-
-                    template_token_dict = {}
-
-                    template_token_dict['<ScriptProject>'] = self.script_project
-                    template_token_dict['<PresetName>'] = self.edit_menu_name_lineedit.text()
-                    template_token_dict['<PresetType>'] = self.edit_menu_visibility_push_btn.text()
-                    template_token_dict['<RevealInMediaHub>'] = str(self.edit_reveal_in_mediahub_pushbutton.isChecked())
-                    template_token_dict['<RevealInFinder>'] = str(self.edit_reveal_in_finder_pushbutton.isChecked())
-
-                    # Open menu template
-
-                    get_config_values = open(self.menu_template_path, 'r')
-                    self.template_lines = get_config_values.read().splitlines()
-
-                    # Replace tokens in menu template
-
-                    for key, value in template_token_dict.items():
-                        for line in self.template_lines:
-                            if key in line:
-                                line_index = self.template_lines.index(line)
-                                new_line = re.sub(key, value, line)
-                                self.template_lines[line_index] = new_line
-
-                def menu_template_preset_lines():
-
-                    def get_preset_path(export_push_btn, saved_presets_push_btn):
-
-                        # Get selected preset path
-
-                        selected_export_menu = export_push_btn.text()
-
-                        if 'Project' in selected_export_menu:
-                            preset_path = self.project_preset_path
-                        else:
-                            preset_path = self.shared_preset_path
-
-                        if 'Movie' in selected_export_menu:
-                            preset_dir_path = preset_path + '/movie_file'
-                        else:
-                            preset_dir_path = preset_path + '/file_sequence'
-
-                        preset_file_path = os.path.join(preset_dir_path, saved_presets_push_btn.text()) + '.xml'
-
-                        print ('preset path:', preset_file_path, '\n')
-
-                        return preset_file_path
-
-                    def new_lines(export_preset_num, use_top_layer, export_in_foreground, export_between_marks, export_path, preset_file_path):
-
-                        menu_lines.append("")
-                        menu_lines.append("        # Export preset %s" % export_preset_num)
-                        menu_lines.append("")
-                        menu_lines.append("        # Export using top video track")
-                        menu_lines.append("")
-                        menu_lines.append("        clip_output.use_top_video_track = %s" % use_top_layer)
-                        menu_lines.append("        print ('\\n>>> Export using top layer: %s <<<')" % use_top_layer)
-                        menu_lines.append("")
-                        menu_lines.append("        # Set export to foreground")
-                        menu_lines.append("")
-                        menu_lines.append("        clip_output.foreground = %s" % export_in_foreground)
-                        menu_lines.append("        print ('>>> Export in foreground: %s <<<')" % export_in_foreground)
-                        menu_lines.append("")
-                        menu_lines.append("        # Export between markers")
-                        menu_lines.append("")
-                        menu_lines.append("        clip_output.export_between_marks = %s" % export_between_marks)
-                        menu_lines.append("        print ('>>> Export between marks: %s <<<\\n')" % export_between_marks)
-                        menu_lines.append("")
-                        menu_lines.append("        # Translate tokens in path")
-                        menu_lines.append("")
-                        menu_lines.append("        new_export_path = translate_token_path(clip, '%s')" % export_path)
-                        menu_lines.append("")
-                        menu_lines.append("        if not new_export_path:")
-                        menu_lines.append("            return")
-                        menu_lines.append("")
-                        menu_lines.append("        if not os.path.isdir(new_export_path):")
-                        menu_lines.append("            os.makedirs(new_export_path)")
-                        menu_lines.append("")
-                        menu_lines.append("        clip_output.export(clip, '%s', new_export_path)" % preset_file_path)
-                        menu_lines.append("")
-                        menu_lines.append("        # Export preset %s END" % export_preset_num)
-                        menu_lines.append("")
-
-                    # Build preset menus
-
-                    # First preset tab
-
-                    preset_file_path = get_preset_path(self.edit_export_push_btn_01, self.edit_saved_presets_push_btn_01)
-                    print ('preset_file_path:', preset_file_path)
-                    new_lines('One', str(self.edit_top_layer_pushbutton_01.isChecked()), str(self.edit_foreground_pushbutton_01.isChecked()), str(self.edit_between_marks_pushbutton_01.isChecked()), self.edit_export_path_lineedit_01.text(), preset_file_path)
-
-                    if self.edit_enable_preset_pushbutton_02.isChecked():
-                        preset_file_path = get_preset_path(self.edit_export_push_btn_02, self.edit_saved_presets_push_btn_02)
-                        print ('preset_file_path:', preset_file_path)
-                        new_lines('Two', str(self.edit_top_layer_pushbutton_02.isChecked()), str(self.edit_foreground_pushbutton_02.isChecked()), str(self.edit_between_marks_pushbutton_02.isChecked()), self.edit_export_path_lineedit_02.text(), preset_file_path)
-
-                    if self.edit_enable_preset_pushbutton_03.isChecked():
-                        preset_file_path = get_preset_path(self.edit_export_push_btn_03, self.edit_saved_presets_push_btn_03)
-                        print ('preset_file_path:', preset_file_path)
-                        new_lines('Three', str(self.edit_top_layer_pushbutton_03.isChecked()), str(self.edit_foreground_pushbutton_03.isChecked()), str(self.edit_between_marks_pushbutton_03.isChecked()), self.edit_export_path_lineedit_03.text(), preset_file_path)
-
-                    if self.edit_enable_preset_pushbutton_04.isChecked():
-                        preset_file_path = get_preset_path(self.edit_export_push_btn_04, self.edit_saved_presets_push_btn_04)
-                        print ('preset_file_path:', preset_file_path)
-                        new_lines('Four', str(self.edit_top_layer_pushbutton_04.isChecked()), str(self.edit_foreground_pushbutton_04.isChecked()), str(self.edit_between_marks_pushbutton_04.isChecked()), self.edit_export_path_lineedit_04.text(), preset_file_path)
-
-                    if self.edit_enable_preset_pushbutton_05.isChecked():
-                        preset_file_path = get_preset_path(self.edit_export_push_btn_05, self.edit_saved_presets_push_btn_05)
-                        print ('preset_file_path:', preset_file_path)
-                        new_lines('Five', str(self.edit_top_layer_pushbutton_05.isChecked()), str(self.edit_foreground_pushbutton_05.isChecked()), str(self.edit_between_marks_pushbutton_05.isChecked()), self.edit_export_path_lineedit_05.text(), preset_file_path)
-
-                # Check fields for proper entries
-
-                if not self.edit_menu_name_lineedit.text():
-                    return message_box('Add menu name')
-
-                preset_error = preset_check()
-                if preset_error:
-                    return message_box(preset_error)
-
-                # Get selected menu path
-
-                selected_script_name = self.edit_menu_push_btn.text().rsplit(': ', 1)[1]
-                print ('selected_script_name:', selected_script_name)
-
-                if 'Shared: ' in self.edit_menu_push_btn.text():
-                    selected_menu_path = os.path.join(self.shared_menus_dir, selected_script_name)
-                elif 'Project: ' in self.edit_menu_push_btn.text():
-                    selected_menu_path = os.path.join(self.project_menus_dir, self.current_project, selected_script_name)
-
-                print ('selected_menu_path:', selected_menu_path)
-
-                set_menu_save_path()
-
-                menu_template_replace_tokens()
-
-                menu_lines = []
-
-                menu_template_preset_lines()
-
-                # Insert new preset menu lines into template
-
-                for i in range(len(self.template_lines)):
-                    if self.template_lines[i] == '    for clip in selection:':
-                        i += 1
-                        for line in menu_lines:
-                            self.template_lines.insert(i, line)
-                            i += 1
-
-                # Check if new preset file already exists in current folder
-
-                if os.path.isfile(self.menu_save_file):
-                    overwrite = message_box_confirm('File already exists. Overwrite?')
-                    if overwrite == False:
-                        print ('\n>>> save cancelled <<<\n')
-                        return
-
-                # Check other folders for menu with same name
-
-                menu_save_folder = self.menu_save_file.rsplit('/', 1)[0]
-                print ('menu_save_folder:', menu_save_folder)
-
-                for root, dirs, files in os.walk(SCRIPT_PATH):
-                    if root != menu_save_folder:
-                        for f in files:
-                            if f == self.menu_name:
-                                return message_box('Menu name already exists.<br>Change name to avoid conflict')
-
-                # Save new menu
-
-                out_file = open(self.menu_save_file, 'w')
-                for line in self.template_lines:
-                    print(line, file=out_file)
-                out_file.close()
-
-                # Delete old menu preset if name of preset has changed
-
-                if self.edit_menu_push_btn.text().split(' ', 1)[1] != self.edit_menu_name_lineedit.text():
-                    os.remove(selected_menu_path + '.py')
-                    try:
-                        os.remove(selected_menu_path + '.pyc')
-                    except:
-                        pass
-
-                # Reload button menus
-
-                build_main_menu_preset_menu(self.edit_menu_push_btn, self.edit_export_name_menu)
-                load_preset()
-
-                message_box('Edited Menu Saved')
-
-                # Refresh python hooks
-
-                flame.execute_shortcut('Rescan Python Hooks')
-
-                print ('\n>>> python hooks refreshed <<<')
-
             # Labels
 
-            self.edit_menu_visibility_label = FlameLabel('Menu Visibility', 'normal', self.window)
-            self.edit_menu_label = FlameLabel('Menu', 'normal', self.window)
-            self.edit_menu_name_label = FlameLabel('Menu Name', 'normal', self.window)
+            self.edit_menu_visibility_label = FlameLabel('Menu Visibility', label_width=110)
+            self.edit_menu_label = FlameLabel('Menu', label_width=110)
+            self.edit_menu_name_label = FlameLabel('Menu Name', label_width=110)
 
             # LineEdits
 
-            self.edit_menu_name_lineedit = QtWidgets.QLineEdit('', self.window)
-            self.edit_menu_name_lineedit.setMinimumSize(QtCore.QSize(200, 28))
-            self.edit_menu_name_lineedit.setMaximumSize(QtCore.QSize(450, 28))
-            self.edit_menu_name_lineedit.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                                       'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
+            self.edit_menu_name_lineedit = FlameLineEdit('', width=150, max_width=450)
 
             ## -------------------------------------------------------------
 
             ## Select Menu Push Button Menu
 
             self.edit_export_name_menu = QtWidgets.QMenu(self.window)
-            self.edit_export_name_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
+            self.edit_export_name_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#2d3744; border: none; font: 14px "Discreet"}'
                                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
             self.edit_menu_push_btn = QtWidgets.QPushButton('', self.window)
             self.edit_menu_push_btn.setMenu(self.edit_export_name_menu)
             self.edit_menu_push_btn.setMinimumSize(QtCore.QSize(450, 28))
             self.edit_menu_push_btn.setMaximumSize(QtCore.QSize(450, 28))
             self.edit_menu_push_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-            self.edit_menu_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                  'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
+            self.edit_menu_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #2d3744; border: none; font: 14px "Discreet"}'
+                                                  'QPushButton:disabled {color: #747474; background-color: #2d3744; border: none}'
+                                                  'QPushButton:hover {border: 1px solid #5a5a5a}'
+                                                  'QPushButton::menu-indicator {image: none}')
 
             build_main_menu_preset_menu(self.edit_menu_push_btn, self.edit_export_name_menu)
 
-            ## Menu Visibility Push Button Menu
+            # Menu Pushbutton
 
-            def project_preset_menu():
-                self.edit_menu_visibility_push_btn.setText('Project')
-
-            def shared_preset_menu():
-                self.edit_menu_visibility_push_btn.setText('Shared')
-
-            self.edit_export_type_menu = QtWidgets.QMenu(self.window)
-            self.edit_export_type_menu.addAction('Project', project_preset_menu)
-            self.edit_export_type_menu.addAction('Shared', shared_preset_menu)
-            self.edit_export_type_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                                     'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-            self.edit_menu_visibility_push_btn = QtWidgets.QPushButton('Project', self.window)
-            self.edit_menu_visibility_push_btn.setMenu(self.edit_export_type_menu)
-            self.edit_menu_visibility_push_btn.setMinimumSize(QtCore.QSize(150, 28))
-            self.edit_menu_visibility_push_btn.setMaximumSize(QtCore.QSize(150, 28))
-            self.edit_menu_visibility_push_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-            self.edit_menu_visibility_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                             'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-            # -------------------------------------------------------------
+            export_type_options = ['Project', 'Shared']
+            self.edit_menu_visibility_push_btn = FlamePushButtonMenu('Project', export_type_options)
 
             # Push Button
 
-            self.edit_reveal_in_mediahub_pushbutton = FlamePushButton(' Reveal in Mediahub', self.reveal_in_mediahub, self.window)
-            self.edit_reveal_in_finder_pushbutton = FlamePushButton(' Reveal in Finder', self.reveal_in_finder, self.window)
+            self.edit_reveal_in_mediahub_pushbutton = FlamePushButton('Reveal in Mediahub', self.reveal_in_mediahub, button_width=160)
+            self.edit_reveal_in_finder_pushbutton = FlamePushButton('Reveal in Finder', self.reveal_in_finder, button_width=160)
 
             # Buttons
 
-            self.edit_delete_btn = FlameButton('Delete', delete_preset, self.window)
-            self.edit_save_btn = FlameButton('Save', save_edited_menu, self.window)
-            self.edit_done_btn = FlameButton('Done', self.window.close, self.window)
+            self.edit_delete_btn = FlameButton('Delete', delete_preset, button_width=160)
+            self.edit_save_btn = FlameButton('Save', partial(self.save_menus, 'Edit'), button_width=160)
+            self.edit_done_btn = FlameButton('Done', self.window.close, button_width=160)
 
             # -------------------------------------------------------------
 
             edit_presets()
-
             load_preset()
 
             # Window Layout
@@ -3524,7 +1220,7 @@ class ExportSetup(object):
             edit_gridbox.addWidget(self.edit_menu_visibility_push_btn, 1, 1)
 
             edit_gridbox.addWidget(self.edit_menu_name_label, 2, 0)
-            edit_gridbox.addWidget(self.edit_menu_name_lineedit, 2, 1, 1, 2)
+            edit_gridbox.addWidget(self.edit_menu_name_lineedit, 2, 1, 1, 4)
 
             edit_gridbox.addWidget(self.edit_reveal_in_mediahub_pushbutton, 2, 5)
             edit_gridbox.addWidget(self.edit_reveal_in_finder_pushbutton, 3, 5)
@@ -3539,79 +1235,71 @@ class ExportSetup(object):
         create_tab()
         edit_tab()
 
-        # Window Layout
+        # Add Widgets to Layout
 
-        gridbox = QtWidgets.QGridLayout()
         gridbox.addWidget(self.main_tabs)
-
-        self.window.setLayout(gridbox)
 
         self.window.show()
 
     def server_path_browse(self, lineedit):
-        from PySide2 import QtWidgets
 
         export_path = str(QtWidgets.QFileDialog.getExistingDirectory(self.window, "Select Directory", lineedit.text(), QtWidgets.QFileDialog.ShowDirsOnly))
 
         if export_path != '':
             lineedit.setText(export_path)
 
-    def create_menu(self):
+    def preset_check(self, tab_options_dict):
+
+        main_tab = str(next(iter(tab_options_dict))).split('_', 1)[0]
+        #print ('main_tab:', main_tab)
+
+        # Check Menu Name entry
+
+        if main_tab == 'create':
+            if not self.menu_name_lineedit.text():
+                return 'Add menu name'
+        else:
+            if not self.edit_menu_name_lineedit.text():
+                return 'Add menu name'
+
+        for key, value in tab_options_dict.items():
+
+            tab_number = key.rsplit('_', 1)[1].capitalize()
+            #print ('tab_number:', tab_number)
+
+            if tab_number != 'Zero':
+
+                # If tab is enabled, check settings
+
+                if value['Enabled'] == True:
+
+                    # Make sure on Shared saved presets are used with shared visibility menus
+
+                    if main_tab == 'create':
+                        if 'Shared' in self.menu_visibility_push_btn.text() and 'Shared:' not in value['Preset Type Menu']:
+                            return '<center>Preset %s: Only a SHARED Saved Preset can be added to a Menu with Shared Menu Visibility.' % tab_number
+                    else:
+                        if 'Shared' in self.edit_menu_visibility_push_btn.text() and 'Shared:' not in value['Preset Type Menu']:
+                            return '<center>Preset %s: Only a SHARED Saved Preset can be added to a Menu with Shared Menu Visibility.' % tab_number
+
+                    # Give message if trying to save with No Save Presets Found
+
+                    if value['Preset Menu'] == 'No Saved Presets Found':
+                        return '<center> Preset %s: No saved presets found - Select a different Preset Type or save a preset in Flame.' % tab_number
+
+                    # Check path entry
+
+                    if not value['Export Path']:
+                        return '<center>Preset %s: Enter export path.' % tab_number
+
+    def save_menus(self, tab):
         import flame
-
-        def preset_check():
-
-            if self.presets_menu_pushbutton_01.text() == 'No Saved Presets Found':
-                return 'Export Preset One - No saved preset selected'
-
-            if not self.export_path_lineedit_01.text():
-                return 'Export Preset One - Add export path'
-
-            # Preset two field check
-
-            if self.enable_preset_pushbutton_02.isChecked():
-
-                if self.saved_presets_push_btn_02.text() == 'No Saved Presets Found':
-                    return 'Export Preset Two - No saved preset selected'
-
-                if not self.export_path_lineedit_02.text():
-                    return 'Export Preset Two - Add export path'
-
-            # Preset three field check
-
-            if self.enable_preset_pushbutton_03.isChecked():
-
-                if self.saved_presets_push_btn_03.text() == 'No Saved Presets Found':
-                    return 'Export Preset Three - No saved preset selected'
-
-                if not self.export_path_lineedit_03.text():
-                    return 'Export Preset Three - Add export path'
-
-            # Preset four field check
-
-            if self.enable_preset_pushbutton_04.isChecked():
-
-                if self.saved_presets_push_btn_04.text() == 'No Saved Presets Found':
-                    return 'Export Preset Four - No saved preset selected'
-
-                if not self.export_path_lineedit_04.text():
-                    return 'Export Preset Four - Add export path'
-
-            # Preset five field check
-
-            if self.enable_preset_pushbutton_05.isChecked():
-
-                if self.saved_presets_push_btn_05.text() == 'No Saved Presets Found':
-                    return 'Export Preset Five - No saved preset selected'
-
-                if not self.export_path_lineedit_05.text():
-                    return 'Export Preset Five - Add export path'
 
         def set_menu_save_path():
 
             # Set path for new menu file
 
-            if self.menu_visibility_push_btn.text() == 'Project':
+            if menu_visibility == 'Project':
                 menu_save_dir = os.path.join(self.project_menus_dir, self.current_project)
                 self.script_project = self.current_project
             else:
@@ -3621,13 +1309,11 @@ class ExportSetup(object):
             if not os.path.isdir(menu_save_dir):
                 os.makedirs(menu_save_dir)
 
-            self.menu_name = self.menu_name_lineedit.text()
-            self.menu_name = self.menu_name.replace('.', '_')
-            self.menu_name = self.menu_name + '.py'
+            self.python_file_name = menu_name.replace('.', '_') + '.py'
 
-            self.menu_save_file = os.path.join(menu_save_dir, self.menu_name)# + '.py'
+            self.menu_save_file = os.path.join(menu_save_dir, self.python_file_name)
 
-            print ('menu_save_file:', self.menu_save_file)
+            print ('menu_save_file:', self.menu_save_file, '\n')
 
         def menu_template_replace_tokens():
 
@@ -3636,10 +1322,11 @@ class ExportSetup(object):
             template_token_dict = {}
 
             template_token_dict['<ScriptProject>'] = self.script_project
-            template_token_dict['<PresetName>'] = self.menu_name_lineedit.text()
-            template_token_dict['<PresetType>'] = self.menu_visibility_push_btn.text()
-            template_token_dict['<RevealInMediaHub>'] = str(self.reveal_in_mediahub_pushbutton.isChecked())
-            template_token_dict['<RevealInFinder>'] = str(self.reveal_in_finder_pushbutton.isChecked())
+            template_token_dict['<PresetName>'] = menu_name
+            template_token_dict['<PresetType>'] = menu_visibility
+            template_token_dict['<RevealInMediaHub>'] = reveal_in_mediahub
+            template_token_dict['<RevealInFinder>'] = reveal_in_finder
+            template_token_dict['<FlameMinMaxVersion>'] = self.flame_min_max_version
 
             # Open menu template
 
@@ -3657,47 +1344,47 @@ class ExportSetup(object):
 
         def menu_template_preset_lines():
 
-            def get_preset_path(export_push_btn, saved_presets_push_btn):
+            def get_preset_path(preset_type_menu, preset_menu):
 
                 # Get selected preset path
 
-                selected_export_menu = export_push_btn.text()
+                #preset_type_menu = export_push_btn.text()
 
-                if 'Project' in selected_export_menu:
+                if 'Project' in preset_type_menu:
                     preset_path = self.project_preset_path
                 else:
                     preset_path = self.shared_preset_path
 
-                if 'Movie' in selected_export_menu:
+                if 'Movie' in preset_type_menu:
                     preset_dir_path = preset_path + '/movie_file'
                 else:
                     preset_dir_path = preset_path + '/file_sequence'
 
-                preset_file_path = os.path.join(preset_dir_path, saved_presets_push_btn.text()) + '.xml'
+                preset_file_path = os.path.join(preset_dir_path, preset_menu) + '.xml'
 
                 print ('preset path:', preset_file_path, '\n')
 
                 return preset_file_path
 
-            def new_lines(export_preset_num, use_top_layer, export_in_foreground, export_between_marks, export_path, preset_file_path):
+            def new_lines(tab_number, top_layer, foreground_export, export_between_marks, export_path, preset_file_path):
 
                 menu_lines.append("")
-                menu_lines.append("        # Export preset %s" % export_preset_num)
+                menu_lines.append("        # Export preset %s" % tab_number)
                 menu_lines.append("")
                 menu_lines.append("        # Export using top video track")
                 menu_lines.append("")
-                menu_lines.append("        clip_output.use_top_video_track = %s" % use_top_layer)
-                menu_lines.append("        print ('\\n>>> Export using top layer: %s <<<')" % use_top_layer)
+                menu_lines.append("        clip_output.use_top_video_track = %s" % top_layer)
+                menu_lines.append("        print ('\\n--> Export using top layer: %s')" % top_layer)
                 menu_lines.append("")
                 menu_lines.append("        # Set export to foreground")
                 menu_lines.append("")
-                menu_lines.append("        clip_output.foreground = %s" % export_in_foreground)
-                menu_lines.append("        print ('>>> Export in foreground: %s <<<')" % export_in_foreground)
+                menu_lines.append("        clip_output.foreground = %s" % foreground_export)
+                menu_lines.append("        print ('--> Export in foreground: %s')" % foreground_export)
                 menu_lines.append("")
                 menu_lines.append("        # Export between markers")
                 menu_lines.append("")
                 menu_lines.append("        clip_output.export_between_marks = %s" % export_between_marks)
-                menu_lines.append("        print ('>>> Export between marks: %s <<<\\n')" % export_between_marks)
+                menu_lines.append("        print ('--> Export between marks: %s\\n')" % export_between_marks)
                 menu_lines.append("")
                 menu_lines.append("        # Translate tokens in path")
                 menu_lines.append("")
@@ -3711,36 +1398,17 @@ class ExportSetup(object):
                 menu_lines.append("")
                 menu_lines.append("        clip_output.export(clip, '%s', new_export_path)" % preset_file_path)
                 menu_lines.append("")
-                menu_lines.append("        # Export preset %s END" % export_preset_num)
+                menu_lines.append("        # Export preset %s END" % tab_number)
                 menu_lines.append("")
 
-            # Build preset menus
+            # Loop through tabs to build preset menus
 
-            # First preset tab
-
-            preset_file_path = get_preset_path(self.preset_type_menu_pushbutton_01, self.presets_menu_pushbutton_01)
-            print ('preset_file_path:', preset_file_path)
-            new_lines('One', str(self.top_layer_pushbutton_01.isChecked()), str(self.foreground_pushbutton_01.isChecked()), str(self.between_marks_pushbutton_01.isChecked()), self.export_path_lineedit_01.text(), preset_file_path)
-
-            if self.enable_preset_pushbutton_02.isChecked():
-                preset_file_path = get_preset_path(self.export_push_btn_02, self.saved_presets_push_btn_02)
-                print ('preset_file_path:', preset_file_path)
-                new_lines('Two', str(self.top_layer_pushbutton_02.isChecked()), str(self.foreground_pushbutton_02.isChecked()), str(self.between_marks_pushbutton_02.isChecked()), self.export_path_lineedit_02.text(), preset_file_path)
-
-            if self.enable_preset_pushbutton_03.isChecked():
-                preset_file_path = get_preset_path(self.export_push_btn_03, self.saved_presets_push_btn_03)
-                print ('preset_file_path:', preset_file_path)
-                new_lines('Three', str(self.top_layer_pushbutton_03.isChecked()), str(self.foreground_pushbutton_03.isChecked()), str(self.between_marks_pushbutton_03.isChecked()), self.export_path_lineedit_03.text(), preset_file_path)
-
-            if self.enable_preset_pushbutton_04.isChecked():
-                preset_file_path = get_preset_path(self.export_push_btn_04, self.saved_presets_push_btn_04)
-                print ('preset_file_path:', preset_file_path)
-                new_lines('Four', str(self.top_layer_pushbutton_04.isChecked()), str(self.foreground_pushbutton_04.isChecked()), str(self.between_marks_pushbutton_04.isChecked()), self.export_path_lineedit_04.text(), preset_file_path)
-
-            if self.enable_preset_pushbutton_05.isChecked():
-                preset_file_path = get_preset_path(self.export_push_btn_05, self.saved_presets_push_btn_05)
-                print ('preset_file_path:', preset_file_path)
-                new_lines('Five', str(self.top_layer_pushbutton_05.isChecked()), str(self.foreground_pushbutton_05.isChecked()), str(self.between_marks_pushbutton_05.isChecked()), self.export_path_lineedit_05.text(), preset_file_path)
+            for key, value in tab_options_dict.items():
+                tab_number = key.rsplit('_', 1)[1].capitalize()
+                if tab_number != 'Zero':
+                    if value['Enabled'] == True:
+                        preset_file_path = get_preset_path(value['Preset Type Menu'], value['Preset Menu'])
+                        new_lines(tab_number, value['Top Layer'], value['Foreground Export'], value['Export Between Marks'], value['Export Path'], preset_file_path)
 
         def save_config():
 
@@ -3769,16 +1437,121 @@ class ExportSetup(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('>>> config saved <<<\n')
+            print ('--> config saved \n')
 
-        # Check fields for proper entries
+        if tab == 'Create':
+            tab_options_dict = {'create_tab_zero':{
+                                        'Menu Visibility': self.menu_visibility_push_btn.text(),
+                                        'Menu Name': self.menu_name_lineedit.text(),
+                                        'Reveal in MediaHub': self.reveal_in_mediahub_pushbutton.isChecked(),
+                                        'Reveal in Finder': self.reveal_in_finder_pushbutton.isChecked()},
+                                'create_tab_one': {
+                                        'Enabled' : True,
+                                        'Preset Type Menu' : self.preset_type_menu_pushbutton_01.text(),
+                                        'Preset Menu' : self.presets_menu_pushbutton_01.text(),
+                                        'Export Path' : self.export_path_lineedit_01.text(),
+                                        'Top Layer' : self.top_layer_pushbutton_01.isChecked(),
+                                        'Foreground Export' : self.foreground_pushbutton_01.isChecked(),
+                                        'Export Between Marks' : self.between_marks_pushbutton_01.isChecked()},
+                                'create_tab_two': {
+                                        'Enabled' : self.enable_preset_pushbutton_02.isChecked(),
+                                        'Preset Type Menu' : self.preset_type_menu_pushbutton_02.text(),
+                                        'Preset Menu' : self.presets_menu_pushbutton_02.text(),
+                                        'Export Path' : self.export_path_lineedit_02.text(),
+                                        'Top Layer' : self.top_layer_pushbutton_02.isChecked(),
+                                        'Foreground Export' : self.foreground_pushbutton_02.isChecked(),
+                                        'Export Between Marks' : self.between_marks_pushbutton_02.isChecked()},
+                                'create_tab_three': {
+                                        'Enabled' : self.enable_preset_pushbutton_03.isChecked(),
+                                        'Preset Type Menu' : self.preset_type_menu_pushbutton_03.text(),
+                                        'Preset Menu' : self.presets_menu_pushbutton_03.text(),
+                                        'Export Path' : self.export_path_lineedit_03.text(),
+                                        'Top Layer' : self.top_layer_pushbutton_03.isChecked(),
+                                        'Foreground Export' : self.foreground_pushbutton_03.isChecked(),
+                                        'Export Between Marks' : self.between_marks_pushbutton_03.isChecked()},
+                                'create_tab_four': {
+                                        'Enabled' : self.enable_preset_pushbutton_04.isChecked(),
+                                        'Preset Type Menu' : self.preset_type_menu_pushbutton_04.text(),
+                                        'Preset Menu' : self.presets_menu_pushbutton_04.text(),
+                                        'Export Path' : self.export_path_lineedit_04.text(),
+                                        'Top Layer' : self.top_layer_pushbutton_04.isChecked(),
+                                        'Foreground Export' : self.foreground_pushbutton_04.isChecked(),
+                                        'Export Between Marks' : self.between_marks_pushbutton_04.isChecked()},
+                                'create_tab_five': {
+                                        'Enabled' : self.enable_preset_pushbutton_05.isChecked(),
+                                        'Preset Type Menu' : self.preset_type_menu_pushbutton_05.text(),
+                                        'Preset Menu' : self.presets_menu_pushbutton_05.text(),
+                                        'Export Path' : self.export_path_lineedit_05.text(),
+                                        'Top Layer' : self.top_layer_pushbutton_05.isChecked(),
+                                        'Foreground Export' : self.foreground_pushbutton_05.isChecked(),
+                                        'Export Between Marks' : self.between_marks_pushbutton_05.isChecked()}
+                                        }
+        else:
+            tab_options_dict = {'edit_tab_zero':{
+                                        'Menu Visibility': self.edit_menu_visibility_push_btn.text(),
+                                        'Menu Name': self.edit_menu_name_lineedit.text(),
+                                        'Reveal in MediaHub': self.edit_reveal_in_mediahub_pushbutton.isChecked(),
+                                        'Reveal in Finder': self.edit_reveal_in_finder_pushbutton.isChecked()},
+                                'edit_tab_one': {
+                                        'Enabled' : True,
+                                        'Preset Type Menu' : self.edit_preset_type_menu_pushbutton_01.text(),
+                                        'Preset Menu' : self.edit_presets_menu_pushbutton_01.text(),
+                                        'Export Path' : self.edit_export_path_lineedit_01.text(),
+                                        'Top Layer' : self.edit_top_layer_pushbutton_01.isChecked(),
+                                        'Foreground Export' : self.edit_foreground_pushbutton_01.isChecked(),
+                                        'Export Between Marks' : self.edit_between_marks_pushbutton_01.isChecked()},
+                                'edit_tab_two': {
+                                        'Enabled' : self.edit_enable_preset_pushbutton_02.isChecked(),
+                                        'Preset Type Menu' : self.edit_preset_type_menu_pushbutton_02.text(),
+                                        'Preset Menu' : self.edit_presets_menu_pushbutton_02.text(),
+                                        'Export Path' : self.edit_export_path_lineedit_02.text(),
+                                        'Top Layer' : self.edit_top_layer_pushbutton_02.isChecked(),
+                                        'Foreground Export' : self.edit_foreground_pushbutton_02.isChecked(),
+                                        'Export Between Marks' : self.edit_between_marks_pushbutton_02.isChecked()},
+                                'edit_tab_three': {
+                                        'Enabled' : self.edit_enable_preset_pushbutton_03.isChecked(),
+                                        'Preset Type Menu' : self.edit_preset_type_menu_pushbutton_03.text(),
+                                        'Preset Menu' : self.edit_presets_menu_pushbutton_03.text(),
+                                        'Export Path' : self.edit_export_path_lineedit_03.text(),
+                                        'Top Layer' : self.edit_top_layer_pushbutton_03.isChecked(),
+                                        'Foreground Export' : self.edit_foreground_pushbutton_03.isChecked(),
+                                        'Export Between Marks' : self.edit_between_marks_pushbutton_03.isChecked()},
+                                'edit_tab_four': {
+                                        'Enabled' : self.edit_enable_preset_pushbutton_04.isChecked(),
+                                        'Preset Type Menu' : self.edit_preset_type_menu_pushbutton_04.text(),
+                                        'Preset Menu' : self.edit_presets_menu_pushbutton_04.text(),
+                                        'Export Path' : self.edit_export_path_lineedit_04.text(),
+                                        'Top Layer' : self.edit_top_layer_pushbutton_04.isChecked(),
+                                        'Foreground Export' : self.edit_foreground_pushbutton_04.isChecked(),
+                                        'Export Between Marks' : self.edit_between_marks_pushbutton_04.isChecked()},
+                                'edit_tab_five': {
+                                        'Enabled' : self.edit_enable_preset_pushbutton_05.isChecked(),
+                                        'Preset Type Menu' : self.edit_preset_type_menu_pushbutton_05.text(),
+                                        'Preset Menu' : self.edit_presets_menu_pushbutton_05.text(),
+                                        'Export Path' : self.edit_export_path_lineedit_05.text(),
+                                        'Top Layer' : self.edit_top_layer_pushbutton_05.isChecked(),
+                                        'Foreground Export' : self.edit_foreground_pushbutton_05.isChecked(),
+                                        'Export Between Marks' : self.edit_between_marks_pushbutton_05.isChecked()}
+                                        }
 
-        if not self.menu_name_lineedit.text():
-            return message_box('Add menu name')
+        # Get tab zero values
 
-        preset_error = preset_check()
+        for key, value in tab_options_dict.items():
+            print ('value:', key)
+
+        for key, value in tab_options_dict.items():
+            print ('key:', key)
+            if 'tab_zero' in key:
+                menu_visibility = value['Menu Visibility']
+                menu_name = value['Menu Name']
+                reveal_in_mediahub = str(value['Reveal in MediaHub'])
+                reveal_in_finder = str(value['Reveal in Finder'])
+
+        # Check options for proper entries
+
+        preset_error = self.preset_check(tab_options_dict)
         if preset_error:
-            return message_box(preset_error)
+            return FlameMessageWindow('Error', 'error', f'{preset_error}')
 
         set_menu_save_path()
 
@@ -3800,21 +1573,30 @@ class ExportSetup(object):
         # Check if new preset file already exists in current folder
 
         if os.path.isfile(self.menu_save_file):
-            overwrite = message_box_confirm('File already exists. Overwrite?')
-            if overwrite == False:
-                print ('\n>>> save cancelled <<<\n')
+            if not FlameMessageWindow('Confirm Operation', 'warning', 'Overwrite exisitng file?'):
+                print ('--> save cancelled \n')
                 return
 
         # Check other folders for menu with same name
 
         menu_save_folder = self.menu_save_file.rsplit('/', 1)[0]
-        print ('menu_save_folder:', menu_save_folder)
+        print ('menu_save_folder:', menu_save_folder, '\n')
 
         for root, dirs, files in os.walk(SCRIPT_PATH):
             if root != menu_save_folder:
                 for f in files:
-                    if f == self.menu_name:
-                        return message_box('Menu name already exists.<br>Change name to avoid conflict')
+                    if f == self.python_file_name:
+                        if not FlameMessageWindow('Confirm Operation', 'warning', 'Overwrite exisitng file?'):
+                            return
+
+                        # Delete old script file before saving new version
+
+                        old_script_path = os.path.join(root, f)
+                        os.remove(old_script_path)
+                        try:
+                            os.remove(old_script_path + 'c')
+                        except:
+                            pass
 
         save_config()
 
@@ -3827,7 +1609,7 @@ class ExportSetup(object):
 
         self.refresh_hooks()
 
-        message_box('Export Menu Created: %s' % self.menu_name_lineedit.text())
+        FlameMessageWindow('Operation Complete', 'message', f'Export Menu Saved: {menu_name}')
 
         self.window.close()
 
@@ -3838,55 +1620,9 @@ class ExportSetup(object):
 
         flame.execute_shortcut('Rescan Python Hooks')
 
-        print ('\n>>> python hooks refreshed <<<')
+        print ('--> python hooks refreshed \n')
 
 #-------------------------------------#
-
-def message_box(message):
-    from PySide2 import QtWidgets, QtCore
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
-
-def message_box_confirm(message):
-    from PySide2 import QtWidgets, QtCore
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setText('<b><center>%s' % message)
-    msg_box_yes_button = msg_box.addButton(QtWidgets.QMessageBox.Yes)
-    msg_box_yes_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_yes_button.setMinimumSize(QtCore.QSize(80, 24))
-    msg_box_no_button = msg_box.addButton(QtWidgets.QMessageBox.No)
-    msg_box_no_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_no_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-
-    message = message.replace('<br>', '-')
-
-    print ('\n>>> %s <<<\n' % message)
-
-    if msg_box.exec_() == QtWidgets.QMessageBox.Yes:
-        return True
-    return False
 
 def get_main_menu_custom_ui_actions():
 
@@ -3897,7 +1633,7 @@ def get_main_menu_custom_ui_actions():
                 {
                     'name': 'Create Export Menus',
                     'execute': ExportSetup,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 }
             ]
         }

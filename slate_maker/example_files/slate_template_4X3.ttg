@@ -1,0 +1,721 @@
+Module Text
+Program Flame
+Version 2023.pr159
+FileVersion 4.19999981
+CreationDate Fri Mar 18 16:32:13 2022
+
+FrameWidth 720
+FrameHeight 486
+FrameAspectRatio 1.33333337
+
+	CurrentFrame 1
+	MaxFrames -1
+	UpdateMode yes
+	PlayLockMode no
+	UndoLevels 10
+	FieldRenderingModeAuto 2
+	GaussianBlur yes
+	GlobalBlur yes
+	BlurOn no
+	BlurLevel 5
+	AntiAliasingLevel 0
+	AntiAliasingSoftness 1
+	MultiSample 0
+	PreRender 1
+	CropBox no
+	CropLeft 0
+	CropRight 0
+	CropBottom 0
+	CropTop 0
+	MatteKey yes
+End
+NumberOfLayer 8
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -288
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 112.5
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 37.5
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 45
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 12
+Text 73 83 67 73 58 32 60 73 83 67 73 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -288
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 67.5
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 37.5
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 45
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 10
+Text 84 82 84 58 32 60 84 82 84 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -288
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 22.5
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 37.5
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 45
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 14
+Text 84 73 84 76 69 58 32 60 84 73 84 76 69 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -288
+	End
+Channel translation/y
+	Extrapolation constant
+	Value -22.5
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 37.5
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 45
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 12
+Text 68 65 84 69 58 32 60 68 65 84 69 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -288
+	End
+Channel translation/y
+	Extrapolation constant
+	Value -67.5
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 37.5
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 45
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 16
+Text 65 71 69 78 67 89 58 32 60 65 71 69 78 67 89 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -288
+	End
+Channel translation/y
+	Extrapolation constant
+	Value -112.5
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 37.5
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 45
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 16
+Text 67 76 73 69 78 84 58 32 60 67 76 73 69 78 84 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -288
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 157.5
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 37.5
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 45
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 27
+Text 84 111 100 97 121 115 32 68 97 116 101 58 32 60 67 85 82 82 69 78 84 95 68 65 84 69 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -286
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 218
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 100
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 100
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 517
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 0
+FontType 0
+FontName Discreet
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 3
+Text 52 120 51
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 517
+End
+EndLayer
+EndGen

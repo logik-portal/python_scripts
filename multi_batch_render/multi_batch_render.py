@@ -1,22 +1,22 @@
 '''
 Script Name: Multi Batch Render
-Script Version: 4.1
-Flame Version: 2020
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Version: 4.3
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 12.12.18
-Update Date: 05.19.21
+Update Date: 03.14.22
 
 Custom Action Type: Batch / Media Panel Desktop
 
 Description:
 
-    Batch render selected batch groups
+    Batch render multiple batch groups
 
-    To enable burn or close batch groups after render options: Right click in batch -> Render... -> Multi-Batch Render -> Setup
+Menus:
 
-    To render selected batch groups: Right click -> Render... on selected batch groups in desktop
+    Right-click in batch -> Render... -> Multi-Batch Render
 
-    To select from list of batch groups to render: Right click in batch -> Render... -> Multi-Batch Render
+    Right-click selected batch groups in desktop -> Render... Render Selected Batch Groups
 
 To install:
 
@@ -24,360 +24,181 @@ To install:
 
 Updates:
 
-v4.1 05.19.21
+    v4.3 03.14.22
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Moved UI widgets to external file - Added new render progress window
 
-v3.5 11.29.20
+    v4.2 02.25.22
 
-    More UI enhancements / Fixed Font for Linux
+        Updated UI for Flame 2023
 
-    Misc bug fixes
+        Updated config to XML
 
-    Batch groups that fail to render won't stop script. Failed batch group renders listed when all renders are complete
+        Burn button removed - no ability to test
 
-v3.2 08.10.20
+    v4.1 05.19.21
 
-    Updated UI
+        Updated to be compatible with Flame 2022/Python 3.7
 
-v3.1 07.26.20
+    v3.5 11.29.20
 
-    Save/Exit button added to main render window. This will save the project and exit Flame when the render is done.
+        More UI enhancements / Fixed Font for Linux
 
-    Fixed errors when attempting to render from desktop with multiple batch groups with same name.
+        Misc bug fixes
 
-v3.0 07.09.20:
+        Batch groups that fail to render won't stop script. Failed batch group renders listed when all renders are complete
 
-    Fixed errors when attempting to render batch groups with no Render or Write nodes. These batch groups will now be skipped
+    v3.2 08.10.20
 
-    Code cleanup
+        Updated UI
 
-v2.91 05.18.20:
+    v3.1 07.26.20
 
-    Render menu no longer incorrectly appears when selecting a batchgroup in a Library or Folder
+        Save/Exit button added to main render window. This will save the project and exit Flame when the render is done.
 
-v2.9 02.23.20:
+        Fixed errors when attempting to render from desktop with multiple batch groups with same name.
 
-    Render window now centers in linux
+    v3.0 07.09.20:
 
-    Script auto replaces all render and write nodes. Works as a fix for when render/write nodes stop working in batch
+        Fixed errors when attempting to render batch groups with no Render or Write nodes. These batch groups will now be skipped
 
-    Added menu to render current batch to batch menu. Render... -> Render Current - Use when getting errors with existing render and write nodes.
+        Code cleanup
 
-v2.8 02.09.20:
+    v2.91 05.18.20:
 
-    Window can now be resized
+        Render menu no longer incorrectly appears when selecting a batchgroup in a Library or Folder
 
-    Fixed bug with Close Batch After Rendering checkbox - showed as checked even after being unchecked.
+    v2.9 02.23.20:
 
-    Burn button updated when checked or unchecked in setup
+        Render window now centers in linux
 
-v2.7 11.06.19
+        Script auto replaces all render and write nodes. Works as a fix for when render/write nodes stop working in batch
 
-    Menu now appears as Render... when right-clicking on batch groups and in the batch window
+        Added menu to render current batch to batch menu. Render... -> Render Current - Use when getting errors with existing render and write nodes.
 
-    Removed menu that showed up in media panel when right clicking on items that could not be rendered.
+    v2.8 02.09.20:
 
-v2.6 10.13.19
+        Window can now be resized
 
-    Add option in main setup that will close batch groups when renders are done.
+        Fixed bug with Close Batch After Rendering checkbox - showed as checked even after being unchecked.
 
-    Removed menu that showed up when clicking on items in media panel that could not be rendered.
+        Burn button updated when checked or unchecked in setup
+
+    v2.7 11.06.19
+
+        Menu now appears as Render... when right-clicking on batch groups and in the batch window
+
+        Removed menu that showed up in media panel when right clicking on items that could not be rendered.
+
+    v2.6 10.13.19
+
+        Add option in main setup that will close batch groups when renders are done.
+
+        Removed menu that showed up when clicking on items in media panel that could not be rendered.
 '''
 
-from __future__ import print_function
-import os
-from PySide2 import QtWidgets, QtCore
+import xml.etree.ElementTree as ET
+import os, ast
+from PySide2 import QtWidgets
+from flame_widgets_multi_batch_render import FlameButton, FlameLabel, FlameListWidget, FlamePushButton, FlameMessageWindow, FlameProgressWindow, FlameWindow
 
-VERSION = 'v4.1'
+VERSION = 'v4.3'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/multi_batch_render'
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-
-    For different label looks use: label_type='normal', label_type='background', or label_type='outline'
-
-    To use:
-
-    label = FlameLabel('Label Name', 'normal', window)
-    """
-
-    def __init__(self, label_name, label_type, parent_window, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(110, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-        elif label_type == 'outline':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"')
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-
-    To use:
-
-    button = FlameButton('Button Name', do_this_when_pressed, window)
-    """
-
-    def __init__(self, button_name, do_when_pressed, parent_window, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(QtCore.QSize(120, 28))
-        self.setMaximumSize(QtCore.QSize(120, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(do_when_pressed)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-
-    To use:
-
-    pushbutton = FlamePushButton(' Button Name', True_or_False, window)
-    """
-
-    def __init__(self, button_name, button_checked, parent_window, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setCheckable(True)
-        self.setChecked(button_checked)
-        self.setMinimumSize(120, 28)
-        self.setMaximumSize(120, 28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #424142, stop: .91 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #4f4f4f, stop: .91 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #383838, stop: .91 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlameListWidget(QtWidgets.QListWidget):
-    """
-    Custom Qt Flame List Widget
-
-    To use:
-
-    list_widget = FlameListWidget(window)
-    """
-
-    def __init__(self, parent_window, *args, **kwargs):
-        super(FlameListWidget, self).__init__(*args, **kwargs)
-
-        self.setMinimumSize(300, 250)
-        self.setParent(parent_window)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        self.setAlternatingRowColors(True)
-        self.setStyleSheet('QListWidget {color: #9a9a9a; background-color: #2a2a2a; alternate-background-color: #2d2d2d; outline: none; font: 14px "Discreet"}'
-                           'QListWidget::item:selected {color: #d9d9d9; background-color: #474747}')
-
-# ---------------------------------- #
 
 class MultiBatchRender(object):
 
     def __init__(self, selection):
         import flame
 
+        # Paths
+
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
-        self.config_file = os.path.join(self.config_path, 'config')
+        self.config_xml = os.path.join(self.config_path, 'config.xml')
 
-        self.check_config_file()
+        # Load config file
 
-        # Get config values from config file
-
-        self.load_config_file()
-
-        self.selection = selection
-
-        self.desk = flame.project.current_project.current_workspace.desktop
-
-        self.desktop_batch_group_object_list = self.desk.batch_groups
-
-        self.desktop_batch_group_list = [str(b.name)[1:-1] for b in self.desktop_batch_group_object_list]
+        self.config()
 
         # Init variables
 
+        self.selection = selection
+        self.desk = flame.project.current_project.current_workspace.desktop
+        self.desktop_batch_group_object_list = self.desk.batch_groups
+        self.desktop_batch_group_list = [str(b.name)[1:-1] for b in self.desktop_batch_group_object_list]
         self.batch_to_render = ''
         self.num_batch_groups = ''
         self.batch_groups_rendered = 0
         self.failed_render_list = []
 
-    def load_config_file(self):
-        import ast
+    def config(self):
 
-        get_config_values = open(self.config_file, 'r')
-        values = get_config_values.read().splitlines()
+        def get_config_values():
 
-        self.burn_enabled = ast.literal_eval(values[2])
-        self.close_after_render = ast.literal_eval(values[4])
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
 
-        get_config_values.close()
+            # Get Settings from config XML
 
-    def check_config_file(self):
-        import ast
+            for setting in root.iter('multi_batch_render_settings'):
+                self.close_after_render = ast.literal_eval(setting.find('close_after_render').text)
 
-        if not os.path.isdir(self.config_path):
-            print ('config folder does not exist, creating folder and config file.')
-            os.makedirs(self.config_path)
+            print ('--> config loaded \n')
 
-        if not os.path.isfile(self.config_file):
-            print ('config file does not exist, creating new config file.')
+        def create_config_file():
 
-            config_text = []
+            if not os.path.isdir(self.config_path):
+                try:
+                    os.makedirs(self.config_path)
+                except:
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
+            if not os.path.isfile(self.config_xml):
+                print ('--> config file does not exist, creating new config file \n')
 
-            config_text.insert(0, 'Setup values for pyFlame Multi Batch Render script.')
-            config_text.insert(1, 'Enable Burn:')
-            config_text.insert(2, 'False')
-            config_text.insert(3, 'Close Batch After Render:')
-            config_text.insert(4, 'False')
+                config = """
+<settings>
+    <multi_batch_render_settings>
+        <close_after_render>False</close_after_render>
+    </multi_batch_render_settings>
+</settings>"""
 
-            out_file = open(self.config_file, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
+                with open(self.config_xml, 'a') as config_file:
+                    config_file.write(config)
+                    config_file.close()
 
-        # Read burn enabled setting
-
-        get_config_values = open(self.config_file, 'r')
-        values = get_config_values.read().splitlines()
-        burn_enabled = ast.literal_eval(values[2])
-        get_config_values.close()
-
-        return burn_enabled
+        if os.path.isfile(self.config_xml):
+            get_config_values()
+        else:
+            create_config_file()
+            if os.path.isfile(self.config_xml):
+                get_config_values()
 
     def main_window(self):
-
-        def setup_main_window():
-
-            def setup_save():
-
-                config_text = []
-
-                config_text.insert(0, 'Setup values for pyFlame Multi Batch Render script.')
-                config_text.insert(1, 'Enable Burn:')
-                config_text.insert(2, enable_burn_pushbutton.isChecked())
-                config_text.insert(3, 'Close Batch After Rendering:')
-                config_text.insert(4, close_batch_pushbutton.isChecked())
-
-                out_file = open(self.config_file, 'w')
-                for line in config_text:
-                    print(line, file=out_file)
-                out_file.close()
-
-                self.setup_window.close()
-
-                self.window.close()
-
-                self.load_config_file()
-
-                self.main_window()
-
-            def setup_cancel():
-
-                self.setup_window.close()
-
-            self.load_config_file()
-
-            self.setup_window = QtWidgets.QWidget()
-            self.setup_window.setMaximumSize(500, 210)
-            self.setup_window.setWindowTitle('Multi Batch Render Setup %s' % VERSION)
-            self.setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-            self.setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-            self.setup_window.setStyleSheet('background-color: #313131')
-
-            # Center window in linux
-
-            resolution = QtWidgets.QDesktopWidget().screenGeometry()
-            self.setup_window.move((resolution.width() / 2) - (self.setup_window.frameSize().width() / 2),
-                                   (resolution.height() / 2) - (self.setup_window.frameSize().height() / 2))
-
-            # Pushbuttons
-
-            enable_burn_pushbutton = FlamePushButton(' Enable Burn', self.burn_enabled, self.setup_window)
-            enable_burn_pushbutton.setMinimumSize(175, 28)
-            enable_burn_pushbutton.setToolTip('Enable to batch submit to burn')
-
-            close_batch_pushbutton = FlamePushButton(' Close Batch Groups', self.close_after_render, self.setup_window)
-            close_batch_pushbutton.setMinimumSize(175, 28)
-            close_batch_pushbutton.setToolTip('If enabled batch groups will close as renders finish.')
-
-            # Buttons
-
-            save_btn = FlameButton('Save', setup_save, self.setup_window)
-
-            cancel_btn = FlameButton('Cancel', setup_cancel, self.setup_window)
-
-            # --------------------- #
-
-            # Layout
-
-            grid = QtWidgets.QGridLayout()
-            grid.setMargin(20)
-            grid.addWidget(enable_burn_pushbutton, 0, 0)
-            grid.addWidget(close_batch_pushbutton, 1, 0)
-            grid.setHorizontalSpacing(80)
-            grid.addWidget(save_btn, 0, 2)
-            grid.setVerticalSpacing(10)
-            grid.addWidget(cancel_btn, 1, 2)
-
-            self.setup_window.setLayout(grid)
-
-            self.setup_window.show()
-
-            return self.setup_window
 
         def list_batch_groups():
             import flame
 
             current_batch_group = str(flame.batch.name)[1:-1]
-            print ('current_batch_group: ', current_batch_group)
+            # print ('current_batch_group: ', current_batch_group)
 
             # Get current batch number
 
             for i in [i for i, x in enumerate(self.desktop_batch_group_list) if x == current_batch_group]:
                 current_batch_num = int(i)
-            print ('current_batch_num: ', current_batch_num)
+            # print ('current_batch_num: ', current_batch_num)
 
             # Add names of batch groups to list
-
-            print ([b for b in self.desktop_batch_group_list])
-
-            print ([b.name for b in self.desk.batch_groups])
 
             self.batch_group_list.addItems(self.desktop_batch_group_list)
             self.batch_group_list.setCurrentItem(self.batch_group_list.item(current_batch_num))
             self.batch_group_list.setFocus()
 
-            print ('\n')
-
         def selected_listbox_batch_groups():
-            import flame
 
             # List of all items in batchgroup list box
 
             all_batch_groups_list = [str(self.batch_group_list.item(index)) for index in range(self.batch_group_list.count())]
-            print ('all_batch_groups_list:', all_batch_groups_list)
+            # print ('all_batch_groups_list:', all_batch_groups_list)
 
             # List of selected batchgroups
 
@@ -392,22 +213,23 @@ class MultiBatchRender(object):
 
         def render():
 
-            self.window.close()
+            # Save settings to config file
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            close_after_render = root.find('.//close_after_render')
+            close_after_render.text = str(self.close_batch_pushbutton.isChecked())
+
+            xml_tree.write(self.config_xml)
+
+            print ('--> config saved \n')
+
+            self.window.hide()
 
             selected_listbox_batch_groups()
 
             self.render_batch_groups()
-
-        def burn():
-
-            self.window.close()
-
-            selected_listbox_batch_groups()
-
-            for num in self.selected_batch_groups:
-                batch_to_render = self.desktop_batch_group_object_list[num]
-                print ('burning:', str(batch_to_render.name)[1:-1], '\n')
-                self.submit_burn_render(batch_to_render)
 
         def cancel():
 
@@ -418,63 +240,45 @@ class MultiBatchRender(object):
             except:
                 pass
 
-        self.window = QtWidgets.QWidget()
-        self.window.setMinimumSize(575, 350)
-        self.window.setWindowTitle('Multi Batch Render %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setStyleSheet('background-color: #313131')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        gridbox = QtWidgets.QGridLayout()
+        self.window = FlameWindow(f'Multi Batch Render <small>{VERSION}', gridbox, 575, 400)
 
         # Labels
 
-        self.batch_group_label = FlameLabel('Desktop Batch Groups', 'normal', self.window)
+        self.batch_group_label = FlameLabel('Desktop Batch Groups', label_type='underline', label_width=120)
 
         # Listboxes
 
-        self.batch_group_list = FlameListWidget(self.window)
+        self.batch_group_list = FlameListWidget()
 
         list_batch_groups()
 
+        # Pushbuttons
+
+        self.close_batch_pushbutton = FlamePushButton('Close Batch', self.close_after_render, button_width=120)
+        self.close_batch_pushbutton.setToolTip('Close batch groups after each render is completed.')
+
+        self.exit_flame = FlamePushButton('Exit Flame', False, button_width=120)
+        self.exit_flame.setToolTip('Save workspace and exit Flame when render is complete')
+
         # Buttons
 
-        self.render_btn = FlameButton('Render', render, self.window)
-
-        self.burn_btn = FlameButton('Burn', burn, self.window)
-        if self.burn_enabled:
-            self.burn_btn.setEnabled(True)
-        else:
-            self.burn_btn.setEnabled(False)
-
-        self.exit_btn = FlamePushButton('      Save/Exit', False, self.window)
-        self.exit_btn.setToolTip('Enable to save workspace and exit Flame when render is complete')
-
-        self.setup_btn = FlameButton('Setup', setup_main_window, self.window)
-
-        self.cancel_btn = FlameButton('Cancel', cancel, self.window)
+        self.render_btn = FlameButton('Render', render, button_width=120)
+        self.cancel_btn = FlameButton('Cancel', cancel, button_width=120)
 
         # --------------------- #
 
         # Window Layout
 
-        gridbox = QtWidgets.QGridLayout()
         gridbox.setMargin(20)
 
         gridbox.addWidget(self.batch_group_label, 0, 0)
         gridbox.addWidget(self.batch_group_list, 1, 0, 7, 1)
 
-        gridbox.addWidget(self.render_btn, 1, 1)
-        gridbox.addWidget(self.burn_btn, 2, 1)
-        gridbox.addWidget(self.exit_btn, 4, 1)
-        gridbox.addWidget(self.setup_btn, 6, 1)
+        gridbox.addWidget(self.render_btn, 6, 1)
+        gridbox.addWidget(self.close_batch_pushbutton, 1, 1)
+        gridbox.addWidget(self.exit_flame, 2, 1)
         gridbox.addWidget(self.cancel_btn, 7, 1)
-
-        self.window.setLayout(gridbox)
 
         self.window.show()
 
@@ -500,62 +304,6 @@ class MultiBatchRender(object):
     def render_batch_groups(self):
         import flame
 
-        def render_progress_window():
-
-            def render_done_button():
-
-                self.render_window.close()
-
-            # Get number of batchgroups to render
-
-            self.num_batch_groups = len(self.selected_batch_groups)
-
-            # Render progress window
-            # ----------------------
-
-            self.render_window = QtWidgets.QWidget()
-            self.render_window.setFixedSize(400, 160)
-            self.render_window.setWindowTitle('Multi Batch Render %s' % VERSION)
-            self.render_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-            self.render_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-            self.render_window.setStyleSheet('background-color: #313131')
-
-            # Center window in linux
-
-            resolution = QtWidgets.QDesktopWidget().screenGeometry()
-            self.render_window.move((resolution.width() / 2) - (self.render_window.frameSize().width() / 2),
-                                    (resolution.height() / 2) - (self.render_window.frameSize().height() / 2))
-
-            # Label
-
-            self.rendering_label = QtWidgets.QLabel('', self.render_window)
-            self.rendering_label.move(30, 20)
-            self.rendering_label.resize(300, 22)
-            self.rendering_label.setStyleSheet('color: #9a9a9a; font: 14px "Discreet"')
-
-            # Buttons
-
-            self.render_done_btn = QtWidgets.QPushButton('Done', self.render_window)
-            self.render_done_btn.setFocusPolicy(QtCore.Qt.NoFocus)
-            self.render_done_btn.move(150, 110)
-            self.render_done_btn.resize(100, 28)
-            self.render_done_btn.setEnabled(False)
-            self.render_done_btn.autoDefault()
-            self.render_done_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                               'QPushButton:pressed {font: italic; color: #d9d9d9}')
-            self.render_done_btn.clicked.connect(render_done_button)
-
-            # Progress bar
-
-            self.progress_bar = QtWidgets.QProgressBar(self.render_window)
-            self.progress_bar.move(30, 60)
-            self.progress_bar.resize(340, 28)
-            self.progress_bar.setMaximum(self.num_batch_groups)
-            self.progress_bar.setStyleSheet('QProgressBar {color: #9a9a9a; font: 14px "Discreet"; text-align: center}'
-                                            'QProgressBar:chunk {background-color: #373e47; border-top: 1px solid #242424; border-bottom: 1px solid #474747; border-left: 1px solid #242424; border-right: 1px solid #474747}')
-
-            self.render_window.show()
-
         def duplicate_render_nodes():
             import flame
 
@@ -569,7 +317,7 @@ class MultiBatchRender(object):
                     new_node.pos_y = n.pos_y
                     n.delete()
 
-        def render_batch_group():
+        def render_batch_group(batch_to_render):
 
             # Update progress bar
 
@@ -578,57 +326,64 @@ class MultiBatchRender(object):
             # Check for Render or Write node before rendering
             # If none found, skip and print message
 
-            if [node for node in self.batch_to_render.nodes if node.type in ('Render', 'Write File')] == []:
-                self.failed_render_list.append(self.batch_to_render.name)
-                print ('\n>>> %s has no render or write nodes. Skipping. <<<\n' % self.batch_to_render.name)
+            if [node for node in batch_to_render.nodes if node.type in ('Render', 'Write File')] == []:
+                self.failed_render_list.append(batch_to_render.name)
+                print (f'--> {batch_to_render.name} has no render or write nodes. Skipping. \n')
+                progress_text = f'Rendering Batch: {self.batch_groups_rendered} of {self.num_batch_groups}'
+
             else:
-                self.rendering_label.setText('Rendering Batch %d of %d ...' % (self.batch_groups_rendered, self.num_batch_groups))
-                print ('\nRendering Batch %d of %d ...\n' % (self.batch_groups_rendered, self.num_batch_groups))
+                progress_text = f'Rendering Batch: {self.batch_groups_rendered} of {self.num_batch_groups}'
+                self.progress_window.set_text(progress_text)
+                print (progress_text)
 
                 # Replace render/write nodes - fix for flame render node bug
 
                 duplicate_render_nodes()
 
-                # Render in foreground
-                # If render fails add to failed render list
+                # Render in foreground - if render fails add to failed render list
 
                 try:
-                    self.batch_to_render.render()
-                except:
-                    self.failed_render_list.append(self.batch_to_render.name)
+                    batch_to_render.render()
+                except RuntimeError:
+                    self.failed_render_list.append(batch_to_render.name)
 
-            self.progress_bar.setValue(self.batch_groups_rendered)
+            # Update progress of renders to progress window
+
+            self.progress_window.set_progress_value(self.batch_groups_rendered)
 
             if self.batch_groups_rendered == self.num_batch_groups:
-                print ('\n', '>>> rendering done <<<', '\n')
+                print ('\n--> rendering done ', '\n')
 
                 # If any renders fail, show list when done
 
                 if self.failed_render_list != []:
-
                     failed_renders = ''
-
                     for fail in self.failed_render_list:
                         failed_renders += '<dd>' + fail
 
-                    message_box('Failed Renders:<br>%s' % failed_renders)
+                    # Send list of failed renders to progress window
 
-                self.render_done_btn.setEnabled(True)
+                    self.progress_window.set_text(progress_text + f'<br><br>These batch groups failed to render:<br>{failed_renders}')
+
+                self.progress_window.enable_done_button(True)
 
                 # If Exit/Save button is pressed, exit Flame when render is done
 
                 try:
-                    if self.exit_btn.isChecked():
-                        print ('\n>>> Exiting Flame <<<\n')
+                    if self.exit_flame.isChecked():
+                        print ('\n--> Exiting Flame \n')
                         self.render_window.close()
                         flame.exit()
                 except:
                     # Render was submitted from right click menu. Do nothing.
                     pass
 
+        self.num_batch_groups = len(self.selected_batch_groups)
+
         # Open render progress window
 
-        render_progress_window()
+        self.progress_window = FlameProgressWindow('Multi-Batch Rendering...', self.num_batch_groups)
+        self.progress_window.enable_done_button(False)
 
         # Render batch groups
 
@@ -637,81 +392,37 @@ class MultiBatchRender(object):
             # Close batch groups after rendering
 
             for batch_num in self.selected_batch_groups:
-                self.batch_to_render = self.desk.batch_groups[batch_num]
-                self.batch_to_render.open()
+                batch_to_render = self.desk.batch_groups[batch_num]
+                batch_to_render.open()
 
                 try:
                     for batch in self.desktop_batch_group_object_list:
-                        if batch != self.batch_to_render:
+                        if batch != batch_to_render:
                             batch.close()
                 except:
                     pass
 
-                render_batch_group()
-
+                render_batch_group(batch_to_render)
         else:
-
             for batch_num in self.selected_batch_groups:
-                self.batch_to_render = self.desk.batch_groups[batch_num]
-                render_batch_group()
-
-    def burn_selected_batch_groups(self):
-        # self.burn_submitted = True
-
-        for batch in self.selection:
-            self.submit_burn_render(batch)
-
-    def submit_burn_render(self, batch_to_render):
-
-        # Submit renders to Burn
-
-        print ('submitting to burn...\n')
-
-        try:
-            batch_to_render.render(render_option='Burn')
-        except:
-            print ('\n>>> Burn Submit Failed <<<\n')
+                batch_to_render = self.desk.batch_groups[batch_num]
+                render_batch_group(batch_to_render)
 
 #-------------------------------------#
 
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
-
 def render_selected(selection):
 
-    print ('\n', '>' * 20, 'multi batch render %s - render selected' % VERSION, '<' * 20, '\n')
+    print ('\n')
+    print ('>' * 20, f'multi batch render {VERSION} - render selected', '<' * 20, '\n')
 
     script = MultiBatchRender(selection)
     script.render_selected_batch_groups()
     return script
 
-def burn_selected(selection):
-
-    print ('\n', '>' * 20, 'multi batch render %s - burn selected' % VERSION, '<' * 20, '\n')
-
-    script = MultiBatchRender(selection)
-    script.burn_selected_batch_groups()
-
 def main_render_window(selection):
 
-    print ('\n', '>' * 20, ' multi batch render %s ' % VERSION, '<' * 20, '\n')
+    print ('\n')
+    print ('>' * 20, f'multi batch render {VERSION}', '<' * 20, '\n')
 
     script = MultiBatchRender(selection)
     script.main_window()
@@ -740,7 +451,7 @@ def get_media_panel_custom_ui_actions():
                     'name': 'Render Selected Batchgroups',
                     'isVisible': scope_batch,
                     'execute': render_selected,
-                    'minimumVersion': '2020'
+                    'minimumVersion': '2022'
                 }
             ]
         }
@@ -755,7 +466,7 @@ def get_batch_custom_ui_actions():
                 {
                     'name': 'Multi-Batch Render',
                     'execute': main_render_window,
-                    'minimumVersion': '2020'
+                    'minimumVersion': '2022'
                 }
             ]
         }

@@ -1,10 +1,10 @@
 '''
 Script Name: Create Projection
-Script Version: 2.1
-Flame Version: 2021.2
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Version: 2.3
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 07.09.19
-Update Date: 11.15.21
+Update Date: 03.15.22
 
 Custom Action Type: Flame Main Menu
 
@@ -12,7 +12,7 @@ Description:
 
     Create projector or diffuse projections in Action from selected action layer
 
-    Scene must have another camera added other than just the default camera
+    Action must have another camera added other than just the default camera
 
     Menus:
 
@@ -25,6 +25,16 @@ To install:
     Copy script into /opt/Autodesk/shared/python/create_projection
 
 Updates:
+
+    v2.3 03.15.22
+
+        Updated UI for Flame 2023
+
+        Moved UI widgets to external file
+
+    v2.2 01.14.22
+
+        Added message when default camera is selected and should be changed to 3d camera
 
     v2.1 11.15.21
 
@@ -51,9 +61,10 @@ Updates:
         Code Cleanup
 '''
 
-from __future__ import print_function
+from flame_widgets_create_projection import FlameMessageWindow
+import os, shutil
 
-VERSION = 'v2.1'
+VERSION = 'v2.3'
 
 def find_line(action_filename, item):
 
@@ -158,7 +169,11 @@ def get_result_camera():
 
     item_value = get_line_value(action_filename, result_cam_number_line)
     result_cam_number = item_value
-    # print ('result_cam_number:', result_cam_number)
+
+    try:
+        int(result_cam_number)
+    except:
+        return FlameMessageWindow('Create Projection - Error', 'error', 'Action result camera should be set to camera other than default camera')
 
     result_cam_child_num = 'Child ' + result_cam_number
     # print ('result_cam_child_num:', result_cam_child_num)
@@ -170,8 +185,6 @@ def get_result_camera():
     # Get name of node parented to camera node
 
     camera_parent_name = find_parent(child_num)
-
-    # print ('\n >>> done getting result camera <<<\n')
 
     return camera_parent_name, action_filename, action_node
 
@@ -285,7 +298,7 @@ def create_cur_frame_camera(projection_type):
 
         camera_exists = None
 
-    print ('\n>>> current frame camera created <<<\n')
+    print ('\n--> current frame camera created \n')
 
     return new_camera, new_camera_name, camera_exists, new_camera_index
 
@@ -310,7 +323,6 @@ def get_action_node():
 
 def save_action_node():
     import flame
-    import os
 
     # Get current action node
 
@@ -318,7 +330,7 @@ def save_action_node():
 
     # Save Action node
 
-    temp_folder = '/opt/Autodesk/shared/python/temp_action'
+    temp_folder = '/opt/Autodesk/shared/python/create_projection/temp_action'
     save_action_path = os.path.join(temp_folder, action_node_name)
     # print ('save_action_path:', save_action_path)
 
@@ -335,7 +347,7 @@ def save_action_node():
     action_filename = save_action_path + '.action'
     # print ('action_filename:', action_filename, '\n')
 
-    # print ('\n>>> action node saved <<<\n')
+    # print ('\n--> action node saved \n')
 
     return save_action_path, action_filename, action_node, action_node_name, temp_folder
 
@@ -371,9 +383,8 @@ def name_node(node_type, node_num=0):
 #--------------------------------------------#
 
 def create_projector_projection(selection):
-    import shutil
 
-    print ('\n', '>' * 20, 'create projection %s - projector projection' % VERSION, '<' * 20, '\n')
+    print ('\n', '>' * 20, f'create projection {VERSION} - projector projection', '<' * 20, '\n')
 
     # Define projection type for camera creation - diffuse will not duplicate cameras, projection will
 
@@ -541,11 +552,11 @@ def create_projector_projection(selection):
     contents = edit_action.readlines()
     edit_action.close()
 
-    contents[projector_pos_x_line_num] = '        PosX %s\n' % new_projector_pos_x
-    contents[projector_pos_y_line_num] = '        PosY %s\n' % new_projector_pos_y
+    contents[projector_pos_x_line_num] = f'        PosX {new_projector_pos_x}\n'
+    contents[projector_pos_y_line_num] = f'        PosY {new_projector_pos_y}\n'
 
-    contents[new_camera_pos_x_line_num] = '        PosX %s\n' % new_camera_pos_x
-    contents[new_camera_pos_y_line_num] = '        PosY %s\n' % new_camera_pos_y
+    contents[new_camera_pos_x_line_num] = f'        PosX {new_camera_pos_x}\n'
+    contents[new_camera_pos_y_line_num] = f'        PosY {new_camera_pos_y}\n'
 
     edit_action = open(action_filename, 'w')
     contents = ''.join(contents)
@@ -560,7 +571,7 @@ def create_projector_projection(selection):
 
     shutil.rmtree(temp_folder)
 
-    print ('\n>>> created projector projection <<<\n')
+    print ('\n--> created projector projection \n')
 
     return action_node, projector_name
 
@@ -583,10 +594,9 @@ def create_light_linked_projector_projection(selection):
     action_node.connect_nodes(parent_node, child_node, link_type='Light')
 
 def create_diffuse_projection(selection):
-    import shutil
     import flame
 
-    print ('\n', '>' * 20, 'create projection %s - diffuse projection' % VERSION, '<' * 20, '\n')
+    print ('\n', '>' * 20, f'create projection {VERSION} - diffuse projection', '<' * 20, '\n')
 
     # Define projection type for camera creation - diffuse will not duplicate cameras, projection will
 
@@ -696,10 +706,10 @@ def create_diffuse_projection(selection):
     edit_action.close()
 
     if not camera_exists:
-        contents[camera_pos_x_line] = '        PosX %s\n' % node_camera_pos_x
-        contents[camera_pos_y_line] = '        PosY %s\n' % node_camera_pos_y
+        contents[camera_pos_x_line] = f'        PosX {node_camera_pos_x}\n'
+        contents[camera_pos_y_line] = f'        PosY {node_camera_pos_y}\n'
 
-    contents[diffuse_projection_camera_line_num] = '                        MapCamera %s\n' % str(int(new_camera_index) - camera_index_fix)
+    contents[diffuse_projection_camera_line_num] = f'                        MapCamera {str(int(new_camera_index) - camera_index_fix)}\n'
     contents[diffuse_projection_map_line_num] = '                        MapCoordType PROJECTION\n'
 
     edit_action = open(action_filename, 'w')
@@ -715,7 +725,7 @@ def create_diffuse_projection(selection):
 
     shutil.rmtree(temp_folder)
 
-    print ('\n>>> created diffuse projection <<<\n')
+    print ('\n--> created diffuse projection \n')
 
 # Scopes
 #-------------------------------------#
@@ -742,19 +752,19 @@ def get_action_custom_ui_actions():
                     'name': 'Projector Projection',
                     'isVisible': scope_geo,
                     'execute': create_projector_projection,
-                    'minimumVersion': '2020.2'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Projector Light-Linked Projection',
                     'isVisible': scope_geo,
                     'execute': create_light_linked_projector_projection,
-                    'minimumVersion': '2020.2'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Diffuse Projection',
                     'isVisible': scope_geo,
                     'execute': create_diffuse_projection,
-                    'minimumVersion': '2020.2'
+                    'minimumVersion': '2022'
                 }
             ]
         }

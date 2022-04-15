@@ -1,0 +1,721 @@
+Module Text
+Program Flame
+Version 2022.1.pr145
+FileVersion 4.19999981
+CreationDate Thu Oct 14 17:33:12 2021
+
+FrameWidth 1080
+FrameHeight 1920
+FrameAspectRatio 0.5625
+
+	CurrentFrame 1
+	MaxFrames -1
+	UpdateMode yes
+	PlayLockMode no
+	UndoLevels 10
+	FieldRenderingModeAuto 2
+	GaussianBlur yes
+	GlobalBlur yes
+	BlurOn no
+	BlurLevel 5
+	AntiAliasingLevel 0
+	AntiAliasingSoftness 1
+	MultiSample 0
+	PreRender 1
+	CropBox no
+	CropLeft 0
+	CropRight 0
+	CropBottom 0
+	CropTop 0
+	MatteKey yes
+End
+NumberOfLayer 8
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 140.625
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 12
+Text 73 83 67 73 58 32 60 73 83 67 73 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 84.375
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 10
+Text 84 82 84 58 32 60 84 82 84 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 28.125
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 14
+Text 84 73 84 76 69 58 32 60 84 73 84 76 69 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value -28.125
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 12
+Text 68 65 84 69 58 32 60 68 65 84 69 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value -84.375
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 16
+Text 65 71 69 78 67 89 58 32 60 65 71 69 78 67 89 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value -140.625
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 16
+Text 67 76 73 69 78 84 58 32 60 67 76 73 69 78 84 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 196.875
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 27
+Text 84 111 100 97 121 115 32 68 97 116 101 58 32 60 67 85 82 82 69 78 84 95 68 65 84 69 62
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+
+#
+# text layer channels
+#
+Channel translation/x
+	Extrapolation constant
+	Value -432
+	End
+Channel translation/y
+	Extrapolation constant
+	Value 243
+	End
+Channel translation/speed
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/x
+	Extrapolation constant
+	Value 0
+	End
+Channel shear/y
+	Extrapolation constant
+	Value 0
+	End
+Channel scale/x
+	Extrapolation constant
+	Value 56.25
+	End
+Channel scale/y
+	Extrapolation constant
+	Value 56.25
+	End
+Channel rotation
+	Extrapolation constant
+	Value 0
+	End
+ChannelEnd
+TransformHasOffset no
+End
+
+#
+# text layer data
+#
+ExtraChannels
+Channel transparency
+	Extrapolation constant
+	Value 100
+	Uncollapsed
+	End
+ChannelEnd
+BlurShadow no
+BlurShadowFactor 5
+DocWidth 1535
+DocHeight 0
+LayerAxisLocked no
+DocBackground no
+ColourBack 100 100 100 100
+DocInterpType 4
+FontType 4
+FontName /opt/Autodesk/font/System Fonts/Arial.ttf
+FontSize 50
+UnderlineWidth 50
+FontStyle Fill
+ColourFill 100 100 100 100
+ColourOut 0 0 100 100
+ColourDrop 0 0 0 100
+ColorUnderline 100 100 100 100
+TextLength 4
+Text 49 54 120 57
+ParagraphType Last
+
+#
+# layer paragraph channels
+#
+ChannelEnd
+TransformHasOffset no
+End
+#
+# layer paragraph ruler
+#
+Justification Justify_Left
+LeftMargin 0
+LeftIndent 0
+RightMargin 1535
+End
+EndLayer
+EndGen

@@ -1,10 +1,10 @@
 '''
 Script Name: Delete Folders
-Script Version: 2.1
+Script Version: 2.2
 Flame Version: 2022
-Written by: Michael Vaglienty - michael@slaytan.net
+Written by: Michael Vaglienty
 Creation Date: 10.04.20
-Update Date: 05.19.21
+Update Date: 03.14.22
 
 Custom Action Type: MediaHub - Files
 
@@ -12,7 +12,9 @@ Description:
 
     Delete one or more folders along with contents in the MediaHub Files view
 
-    *** WARNING - THIS WILL DELETE ALL SELECTED FOLDERS/SUBFOLDERS WITHOUT CONFIRMATION ***
+    *** WARNING - THIS WILL DELETE ALL SELECTED FOLDERS/SUBFOLDERS - THIS IS NOT UNDOABLE***
+
+Menu:
 
     Right-click with folders selected -> Delete... -> Delete Selected Folders
 
@@ -22,28 +24,34 @@ To install:
 
 Updates:
 
+v2.2 03.14.22
+
+    Added delete confirmation
+
 v2.1 05.19.21
 
     Updated to be compatible with Flame 2022/Python 3.7
 '''
 
-from __future__ import print_function
+from flame_widgets_delete_folders import FlameMessageWindow
+import shutil
 
-VERSION = 'v2.1'
+VERSION = 'v2.2'
 
 def delete_folders(selection):
-    import shutil
     import flame
 
-    print ('\n', '>' * 20, 'delete folders %s' % VERSION, '<' * 20, '\n')
+    print ('\n')
+    print ('>' * 20, f'delete folders {VERSION}', '<' * 20, '\n')
 
-    for folder in selection:
-        print ('deleting:', folder.path[:-1])
-        shutil.rmtree(folder.path)
+    if FlameMessageWindow('Confirm Delete Operation', 'warning', f'Delete selected folder(s)?<br><br>All files and sub-folders in selected folder(s) will be deleted.<br><br>This cannot be undone.'):
+        for folder in selection:
+            print ('deleting:', folder.path[:-1])
+            shutil.rmtree(folder.path)
 
-    flame.execute_shortcut("Refresh the MediaHub's Folders and Files")
+        flame.execute_shortcut("Refresh the MediaHub's Folders and Files")
 
-    print ('\ndone.\n')
+        print ('\ndone.\n')
 
 def scope_folder(selection):
 

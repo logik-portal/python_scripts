@@ -1,10 +1,10 @@
 '''
 Script Name: Export Frame
-Script Version: 1.3
-Flame Version: 2021.2
+Script Version: 1.4
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 10.11.21
-Update Date: 11.02.21
+Update Date: 04.07.22
 
 Custom Action Type: Media Panel/Player
 
@@ -27,9 +27,13 @@ Description:
 
     Openning the MediaHub or a Finder window after the export is completed can be set in the script setup.
 
-    Menus:
+Menus:
+
+    Setup:
 
         Flame Main Menu -> pyFlame -> Export Current Frame Setup
+
+    To Export:
 
         Right-click on clip, sequence, or player view -> Export... -> Export Current Frame
         Right-click on clip, sequence, or player view -> Export... -> Export Marker Frames
@@ -40,6 +44,12 @@ To install:
 
 Updates:
 
+    v1.4 04.07.22
+
+        Updated UI for Flame 2023
+
+        UI Widgets moved to external file
+
     v1.3 11.02.21
 
         Fixed shot name token compatibility to work with python 3.7
@@ -48,205 +58,21 @@ Updates:
 
         Removed custom path menus. Custom export paths can be turned on in Setup.
 
-        Known bug - right clicking on clip in schematic reel will cause flame to crash.
+        Known bug - right clicking on clip in schematic reel will cause Flame to crash.
 
     v1.1 10.12.21
 
         Fixed SEQNAME token
 '''
 
-from __future__ import print_function
-from PySide2 import QtWidgets, QtCore
-from functools import partial
+from PySide2 import QtWidgets
 import xml.etree.ElementTree as ET
 import re, os, ast, datetime, platform, subprocess
+from flame_widgets_export_frame import FlameLabel, FlameButton, FlameLineEdit, FlamePushButton, FlamePushButtonMenu, FlameTokenPushButton, FlameMessageWindow, FlameWindow
 
-VERSION = 'v1.3'
+VERSION = 'v1.4'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/export_frame'
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-    Options for normal, label with background color, and label with background color and outline
-    """
-
-    def __init__(self, label_name, parent, label_type='normal', *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent)
-        self.setMinimumSize(150, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #393939; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'outline':
-            # self.setAlignment(QtCore.Qt.AlignLeft)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-    """
-
-    def __init__(self, button_name, connect, parent, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumSize(QtCore.QSize(150, 28))
-        self.setMaximumSize(QtCore.QSize(150, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(connect)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-class FlameLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Line Edit Widget
-
-    Main window should include this: window.setFocusPolicy(QtCore.Qt.StrongFocus)
-
-    To use:
-
-    line_edit = FlameLineEdit('Some text here', window)
-    """
-
-    def __init__(self, text, parent_window, *args, **kwargs):
-        super(FlameLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        # self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:focus {background-color: #474e58}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-
-    To use:
-
-    pushbutton = FlamePushButton(' Button Name', bool, window)
-    """
-
-    def __init__(self, button_name, button_checked, parent_window, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setCheckable(True)
-        self.setChecked(button_checked)
-        self.setMinimumSize(150, 28)
-        self.setMaximumSize(150, 28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #424142, stop: .94 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #4f4f4f, stop: .94 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #383838, stop: .94 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlamePushButtonMenu(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Menu Push Button Widget
-
-    To use:
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu('push_button_name', push_button_menu_options, window)
-
-    or
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu(push_button_menu_options[0], push_button_menu_options, window)
-    """
-
-    def __init__(self, button_name, menu_options, parent_window, *args, **kwargs):
-        super(FlamePushButtonMenu, self).__init__(*args, **kwargs)
-        from functools import partial
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(150)
-        # self.setMaximumWidth(150)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        def create_menu(option):
-            self.setText(option)
-
-        pushbutton_menu = QtWidgets.QMenu(parent_window)
-        pushbutton_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        pushbutton_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-        for option in menu_options:
-            pushbutton_menu.addAction(option, partial(create_menu, option))
-
-        self.setMenu(pushbutton_menu)
-
-class FlameTokenPushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Token Push Button Widget
-
-    To use:
-
-    token_dict = {'Token 1': '<Token1>', 'Token2': '<Token2>'}
-    token_push_button = FlameTokenPushButton('Add Token', token_dict, token_dest, window)
-
-    token_dict: Key in dictionary is what will show in button menu.
-                Value in dictionary is what will be applied to the button destination
-    token_dest: Where the Value of the item selected will be applied such as a LineEdit
-    """
-
-    def __init__(self, button_name, token_dict, token_dest, parent, *args, **kwargs):
-        super(FlameTokenPushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(150)
-        self.setMaximumWidth(150)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #6a6a6a}')
-
-        def token_action_menu():
-            from functools import partial
-
-            def insert_token(token):
-                for key, value in token_dict.items():
-                    if key == token:
-                        token_name = value
-                        token_dest.insert(token_name)
-
-            for key, value in token_dict.items():
-                token_menu.addAction(key, partial(insert_token, key))
-
-        token_menu = QtWidgets.QMenu(parent)
-        token_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        token_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-        self.setMenu(token_menu)
-
-        token_action_menu()
-
-#-------------------------------------#
 
 class ExportFrame(object):
 
@@ -254,17 +80,17 @@ class ExportFrame(object):
         import flame
 
         print ('''
- ______                       _      ______
-|  ____|                     | |    |  ____|
-| |__  __  ___ __   ___  _ __| |_   | |__ _ __ __ _ _ __ ___   ___
-|  __| \ \/ / '_ \ / _ \| '__| __|  |  __| '__/ _` | '_ ` _ \ / _ \\
-| |____ >  <| |_) | (_) | |  | |_   | |  | | | (_| | | | | | |  __/
-|______/_/\_\ .__/ \___/|_|   \__|  |_|  |_|  \__,_|_| |_| |_|\___|
+ ______                       _    ______
+|  ____|                     | |  |  ____|
+| |__  __  ___ __   ___  _ __| |_ | |__ _ __ __ _ _ __ ___   ___
+|  __| \ \/ / '_ \ / _ \| '__| __||  __| '__/ _` | '_ ` _ \ / _ \\
+| |____ >  <| |_) | (_) | |  | |_ | |  | | | (_| | | | | | |  __/
+|______/_/\_\ .__/ \___/|_|   \__||_|  |_|  \__,_|_| |_| |_|\___|
             | |
             |_|
         ''')
 
-        print ('>' * 24, 'export frame %s' % VERSION, '<' * 24, '\n')
+        print ('>' * 24, f'export frame {VERSION}', '<' * 24, '\n')
 
         self.selection = selection
 
@@ -313,7 +139,7 @@ class ExportFrame(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
                 print ('>>> config file does not exist, creating new config file <<<')
@@ -345,11 +171,9 @@ class ExportFrame(object):
 
     def setup(self):
 
-        def export_dest_toggle(dest):
+        def export_dest_toggle():
 
-            self.export_dest_menu_push_button.setText(dest)
-
-            if dest == 'Browse to Path':
+            if self.export_dest_menu_push_button.text() == 'Browse to Path':
                 self.custom_path_settings_label.setEnabled(False)
                 self.custom_export_path_label.setEnabled(False)
                 self.custom_export_path_lineedit.setEnabled(False)
@@ -403,32 +227,21 @@ class ExportFrame(object):
 
                 print ('Done.\n')
 
-        self.setup_window = QtWidgets.QWidget()
-        self.setup_window.setMinimumSize(QtCore.QSize(900, 420))
-        self.setup_window.setMaximumSize(QtCore.QSize(900, 420))
-        self.setup_window.setWindowTitle('Export Frame Setup %s' % VERSION)
-        self.setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.setup_window.setStyleSheet('background-color: #272727')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.setup_window.move((resolution.width() / 2) - (self.setup_window.frameSize().width() / 2),
-                               (resolution.height() / 2) - (self.setup_window.frameSize().height() / 2))
+        gridbox = QtWidgets.QGridLayout()
+        self.setup_window = FlameWindow(f'Export Frame - Setup <small>{VERSION}', gridbox, 900, 490)
 
         # Labels
 
-        self.export_settings_label = FlameLabel('Export Settings', self.setup_window, label_type='background')
-        self.after_export_label = FlameLabel('After Export', self.setup_window, label_type='normal')
-        self.export_dest_label = FlameLabel('Export Destination', self.setup_window, label_type='normal')
-        self.custom_path_settings_label = FlameLabel('Custom Path Settings', self.setup_window, label_type='background')
-        self.custom_export_path_label = FlameLabel('Custom Export Path', self.setup_window, label_type='normal')
-        self.export_preset_label = FlameLabel('Export Preset', self.setup_window, label_type='normal')
+        self.export_settings_label = FlameLabel('Export Settings', label_type='underline')
+        self.after_export_label = FlameLabel('After Export')
+        self.export_dest_label = FlameLabel('Export Destination')
+        self.custom_path_settings_label = FlameLabel('Custom Path Settings', label_type='underline')
+        self.custom_export_path_label = FlameLabel('Custom Export Path')
+        self.export_preset_label = FlameLabel('Export Preset')
 
         # LineEdits
 
-        self.custom_export_path_lineedit = FlameLineEdit(self.custom_export_path, self.setup_window)
+        self.custom_export_path_lineedit = FlameLineEdit(self.custom_export_path)
 
         # Batch Path Token Pushbutton Menu
 
@@ -439,43 +252,32 @@ class ExportFrame(object):
                              'Year (YY)': '<YY>', 'Month': '<MM>', 'Day': '<DD>', 'Hour': '<Hour>', 'Minute': '<Minute>',
                              'AM/PM': '<AMPM>', 'am/pm': '<ampm>'}
 
-        self.custom_token_push_btn = FlameTokenPushButton('Add Token', custom_token_dict, self.custom_export_path_lineedit, self.setup_window)
+        self.custom_token_push_btn = FlameTokenPushButton('Add Token', custom_token_dict, self.custom_export_path_lineedit)
 
         # Menu Push Buttons
 
-        self.export_preset_menu_push_button = FlamePushButtonMenu(self.export_preset, self.shared_presets, self.setup_window)
+        self.export_preset_menu_push_button = FlamePushButtonMenu(self.export_preset, self.shared_presets)
 
         # Export Destination Menu Push Button
 
-        self.export_dest_menu = QtWidgets.QMenu(self.setup_window)
-        self.export_dest_menu.addAction('Browse to Path', partial(export_dest_toggle, 'Browse to Path'))
-        self.export_dest_menu.addAction('Use Custom Path', partial(export_dest_toggle, 'Use Custom Path'))
-        self.export_dest_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                            'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-        self.export_dest_menu_push_button = QtWidgets.QPushButton(self.export_destination, self.setup_window)
-        self.export_dest_menu_push_button.setMenu(self.export_dest_menu)
-        self.export_dest_menu_push_button.setMinimumSize(QtCore.QSize(150, 28))
-        self.export_dest_menu_push_button.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.export_dest_menu_push_button.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                                        'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
+        export_menu_options = ['Browse to Path', 'Use Custom Path']
+        self.export_dest_menu_push_button = FlamePushButtonMenu(self.export_destination, export_menu_options, menu_action=export_dest_toggle)
 
         # Push buttons
 
-        self.reveal_finder_push_button = FlamePushButton(' Reveal in Finder', self.reveal_in_finder, self.setup_window)
-        self.reveal_mediahub_push_button = FlamePushButton(' Reveal in MediaHub', self.reveal_in_mediahub, self.setup_window)
+        self.reveal_finder_push_button = FlamePushButton(' Reveal in Finder', self.reveal_in_finder)
+        self.reveal_mediahub_push_button = FlamePushButton(' Reveal in MediaHub', self.reveal_in_mediahub)
 
         #  Buttons
 
-        self.browse_btn = FlameButton('Browse', custom_path_browse, self.setup_window)
-        self.save_btn = FlameButton('Save', save_config, self.setup_window)
-        self.cancel_btn = FlameButton('Cancel', self.setup_window.close, self.setup_window)
+        self.browse_btn = FlameButton('Browse', custom_path_browse)
+        self.save_btn = FlameButton('Save', save_config)
+        self.cancel_btn = FlameButton('Cancel', self.setup_window.close)
 
-        export_dest_toggle(self.export_destination)
+        export_dest_toggle()
 
-        # Setup window layout
+        # UI Widget Layout
 
-        gridbox = QtWidgets.QGridLayout()
         gridbox.setMargin(20)
 
         gridbox.setRowMinimumHeight(1, 30)
@@ -507,14 +309,12 @@ class ExportFrame(object):
         gridbox.addWidget(self.save_btn, 12, 5)
         gridbox.addWidget(self.cancel_btn, 13, 5)
 
-        self.setup_window.setLayout(gridbox)
-
         self.setup_window.show()
 
         return self.setup_window
 
     def export_current_frame(self):
-        # import flame
+        import flame
 
         marker = ''
 
@@ -530,13 +330,13 @@ class ExportFrame(object):
                 print ('\n')
                 self.post_export(export_path)
             else:
-                print ('>>> Export cancelled <<<\n')
+                print ('--> Export cancelled\n')
 
         else:
             # Check path in config file
 
             if self.custom_export_path == '/':
-                return message_box('<center>Add custom path in script setup. <br><br>Flame Main Menu -> pyFlame -> <br>Export Frame Setup')
+                return FlameMessageWindow('Error', 'error', 'Add export path in script setup.<br><br>Flame Main Menu -> pyFlame -> Export Frame Setup')
 
             # Export frames
 
@@ -569,13 +369,13 @@ class ExportFrame(object):
                 print ('\n')
                 self.post_export(export_path)
             else:
-                print ('>>> Export cancelled <<<\n')
+                print ('--> Export cancelled\n')
 
         else:
             # Check saved settings
 
             if self.custom_export_path == '/':
-                return message_box('<center>Add custom path in script setup. <br><br>Flame Main Menu -> pyFlame -> <br>Export Frame Setup')
+                return FlameMessageWindow('Error', 'error', 'Add custom path in script setup. <br><br>Flame Main Menu -> pyFlame -> Export Frame Setup')
 
             for clip in self.selection:
                 for marker in clip.markers:
@@ -632,7 +432,7 @@ class ExportFrame(object):
                 duplicate_clip.out_mark = clip.current_time.get_value() + 1
             exporter.export(duplicate_clip, export_preset_path, export_path)
         finally:
-            print ('    Exported:', str(clip.name)[1:-1], 'at %s' % duplicate_clip.in_mark)
+            print ('    Exported:', str(clip.name)[1:-1], f'at {duplicate_clip.in_mark}')
             flame.delete(duplicate_clip)
 
 #-------------------------------------#
@@ -651,11 +451,11 @@ class ExportFrame(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('>>> config saved <<<\n')
+            print ('--> config saved\n')
 
         # Select export folder
 
-        message_box('Select still image export path')
+        FlameMessageWindow('Select Path', 'message', 'Select still image export path')
 
         # Open folder browse window
 
@@ -762,14 +562,14 @@ class ExportFrame(object):
         if self.reveal_in_mediahub:
             self.open_mediahub(export_path)
 
-        message_box('Export done.')
+        FlameMessageWindow('Operation Complete', 'message', f'Frame(s) exported: {export_path}')
 
     def open_mediahub(self, export_path):
         import flame
 
         flame.go_to('MediaHub')
         flame.mediahub.files.set_path(export_path)
-        print ('>>> Media Hub opened <<<\n')
+        print ('--> Media Hub opened\n')
 
     def open_finder(self, export_path):
 
@@ -780,12 +580,12 @@ class ExportFrame(object):
 
 #-------------------------------------#
 
-def export_select_path(selection):
+def export_frame(selection):
 
     export = ExportFrame(selection)
     return export.export_current_frame()
 
-def export_marker_select_path(selection):
+def export_markers(selection):
 
     export = ExportFrame(selection)
     return export.export_marker_frame()
@@ -797,31 +597,11 @@ def script_setup(selection):
 
 #-------------------------------------#
 
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    message = message.replace('<br>', '')
-    message = message.replace('<center>', '')
-
-    print ('>>> %s\n' % message)
-
 def scope_clip(selection):
     import flame
 
     for item in selection:
         if isinstance(item, (flame.PyClip, flame.PySequence)):
-            # if item.parent.type == "Schematic":
             return True
     return False
 
@@ -846,14 +626,14 @@ def get_media_panel_custom_ui_actions():
                 {
                     'name': 'Export Current Frame',
                     'isVisible': scope_clip,
-                    'execute': export_select_path,
-                    'minimumVersion': '2021.2'
+                    'execute': export_frame,
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Export Marker Frames',
                     'isVisible': scope_markers,
-                    'execute': export_marker_select_path,
-                    'minimumVersion': '2021.2'
+                    'execute': export_markers,
+                    'minimumVersion': '2022'
                 }
             ]
         }
@@ -868,34 +648,8 @@ def get_main_menu_custom_ui_actions():
                 {
                     'name': 'Export Frame Setup',
                     'execute': script_setup,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '2022'
                 }
             ]
         }
     ]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

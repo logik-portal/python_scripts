@@ -1,16 +1,18 @@
 '''
 Script Name: Add GMask
-Script Version: 2.1
-Flame Version: 2020
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Version: 2.2
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 01.05.20
-Update Date: 05.19.21
+Update Date: 03.16.22
 
 Custom Action Type: Batch
 
 Description:
 
-    Add GMask or GMask Tracer node in batch or connected to any node with matte input
+    Adds right-click menu to batch to add GMask or GMask Tracer node to batch
+
+Menus:
 
     Right click anywhere in batch or on any node with a matte input -> Add GMask... -> Add GMask Tracer Node
 
@@ -22,16 +24,18 @@ To install:
 
 Updates:
 
-v2.1 05.19.21
+    v2.2 03.16.22
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Fixed float position error in 2022.3
 
-v1.1 05.08.21
+    v2.1 05.19.21
 
-    Gmask nodes can now be added loose in batch at cursor position
+        Updated to be compatible with Flame 2022/Python 3.7
+
+    v1.1 05.08.21
+
+        Gmask nodes can now be added loose in batch at cursor position
 '''
-
-from __future__ import print_function
 
 VERSION = 'v2.1'
 
@@ -75,11 +79,11 @@ def create_gmask_node(selection, gmask_type):
         gmask_node = flame.batch.create_node(gmask_type)
 
         if connected_node_pos_x != '':
-            gmask_node.pos_x = (connected_node_pos_x - selected_node.pos_x)/2 + selected_node.pos_x
+            gmask_node.pos_x = int((connected_node_pos_x - selected_node.pos_x)/2 + selected_node.pos_x)
         else:
-            gmask_node.pos_x = selected_node.pos_x - 250
+            gmask_node.pos_x = int(selected_node.pos_x - 250)
 
-        gmask_node.pos_y = selected_node.pos_y - 100
+        gmask_node.pos_y = int(selected_node.pos_y - 100)
 
         # Get selected node matte input socket name
 
@@ -120,7 +124,8 @@ def add_gmask_tracer(selection):
 
     gmask_type = 'GMask Tracer'
 
-    print ('\n', '>' * 20, 'add gmask %s - %s' % (VERSION, gmask_type), '<' * 20, '\n')
+    print ('\n')
+    print ('>' * 20, f'add gmask {VERSION} - {gmask_type}', '<' * 20, '\n')
 
     create_gmask_node(selection, gmask_type)
 
@@ -128,7 +133,8 @@ def add_gmask(selection):
 
     gmask_type = 'GMask'
 
-    print ('\n', '>' * 20, 'add gmask %s - %s' % (VERSION, gmask_type), '<' * 20, '\n')
+    print ('\n')
+    print ('>' * 20, f'add gmask {VERSION} - {gmask_type}', '<' * 20, '\n')
 
     create_gmask_node(selection, gmask_type)
 
@@ -157,13 +163,13 @@ def get_batch_custom_ui_actions():
                     'name': 'Add GMask Tracer Node',
                     'isVisible': scope,
                     'execute': add_gmask_tracer,
-                    'minimumVersion': '2020'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Add GMask Node',
                     'isVisible': scope,
                     'execute': add_gmask,
-                    'minimumVersion': '2020'
+                    'minimumVersion': '2022'
                 }
             ]
         }

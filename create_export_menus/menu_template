@@ -1,10 +1,10 @@
 '''
 Script Name: <PresetName> Export Preset Menu Script
-Script Version: 3.5
-Flame Version: 2020.1
+Script Version: 3.7
+Flame Version: <FlameMinMaxVersion>
 Written by: Michael Vaglienty
 Creation Date: 04.27.20
-Update Date: 10.16.21
+Update Date: 01.06.22
 
 Custom Action Type: Media Panel
 
@@ -43,7 +43,6 @@ def export_clips(selection):
             # Get sequence name abreviation from shot name
 
             seq_name = re.split('[^a-zA-Z]', name)[0]
-            print ('seq_name:', seq_name)
 
             return seq_name
 
@@ -62,6 +61,13 @@ def export_clips(selection):
                 shot_name = get_shot_name(clip_name)
         except:
             shot_name = ''
+
+        # Get tape name
+
+        try:
+            tape_name = str(clip.versions[0].tracks[0].segments[0].tape_name)
+        except:
+            tape_name = ''
 
         # Get Seq Name
 
@@ -88,8 +94,9 @@ def export_clips(selection):
         new_export_path = re.sub('<Minute>', minute, new_export_path)
         new_export_path = re.sub('<AMPM>', ampm_caps, new_export_path)
         new_export_path = re.sub('<ampm>', ampm, new_export_path)
+        new_export_path = re.sub('<TapeName>', tape_name, new_export_path)
 
-        print ('new_export_path:', new_export_path)
+        print ('new_export_path:', new_export_path, '\n')
 
         return new_export_path
 
@@ -184,7 +191,8 @@ def get_media_panel_custom_ui_actions():
                     'name': '<PresetName>',
                     'isVisible': scope_clip,
                     'execute': export_clips,
-                    'minimumVersion': '2021.2'
+                    'minimumVersion': '<FlameMinMaxVersion>',
+                    'maximumVersion': '<FlameMinMaxVersion>'
                 }
             ]
         }

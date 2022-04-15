@@ -1,43 +1,62 @@
 '''
-Script Name: Add Batch Nodes
-Script Version: 3.1
-Flame Version: 2021
+Script Name: Batch Nodes
+Script Version: 3.3
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 04.18.20
-Update Date: 10.26.21
+Update Date: 03.31.22
 
 Custom Action Type: Batch / Flame Main Menu
 
 Description:
 
-    Create menus that can add nodes to batch
+    Add menus to batch right-click for your favorite nodes.
 
-    Works with standard batch nodes/matchboxes/ofx
+    Works with standard batch nodes/matchboxes/ofx.
+
+    OFX can only be added by right clicking on an existing node in batch.
+
+    Nodes added by right-clicking on them in batch will be saved with current settings.
 
     All created node menu scripts are saved in /opt/Autodesk/user/YOURUSER/python/batch_node_menus
 
-    Menus:
+Menus:
 
-        To create/rename/delete menus from node lists:
-        Flame Main Menu -> pyFlame -> Add Batch Nodes Setup
+    To create/rename/delete menus from node lists:
 
-        To create menus for nodes with settings applied in batch:
-        Right-click on node in batch -> Add Batch Node Menu... -> Create Menu For Selected Node
+        Flame Main Menu -> pyFlame -> Batch Nodes Setup
 
-        To create menus for ofx nodes:
-        Right-click on node in batch -> Add Batch Node Menu... -> Create Menu Dor Selected Node
+    To create menus for nodes with settings applied in batch:
 
-        To add node from menu to batch:
-        Right-click in batch -> Add Batch Nodes... -> Select Node
+        Right-click on node in batch -> Batch Nodes... -> Create Menu For Selected Node
 
-        To add node from menu to batch connected to selected node:
-        Right-click on node in batch -> Add Batch Nodes... -> Select Node
+    To create menus for ofx nodes:
+
+        Right-click on node in batch -> Batch Nodes... -> Create Menu For Selected Node
+
+    To add node from menu to batch:
+
+        Right-click in batch -> Batch Nodes... -> Select Node to be added
+
+    To add node from menu to batch connected to selected node:
+
+        Right-click on node in batch -> Batch Nodes... -> Select Node to be added
 
 To install:
 
-    Copy script into /opt/Autodesk/shared/python/add_batch_nodes
+    Copy script into /opt/Autodesk/shared/python/batch_nodes
 
 Updates:
+
+    v3.3 03.31.22
+
+        UI widgets moved to external file
+
+        Misc bug fixes
+
+    v3.2 03.07.22
+
+        Updated UI for Flame 2023
 
     v3.1 10.26.21
 
@@ -58,117 +77,15 @@ Updates:
         Misc code updates
 '''
 
-from __future__ import print_function
 import xml.etree.ElementTree as ET
 from functools import partial
-import os, shutil
+import os, re, shutil
 from PySide2 import QtWidgets, QtCore
+from flame_widgets_add_batch_nodes import FlameButton, FlameLabel, FlameLineEdit, FlameListWidget, FlameMessageWindow, FlameWindow
 
-VERSION = 'v3.1'
+VERSION = 'v3.3'
 
-SCRIPT_PATH = '/opt/Autodesk/shared/python/add_batch_nodes'
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-
-    For different label looks use: 'normal', 'background', or 'outline'
-
-    To use:
-
-    label = FlameLabel('Label Name', 'normal', window)
-    """
-
-    def __init__(self, label_name, label_type, parent_window, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(300, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setAlignment(QtCore.Qt.AlignCenter)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-        elif label_type == 'outline':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"')
-
-class FlameLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Line Edit Widget
-
-    Main window should include this: window.setFocusPolicy(QtCore.Qt.StrongFocus)
-
-    To use:
-
-    line_edit = FlameLineEdit('Some text here', window)
-    """
-
-    def __init__(self, text, parent_window, *args, **kwargs):
-        super(FlameLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(300)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-
-    To use:
-
-    button = FlameButton('Button Name', do_this_when_pressed, window)
-    """
-
-    def __init__(self, button_name, do_when_pressed, parent_window, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(QtCore.QSize(110, 28))
-        self.setMaximumSize(QtCore.QSize(110, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(do_when_pressed)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-class FlameListWidget(QtWidgets.QListWidget):
-    """
-    Custom Qt Flame List Widget
-
-    To use:
-
-    list_widget = FlameListWidget(window)
-    """
-
-    def __init__(self, parent_window, *args, **kwargs):
-        super(FlameListWidget, self).__init__(*args, **kwargs)
-
-        self.setMaximumSize(300, 450)
-        self.setParent(parent_window)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        self.setAlternatingRowColors(True)
-        self.clear()
-        self.setAcceptDrops(True)
-        self.setAlternatingRowColors(True)
-        self.setCurrentRow(0)
-        self.setStyleSheet('QListWidget {color: #9a9a9a; background-color: #2a2a2a; alternate-background-color: #2d2d2d; outline: none; font: 14px "Discreet"}'
-                           'QListWidget::item:selected {color: #d9d9d9; background-color: #474747}')
-
-# -------------------------------------- #
+SCRIPT_PATH = '/opt/Autodesk/shared/python/batch_nodes'
 
 class BatchNodes(object):
 
@@ -176,16 +93,15 @@ class BatchNodes(object):
         import flame
 
         print ('''
-             _     _   ____        _       _       _   _           _
-    /\      | |   | | |  _ \      | |     | |     | \ | |         | |
-   /  \   __| | __| | | |_) | __ _| |_ ___| |__   |  \| | ___   __| | ___  ___
-  / /\ \ / _` |/ _` | |  _ < / _` | __/ __| '_ \  | . ` |/ _ \ / _` |/ _ \/ __|
- / ____ \ (_| | (_| | | |_) | (_| | || (__| | | | | |\  | (_) | (_| |  __/\__ \\
-/_/    \_\__,_|\__,_| |____/ \__,_|\__\___|_| |_| |_| \_|\___/ \__,_|\___||___/
+ ____        _       _       _   _           _
+|  _ \      | |     | |     | \ | |         | |
+| |_) | __ _| |_ ___| |__   |  \| | ___   __| | ___  ___
+|  _ < / _` | __/ __| '_ \  | . ` |/ _ \ / _` |/ _ \/ __|
+| |_) | (_| | || (__| | | | | |\  | (_) | (_| |  __/\__ \\
+|____/ \__,_|\__\___|_| |_| |_| \_|\___/ \__,_|\___||___/
         ''')
 
-        print ('\n')
-        print ('>' * 29, 'add batch nodes %s' % VERSION, '<' * 28, '\n')
+        print ('>' * 20, f'batch nodes {VERSION}', '<' * 19, '\n')
 
         # Set paths
 
@@ -193,10 +109,7 @@ class BatchNodes(object):
         self.config_xml = os.path.join(self.config_path, 'config.xml')
 
         self.save_selected_template = os.path.join(SCRIPT_PATH, 'save_selected')
-        print ('save_selected_template:', self.save_selected_template)
-
-        self.create_node_template = os.path.join(SCRIPT_PATH, 'create_node', '\n')
-        print ('create_node:', self.create_node_template)
+        self.create_node_template = os.path.join(SCRIPT_PATH, 'create_node')
 
         self.config()
 
@@ -205,23 +118,19 @@ class BatchNodes(object):
         self.selection = selection
 
         self.flame_version = flame.get_version()
-        print ('flameVersion:', self.flame_version)
-
         self.current_user = flame.users.current_user.name
-        print ('current_user:', self.current_user)
 
-        self.matchbox_path = '/opt/Autodesk/presets/%s/matchbox/shaders' % self.flame_version
-        print ('matchbox_path:', self.matchbox_path, '\n')
+        self.matchbox_path = f'/opt/Autodesk/presets/{self.flame_version}/matchbox/shaders'
 
         # Check/create folder to store node scripts in user python folder
 
         self.node_dir = os.path.join('/opt/Autodesk/user', self.current_user, 'python/batch_node_menus/nodes')
         if not os.path.isdir(self.node_dir):
             os.makedirs(self.node_dir)
-            print ('>>> created user node folder <<<\n')
+            print ('--> created user node folder \n')
 
         if not os.path.isdir(self.logik_path):
-            print ('\n>>> logik matchbox path no longer exists - set new path in setup <<<\n')
+            print ('\n--> logik matchbox path no longer exists - set new path in setup \n')
             self.logik_path = '/'
 
         #  Init variables
@@ -240,7 +149,7 @@ class BatchNodes(object):
             for setting in root.iter('add_batch_nodes_settings'):
                 self.logik_path = setting.find('logik_path').text
 
-            print ('>>> config loaded <<<\n')
+            print ('--> config loaded \n')
 
         def create_config_file():
 
@@ -248,10 +157,10 @@ class BatchNodes(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br><br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('>>> config file does not exist, creating new config file <<<')
+                print ('--> config file does not exist, creating new config file ')
 
                 config = """
 <settings>
@@ -273,52 +182,29 @@ class BatchNodes(object):
 
     def main_window(self):
 
-        self.window = QtWidgets.QTabWidget()
-        self.window.setMinimumSize(QtCore.QSize(775, 500))
-        self.window.setMaximumSize(QtCore.QSize(775, 500))
-        self.window.setWindowTitle('Add Batch Nodes %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setStyleSheet('background-color: #212121')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        vbox = QtWidgets.QVBoxLayout()
+        self.window = FlameWindow(f'Batch Nodes <small>{VERSION}', vbox, 800, 570)
 
         # Tabs
+
+        self.main_tabs = QtWidgets.QTabWidget()
 
         self.window.tab1 = QtWidgets.QWidget()
         self.window.tab2 = QtWidgets.QWidget()
         self.window.tab3 = QtWidgets.QWidget()
 
-        self.window.addTab(self.window.tab1, 'Batch Node List')
-        self.window.addTab(self.window.tab2, 'Matchbox List')
-        self.window.addTab(self.window.tab3, 'Logik List')
+        self.main_tabs.addTab(self.window.tab1, 'Batch Node List')
+        self.main_tabs.addTab(self.window.tab2, 'Matchbox List')
+        self.main_tabs.addTab(self.window.tab3, 'Logik List')
 
         self.batch_node_tab()
         self.matchbox_tab()
         self.logik_tab()
 
-        self.window.setStyleSheet('QTabWidget {background-color: #212121; font: 14px "Discreet"}'
-                                  'QTabWidget::tab-bar {alignment: center}'
-                                  'QTabBar::tab {color: #9a9a9a; background-color: #212121; border: 1px solid #3a3a3a; border-bottom-color: #555555; min-width: 20ex; padding: 5px}'
-                                  'QTabBar::tab:selected {color: #bababa; border: 1px solid #555555; border-bottom: 1px solid #212121}'
-                                  'QTabWidget::pane {border-top: 1px solid #555555; top: -0.05em}')
+        # Widget Layout
 
-        #------------------------------------#
-
-        # Window Layout
-
-        self.vbox = QtWidgets.QVBoxLayout()
-        self.vbox.setMargin(20)
-
-        self.vbox.addLayout(self.window.tab1.layout)
-        self.vbox.addLayout(self.window.tab2.layout)
-        self.vbox.addLayout(self.window.tab3.layout)
-
-        self.window.setLayout(self.vbox)
+        vbox.setMargin(20)
+        vbox.addWidget(self.main_tabs)
 
         self.window.show()
 
@@ -331,7 +217,7 @@ class BatchNodes(object):
             for node in self.batch_node_list.selectedItems():
                 self.node_name = node.text()
 
-                self.create_node_line = "new_node = flame.batch.create_node('%s')" % self.node_name
+                self.create_node_line = f"new_node = flame.batch.create_node('{self.node_name}')"
 
                 self.create_node()
 
@@ -343,39 +229,39 @@ class BatchNodes(object):
 
         # Labels
 
-        self.batch_node_label = FlameLabel('Batch Node Menus', 'background', self.window.tab1)
-        self.batch_node_list_label = FlameLabel('Batch Nodes', 'background', self.window.tab1)
+        self.batch_node_label = FlameLabel('Batch Node Menus', label_type='underline', label_width=110)
+        self.batch_node_list_label = FlameLabel('Batch Nodes', label_type='underline', label_width=110)
 
         # Listboxes
 
-        self.node_menu_list = FlameListWidget(self.window.tab1)
+        self.node_menu_list = FlameListWidget()
         self.get_node_scripts_lists(self.node_menu_list, self.node_dir)
 
 
-        self.batch_node_list = FlameListWidget(self.window.tab1)
+        self.batch_node_list = FlameListWidget()
         self.get_batch_node_list()
 
         # Buttons
 
-        self.batch_add_btn = FlameButton('Add', add_batch_node, self.window.tab1)
-        self.batch_remove_btn = FlameButton('Remove', partial(self.remove_scripts, self.node_menu_list, self.node_dir), self.window.tab1)
-        self.batch_rename_btn = FlameButton('Rename', partial(self.rename_menu, self.node_menu_list, self.node_dir), self.window.tab1)
-        self.batch_done_btn = FlameButton('Done', self.done_button, self.window.tab1)
+        self.batch_add_btn = FlameButton('Add', add_batch_node, button_width=110)
+        self.batch_remove_btn = FlameButton('Remove', partial(self.remove_scripts, self.node_menu_list), button_width=110)
+        self.batch_rename_btn = FlameButton('Rename', partial(self.rename_menu, self.node_menu_list), button_width=110)
+        self.batch_done_btn = FlameButton('Done', self.done_button, button_width=110)
 
         # List context menu
 
-        self.batch_action_add_node = QtWidgets.QAction('Add Node', self.window.tab1)
+        self.batch_action_add_node = QtWidgets.QAction('Add Node')
         self.batch_action_add_node.triggered.connect(add_batch_node)
         self.batch_node_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.batch_node_list.addAction(self.batch_action_add_node)
 
-        self.action_remove_node = QtWidgets.QAction('Remove Node/Menu', self.window.tab1)
-        self.action_remove_node.triggered.connect(partial(self.remove_scripts, self.node_menu_list, self.node_dir))
+        self.action_remove_node = QtWidgets.QAction('Remove Node/Menu')
+        self.action_remove_node.triggered.connect(partial(self.remove_scripts, self.node_menu_list))
         self.node_menu_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.node_menu_list.addAction(self.action_remove_node)
 
-        self.action_rename_node = QtWidgets.QAction('Rename Node/Menu', self.window.tab1)
-        self.action_rename_node.triggered.connect(partial(self.rename_menu, self.node_menu_list, self.node_dir))
+        self.action_rename_node = QtWidgets.QAction('Rename Node/Menu')
+        self.action_rename_node.triggered.connect(partial(self.rename_menu, self.node_menu_list))
         self.node_menu_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.node_menu_list.addAction(self.action_rename_node)
 
@@ -412,7 +298,7 @@ class BatchNodes(object):
                 matchbox_node_path = os.path.join(self.matchbox_path, node.text())
                 print ('matchbox_node_path:', matchbox_node_path)
 
-                self.create_node_line = "new_node = flame.batch.create_node('Matchbox', '%s.mx')" % matchbox_node_path
+                self.create_node_line = f"new_node = flame.batch.create_node('Matchbox', '{matchbox_node_path}.mx')"
 
                 self.create_node()
 
@@ -424,38 +310,38 @@ class BatchNodes(object):
 
         # Labels
 
-        self.matchbox_node_label = FlameLabel('Batch Node Menus', 'background', self.window.tab2)
-        self.matchbox_node_list_label = FlameLabel('Autodesk Matchbox', 'background', self.window.tab2)
+        self.matchbox_node_label = FlameLabel('Batch Node Menus', label_type='underline', label_width=110)
+        self.matchbox_node_list_label = FlameLabel('Autodesk Matchbox', label_type='underline', label_width=110)
 
         # Listboxes
 
-        self.matchbox_node_menu_list = FlameListWidget(self.window.tab2)
+        self.matchbox_node_menu_list = FlameListWidget()
         self.get_node_scripts_lists(self.matchbox_node_menu_list, self.node_dir)
 
-        self.matchbox_list = FlameListWidget(self.window.tab2)
+        self.matchbox_list = FlameListWidget()
         self.get_matchbox_list()
 
         # Buttons
 
-        self.matchbox_add_btn = FlameButton('Add', add_matchbox, self.window.tab2)
-        self.matchbox_remove_node_btn = FlameButton('Remove', partial(self.remove_scripts, self.matchbox_node_menu_list, self.node_dir), self.window.tab2)
-        self.matchbox_rename_btn = FlameButton('Rename', partial(self.rename_menu, self.matchbox_node_menu_list, self.node_dir), self.window.tab2)
-        self.matchbox_done_btn = FlameButton('Done', self.done_button, self.window.tab2)
+        self.matchbox_add_btn = FlameButton('Add', add_matchbox, button_width=110)
+        self.matchbox_remove_node_btn = FlameButton('Remove', partial(self.remove_scripts, self.matchbox_node_menu_list), button_width=110)
+        self.matchbox_rename_btn = FlameButton('Rename', partial(self.rename_menu, self.matchbox_node_menu_list), button_width=110)
+        self.matchbox_done_btn = FlameButton('Done', self.done_button, button_width=110)
 
         # List context menu
 
-        self.matchbox_action_add_node = QtWidgets.QAction('Add Node', self.window.tab2)
+        self.matchbox_action_add_node = QtWidgets.QAction('Add Node')
         self.matchbox_action_add_node.triggered.connect(add_matchbox)
         self.matchbox_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.matchbox_list.addAction(self.matchbox_action_add_node)
 
-        self.action_remove_node = QtWidgets.QAction('Remove Node', self.window.tab2)
-        self.action_remove_node.triggered.connect(partial(self.remove_scripts, self.matchbox_node_menu_list, self.node_dir))
+        self.action_remove_node = QtWidgets.QAction('Remove Node')
+        self.action_remove_node.triggered.connect(partial(self.remove_scripts, self.matchbox_node_menu_list))
         self.matchbox_node_menu_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.matchbox_node_menu_list.addAction(self.action_remove_node)
 
-        self.action_rename_node = QtWidgets.QAction('Rename Node/Menu', self.window.tab2)
-        self.action_rename_node.triggered.connect(partial(self.rename_menu, self.matchbox_node_menu_list, self.node_dir))
+        self.action_rename_node = QtWidgets.QAction('Rename Node/Menu')
+        self.action_rename_node.triggered.connect(partial(self.rename_menu, self.matchbox_node_menu_list))
         self.matchbox_node_menu_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.matchbox_node_menu_list.addAction(self.action_rename_node)
 
@@ -493,7 +379,7 @@ class BatchNodes(object):
                 logik_node_path = os.path.join(self.logik_path, node.text())
                 print ('logik_node_path:', logik_node_path)
 
-                self.create_node_line = "new_node = flame.batch.create_node('Matchbox', '%s.glsl')" % logik_node_path
+                self.create_node_line = f"new_node = flame.batch.create_node('Matchbox', '{logik_node_path}.glsl')"
 
                 self.create_node()
 
@@ -503,41 +389,69 @@ class BatchNodes(object):
             self.get_node_scripts_lists(self.matchbox_node_menu_list, self.node_dir)
             self.get_node_scripts_lists(self.logik_node_menu_list, self.node_dir)
 
+        def set_path():
+
+            path = str(QtWidgets.QFileDialog.getExistingDirectory(QtWidgets.QWidget(), 'Select Directory', self.logik_path, QtWidgets.QFileDialog.ShowDirsOnly))
+            print ('path:', path)
+
+            if path:
+                self.logik_path = path
+
+                # Save settings to config file
+
+                xml_tree = ET.parse(self.config_xml)
+                root = xml_tree.getroot()
+
+                logik_path = root.find('.//logik_path')
+                logik_path.text = self.logik_path
+
+                xml_tree.write(self.config_xml)
+
+                print ('--> config saved \n')
+
+                self.window.close()
+
+                self.config()
+
+                self.main_window()
+
+                self.main_tabs.setCurrentIndex(2)
+
         # Labels
 
-        self.logik_node_label = FlameLabel('Batch Node Menus', 'background', self.window.tab3)
-        self.logik_node_list_label = FlameLabel('Logik Matchbox', 'background', self.window.tab3)
+        self.logik_node_label = FlameLabel('Batch Node Menus', label_type='underline', label_width=110)
+        self.logik_node_list_label = FlameLabel('Logik Matchbox', label_type='underline', label_width=110)
 
         # Listboxes
 
-        self.logik_node_menu_list = FlameListWidget(self.window.tab3)
+        self.logik_node_menu_list = FlameListWidget()
         self.get_node_scripts_lists(self.logik_node_menu_list, self.node_dir)
 
-        self.logik_list = FlameListWidget(self.window.tab3)
+        self.logik_list = FlameListWidget()
         self.get_logik_list()
 
         # Buttons
 
-        self.logik_setup_btn = FlameButton('Setup', self.setup_window, self.window.tab3)
-        self.logik_add_btn = FlameButton('Add', add_logik_matchbox, self.window.tab3)
-        self.logik_remove_btn = FlameButton('Remove', partial(self.remove_scripts, self.logik_node_menu_list, self.node_dir), self.window.tab3)
-        self.logik_rename_btn = FlameButton('Rename', partial(self.rename_menu, self.logik_node_menu_list, self.node_dir), self.window.tab3)
-        self.logik_done_btn = FlameButton('Done', self.done_button, self.window.tab3)
+        self.logik_setup_btn = FlameButton('Set Path', set_path, button_width=110)
+        self.logik_add_btn = FlameButton('Add', add_logik_matchbox, button_width=110)
+        self.logik_remove_btn = FlameButton('Remove', partial(self.remove_scripts, self.logik_node_menu_list), button_width=110)
+        self.logik_rename_btn = FlameButton('Rename', partial(self.rename_menu, self.logik_node_menu_list), button_width=110)
+        self.logik_done_btn = FlameButton('Done', self.done_button, button_width=110)
 
         # List context menu
 
-        self.logik_action_add_node = QtWidgets.QAction('Add Node', self.window.tab2)
+        self.logik_action_add_node = QtWidgets.QAction('Add Node')
         self.logik_action_add_node.triggered.connect(add_logik_matchbox)
         self.logik_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.logik_list.addAction(self.logik_action_add_node)
 
-        self.logik_action_remove_node = QtWidgets.QAction('Remove Node', self.window.tab2)
-        self.logik_action_remove_node.triggered.connect(partial(self.remove_scripts, self.logik_node_menu_list, self.node_dir))
+        self.logik_action_remove_node = QtWidgets.QAction('Remove Node')
+        self.logik_action_remove_node.triggered.connect(partial(self.remove_scripts, self.logik_node_menu_list))
         self.logik_node_menu_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.logik_node_menu_list.addAction(self.logik_action_remove_node)
 
-        self.action_rename_node = QtWidgets.QAction('Rename Node/Menu', self.window.tab3)
-        self.action_rename_node.triggered.connect(partial(self.rename_menu, self.logik_node_menu_list, self.node_dir))
+        self.action_rename_node = QtWidgets.QAction('Rename Node/Menu')
+        self.action_rename_node.triggered.connect(partial(self.rename_menu, self.logik_node_menu_list))
         self.logik_node_menu_list.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
         self.logik_node_menu_list.addAction(self.action_rename_node)
 
@@ -562,92 +476,6 @@ class BatchNodes(object):
         self.window.tab3.layout.addLayout(self.matchbox_gridbox)
 
         self.window.tab3.setLayout(self.window.tab3.layout)
-
-    def setup_window(self):
-
-        def logik_browse():
-
-            logik_path = str(QtWidgets.QFileDialog.getExistingDirectory(setup_window, "Select Directory", logik_path_entry.text(), QtWidgets.QFileDialog.ShowDirsOnly))
-
-            if logik_path:
-                logik_path_entry.setText(logik_path)
-
-        def save_config():
-
-            self.logik_path = logik_path_entry.text()
-
-            # Save settings to config file
-
-            xml_tree = ET.parse(self.config_xml)
-            root = xml_tree.getroot()
-
-            logik_path = root.find('.//logik_path')
-            logik_path.text = self.logik_path
-
-            xml_tree.write(self.config_xml)
-
-            print ('>>> config saved <<<\n')
-
-            setup_window.close()
-
-            self.main_window()
-
-        def cancel():
-
-            setup_window.close()
-
-            print ('\n>>> setup cancelled - nothing saved <<<\n')
-
-        setup_window = QtWidgets.QWidget()
-        setup_window.setMinimumSize(QtCore.QSize(700, 150))
-        setup_window.setMaximumSize(QtCore.QSize(700, 150))
-        setup_window.setWindowTitle('Add Batch Nodes Path Setup')
-        setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        setup_window.setStyleSheet('background-color: #313131')
-
-        #  Labels
-
-        logik_path_label = FlameLabel('Logik Matchbox Path', 'normal', setup_window)
-        logik_path_label.setAlignment(QtCore.Qt.AlignLeft)
-        logik_path_label.setMinimumSize(QtCore.QSize(150, 28))
-
-        # Entries
-
-        logik_path_entry = FlameLineEdit(self.logik_path, setup_window)
-
-        # Buttons
-
-        logik_browse_btn = FlameButton('Browse', logik_browse, setup_window)
-        setup_save_btn = FlameButton('Save', save_config, setup_window)
-        setup_cancel_btn = FlameButton('Cancel', cancel, setup_window)
-
-        #------------------------------------#
-
-        # Window Layout
-
-        hbox01 = QtWidgets.QHBoxLayout()
-        hbox01.addWidget(logik_path_label)
-        hbox01.addWidget(logik_path_entry)
-        hbox01.addWidget(logik_browse_btn)
-
-        hbox02 = QtWidgets.QHBoxLayout()
-        hbox02.addStretch(10)
-        hbox02.addWidget(setup_cancel_btn)
-        hbox02.addStretch(5)
-        hbox02.addWidget(setup_save_btn)
-
-        hbox02.addStretch(10)
-
-        vbox = QtWidgets.QVBoxLayout()
-        vbox.setMargin(20)
-
-        vbox.addLayout(hbox01)
-        vbox.addLayout(hbox02)
-
-        setup_window.setLayout(vbox)
-
-        setup_window.show()
 
     # ----------------------- #
 
@@ -712,7 +540,7 @@ class BatchNodes(object):
 
                 listbox.addItem(item)
 
-    def remove_scripts(self, listbox, node_dir):
+    def remove_scripts(self, listbox):
 
         # Delete script files
 
@@ -733,7 +561,7 @@ class BatchNodes(object):
                         os.remove(os.path.join(self.node_dir, f))
                     except:
                         shutil.rmtree(os.path.join(self.node_dir, f))
-                    print ('>>> %s deleted <<<\n' % f)
+                    print (f'--> {f} deleted \n')
 
         self.get_node_scripts_lists(self.node_menu_list, self.node_dir)
         self.get_node_scripts_lists(self.matchbox_node_menu_list, self.node_dir)
@@ -741,7 +569,7 @@ class BatchNodes(object):
 
     # ----------------------- #
 
-    def rename_menu(self, menu_list, folder):
+    def rename_menu(self, menu_list):
 
         def rename():
             import flame
@@ -801,7 +629,8 @@ class BatchNodes(object):
                 return
 
             if new_name_entry.text() == selected_menu:
-                return message_box('Menu with that name already exists')
+                if not FlameMessageWindow('Confirm Operation', 'warning', f'Overwrite existing menu: <b>{selected_menu}?'):
+                    return
 
             new_menu_name = new_name_entry.text()
 
@@ -819,9 +648,9 @@ class BatchNodes(object):
 
             flame.execute_shortcut('Rescan Python Hooks')
 
-            print ('>>> python hooks refreshed <<<\n')
+            print ('--> python hooks refreshed\n')
 
-            print ('>>> menu renamed <<<\n')
+            print ('--> menu renamed\n')
 
             rename_window.close()
 
@@ -831,35 +660,25 @@ class BatchNodes(object):
         selected_menu = [m.text() for m in menu_list.selectedItems()][0]
         print ('selected_menu:', selected_menu, '\n')
 
-        rename_window = QtWidgets.QWidget()
-        rename_window.setMinimumSize(QtCore.QSize(450, 100))
-        rename_window.setMaximumSize(QtCore.QSize(450, 100))
-        rename_window.setWindowTitle('pyFlame Add Batch Nodes Path Setup')
-        rename_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        rename_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        rename_window.setStyleSheet('background-color: #272727')
+        gridlayout = QtWidgets.QGridLayout()
+        rename_window = FlameWindow('Batch Nodes - Rename Menu', gridlayout, 450, 170, window_bar_color='green')
 
         #  Labels
 
-        new_name_label = QtWidgets.QLabel('Menu Name', rename_window)
-        new_name_label.setMinimumSize(QtCore.QSize(75, 28))
-        new_name_label.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                                     'QLabel:disabled {color: #6a6a6a}')
+        new_name_label = FlameLabel('Menu Name', label_width=75)
 
         # Entries
 
-        new_name_entry = FlameLineEdit(selected_menu, rename_window)
+        new_name_entry = FlameLineEdit(selected_menu)
 
         # Buttons
 
-        rename_btn = FlameButton('Rename', rename, rename_window)
-        cancel_btn = FlameButton('Cancel', rename_window.close, rename_window)
+        rename_btn = FlameButton('Rename', rename)
+        cancel_btn = FlameButton('Cancel', rename_window.close)
 
         #------------------------------------#
 
-        # Window Layout
-
-        gridlayout = QtWidgets.QGridLayout()
+        # UI Widget Layout
 
         gridlayout.addWidget(new_name_label, 0, 0)
         gridlayout.addWidget(new_name_entry, 0, 1, 1, 3)
@@ -919,14 +738,13 @@ class BatchNodes(object):
 
         create_node_script()
 
-        print ('>>> node script for %s saved <<<' % node_name, '\n')
+        print (f'--> node script for {node_name} saved ', '\n')
 
     def save_selected_node(self):
 
         def create_node_script():
 
             def replace_tokens():
-                import re
 
                 token_dict = {}
 
@@ -963,7 +781,7 @@ class BatchNodes(object):
         selected_node = self.selection[0]
 
         node_name = str(selected_node.name)[1:-1]
-        print ('node_name:', node_name, '\n')
+        #print ('node_name:', node_name, '\n')
 
         # Check user python folder for existing node script
 
@@ -971,8 +789,7 @@ class BatchNodes(object):
 
         for n in os.listdir(self.node_dir):
             if n == node_name:
-                # return message_box('<center>Menu with selected nodes name already exists. Rename node or rename/delete existing menu')
-                create_node = message_box_confirm('Menu already exists for node with same name. <br>Overwrite?')
+                create_node = FlameMessageWindow('Confirm Operation', 'warning', f'Overwrite existing menu: <b>{node_name}?')
 
         if create_node:
 
@@ -986,9 +803,9 @@ class BatchNodes(object):
 
             try:
                 os.makedirs(node_setup_path)
-                print ('>>> %s node folder created <<<\n' % node_name)
+                print (f'--> {node_name} node folder created \n')
             except:
-                print ('>>> %s node folder already exists - overwriting setup <<<\n' % node_name)
+                print (f'--> {node_name} node folder already exists - overwriting setup \n')
 
             # Save node setup
 
@@ -1003,63 +820,14 @@ class BatchNodes(object):
 
             create_node_script()
 
-            message_box('Menu created for %s' % node_name)
+            FlameMessageWindow('Operation Complete', 'message', f'Menu created: <b>{node_name}')
 
-            # print ('>>> Node script for %s saved <<<' % node_name, '\n')
+            # print (f'--> Node script for {node_name} saved\n')
 
         else:
-            print ('>>> Node already exists - Nothing saved <<<.\n')
+            print ('--> Node already exists - Nothing saved .\n')
 
         print ('done.\n')
-
-# ----------------------- #
-
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>', '<center>']
-
-    for code in code_list:
-        message = message.replace(code, '')
-
-    print ('>>> %s <<<\n' % message)
-
-def message_box_confirm(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setText('<b><center>%s' % message)
-    msg_box_yes_button = msg_box.addButton(QtWidgets.QMessageBox.Yes)
-    msg_box_yes_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_yes_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box_no_button = msg_box.addButton(QtWidgets.QMessageBox.No)
-    msg_box_no_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_no_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-
-    code_list = ['<br>']
-
-    for code in code_list:
-        message = message.replace(code, '')
-
-    print ('>>> %s <<<\n' % message)
-
-    if msg_box.exec_() == QtWidgets.QMessageBox.Yes:
-        return True
-    return False
 
 # ----------------------- #
 
@@ -1092,9 +860,9 @@ def get_main_menu_custom_ui_actions():
             'name': 'pyFlame',
             'actions': [
                 {
-                    'name': 'Add Batch Nodes Setup',
+                    'name': 'Batch Nodes Setup',
                     'execute': edit_node_lists,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 }
             ]
         }
@@ -1104,14 +872,18 @@ def get_batch_custom_ui_actions():
 
     return [
         {
-            'name': 'Add Batch Node Menu...',
+            'name': 'Batch Nodes...',
             'actions': [
                 {
-                    'name': 'Create Menu For Selected Node',
+                    'name': 'Create Menu for Selected Node',
                     'isVisible': scope_node,
                     'execute': save_node,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
+                {
+                    'name': '--------------------------------------',
+                    'isVisible': scope_node,
+                }
             ]
         }
     ]

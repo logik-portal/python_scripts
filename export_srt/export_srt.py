@@ -1,10 +1,10 @@
 '''
 Script Name: Export SRT
-Script Version: 1.1
-Flame Version: 2020.3
+Script Version: 1.2
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 07.22.20
-Update Date: 10.23.21
+Update Date: 03.30.22
 
 Custom Action Type: Timeline
 
@@ -14,8 +14,7 @@ Description:
 
     All text to be exported must be timeline text fx.
 
-    When running the script a second time be sure to reselect all segments with text fx.
-    Not doing so will can cause Flame to crash.
+Menu:
 
     Right-click on selected clips with timeline text fx -> SRT... -> Export SRT
 
@@ -23,9 +22,15 @@ To install:
 
     Copy script into /opt/Autodesk/shared/python/export_srt
 
-    When creating this folder manually be sure Flame has full read/write permissions to it.
-
 Updates:
+
+    v1.2 03.30.22
+
+        Updated config to xml
+
+        Updated UI for Flame 2023
+
+        UI Widgets moved to external file
 
     v1.1 10.23.21
 
@@ -33,18 +38,31 @@ Updates:
 
 '''
 
-from __future__ import print_function
-import os
+from PySide2 import QtWidgets
+import xml.etree.ElementTree as ET
+import os, shutil, platform, subprocess
+from flame_widgets_export_srt import FlameMessageWindow
 
-VERSION = 'v1.1'
+VERSION = 'v1.2'
 
-### config setup ###
-CONFIG_PATH = '/opt/Autodesk/shared/python/export_srt/config'
-CONFIG_FILE = os.path.join(CONFIG_PATH, 'config')
+SCRIPT_PATH = '/opt/Autodesk/shared/python/export_srt'
 
 class ExportSRT(object):
 
     def __init__(self, selection):
+
+        print ('''
+  ______                       _    _____ _____ _______
+ |  ____|                     | |  / ____|  __ \__   __|
+ | |__  __  ___ __   ___  _ __| |_| (___ | |__) | | |
+ |  __| \ \/ / '_ \ / _ \| '__| __|\___ \|  _  /  | |
+ | |____ >  <| |_) | (_) | |  | |_ ____) | | \ \  | |
+ |______/_/\_\ .__/ \___/|_|   \__|_____/|_|  \_\ |_|
+             | |
+             |_|
+             ''')
+
+        print ('>' * 20, f'export srt {VERSION}', '<' * 20, '\n')
 
         self.selection = selection
 
@@ -54,17 +72,9 @@ class ExportSRT(object):
 
         self.temp_text_file = os.path.join(self.temp_save_path, 'temp_text.ttg_node')
 
-        # Get config file values
-        #-----------------------
+        # Load config
 
-        get_config_values = open(CONFIG_FILE, 'r')
-        values = get_config_values.read().splitlines()
-
-        self.export_path = values[2]
-
-        get_config_values.close()
-
-        print ('>>> config loaded <<<\n')
+        self.config()
 
         # Init variables
 
@@ -76,13 +86,75 @@ class ExportSRT(object):
         self.frame_rate = ''
         self.srt_timecode = ''
 
+    def config(self):
+
+        def get_config_values():
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            # Get Settings
+
+            for setting in root.iter('export_srt_settings'):
+                self.export_path = setting.find('export_path').text
+
+            print ('--> config loaded\n')
+
+        def create_config_file():
+
+            if not os.path.isdir(self.config_path):
+                try:
+                    os.makedirs(self.config_path)
+                except:
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br><br>Check folder permissions')
+
+            if not os.path.isfile(self.config_xml):
+                print ('--> config file does not exist, creating new config file\n')
+
+                config = """
+<settings>
+    <export_srt_settings>
+        <export_path>/</export_path>
+    </export_srt_settings>
+</settings>"""
+
+                with open(self.config_xml, 'a') as config_file:
+                    config_file.write(config)
+                    config_file.close()
+
+        self.config_path = os.path.join(SCRIPT_PATH, 'config')
+        self.config_xml = os.path.join(self.config_path, 'config.xml')
+
+        if os.path.isfile(self.config_xml):
+            get_config_values()
+        else:
+            create_config_file()
+            if os.path.isfile(self.config_xml):
+                get_config_values()
+
     def export_srt(self):
-        import shutil
         import flame
 
+        def save_config():
+
+            # Save settings to config file
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            export_path = root.find('.//export_path')
+            export_path.text = self.export_path
+
+            xml_tree.write(self.config_xml)
+
+            print ('--> config saved\n')
+
         self.export_path = self.path_browse()
+        print ('export path:', self.export_path, '\n')
 
         if self.export_path:
+
+            save_config()
 
             event_number = 1
 
@@ -128,47 +200,23 @@ class ExportSRT(object):
                             event_number += 1
 
             self.export_file()
-
-            # Remove temp folder
-
-            shutil.rmtree(self.temp_save_path)
-
         else:
-            print ('\n>>> exit - nothing exported <<<\n')
+            print ('--> exit - nothing exported\n')
+
+        # Remove temp folder
+
+        shutil.rmtree(self.temp_save_path)
+        print ('--> cleaning up temp files\n')
+
+        print ('done.\n')
 
     def path_browse(self):
-        from PySide2 import QtWidgets
 
-        if not os.path.isdir(self.export_path):
-            self.export_path = '/'
-
-        window = QtWidgets.QWidget()
-
-        path = str(QtWidgets.QFileDialog.getExistingDirectory(window, 'Select Directory', self.export_path, QtWidgets.QFileDialog.ShowDirsOnly))
-
-        if os.path.isdir(path):
-            self.export_path = path
-            print ('export_path:', self.export_path)
-
-            # Save Path
-
-            config_text = []
-
-            config_text.insert(0, 'Values for pyFlame Export SRT script.')
-            config_text.insert(1, 'Export Path:')
-            config_text.insert(2, self.export_path)
-
-            out_file = open(CONFIG_FILE, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
-
-            print ('\n>>> config file saved <<<\n')
-
-        else:
-            self.export_path = False
-
-        return self.export_path
+        file_browser = QtWidgets.QFileDialog()
+        file_browser.setDirectory(self.export_path)
+        file_browser.setFileMode(QtWidgets.QFileDialog.DirectoryOnly)
+        if file_browser.exec_():
+            return str(file_browser.selectedFiles()[0])
 
     def get_seqeunce_info(self):
 
@@ -275,73 +323,32 @@ class ExportSRT(object):
 
     def export_file(self):
 
-        self.srt_export_file = os.path.join(self.export_path, self.seq_name) + '.srt'
-
         try:
+            self.srt_export_file = os.path.join(self.export_path, self.seq_name) + '.srt'
+
             out_file = open(self.srt_export_file, 'w')
             for line in self.srt_block_list:
                 print(line, file=out_file)
             out_file.close()
 
-            message_box('SRT File Exported')
+            if FlameMessageWindow('Operation Complete', 'confirm', f'SRT File Exported:<br><br>{self.srt_export_file}<br><br>Open path file browser?'):
+                self.open_finder(self.export_path)
 
-        except:
-            message_box('SRT File Not Exported <br> Check File Path/Permissions')
+        except OSError as error:
+            FlameMessageWindow('Export SRT - Error', 'error', f'SRT file not exported<br><br>Check file path permissions:<br><br>{error}')
+
+    def open_finder(self, path):
+
+        if platform.system() == 'Darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
+
+        print ('--> Export path opened in file browser\n')
 
 # -------------------------------------- #
 
-def config_file():
-
-    # Check for and load config file
-    #-------------------------------
-
-    if not os.path.isdir(CONFIG_PATH):
-        try:
-            os.makedirs(CONFIG_PATH)
-        except:
-            message_box('Unable to create folder:<br>%s<br>Check folder permissions' % CONFIG_PATH)
-
-    if not os.path.isfile(CONFIG_FILE):
-        print ('>>> config file does not exist, creating new config file <<<')
-
-        config_text = []
-
-        config_text.insert(0, 'Values for pyFlame Export  SRT script.')
-        config_text.insert(1, 'Export Path:')
-        config_text.insert(2, '/')
-
-        out_file = open(CONFIG_FILE, 'w')
-        for line in config_text:
-            print(line, file=out_file)
-        out_file.close()
-
-def message_box(message):
-    from PySide2 import QtWidgets, QtCore
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '-']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
-
 def export(selection):
-
-    print ('\n', '>' * 20, 'export srt %s' % VERSION, '<' * 20, '\n')
-
-    config_file()
 
     script = ExportSRT(selection)
     script.export_srt()
@@ -349,9 +356,11 @@ def export(selection):
 def scope_segment(selection):
     import flame
 
-    for item in selection:
-        if isinstance(item, flame.PySegment):
-            return True
+    if isinstance(selection[0], flame.PySegment):
+        tlfx = selection[0].effects
+        for fx in tlfx:
+            if fx.type == 'Text':
+                return True
     return False
 
 def get_timeline_custom_ui_actions():
@@ -364,7 +373,7 @@ def get_timeline_custom_ui_actions():
                     'name': 'Export SRT',
                     'isVisible': scope_segment,
                     'execute': export,
-                    'minimumVersion': '2020.3'
+                    'minimumVersion': '2022'
                 }
             ]
         }

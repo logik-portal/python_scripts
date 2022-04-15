@@ -1,21 +1,25 @@
 '''
 Script Name: Import Camera
-Script Version: 4.0
-Flame Version: 2021
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Version: 4.3
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 06.02.18
-Update Date: 05.22.21
+Update Date: 03.15.22
 
 Custom Action Type: Batch
 
 Description:
 
     Creates a new Action node with selected FBX or Alembic file loaded.
-    Action camera switched to new FBX/Alembic camera
 
-    Options to load with simple recomp or st map setup
+    The Action camera will be automatically switched to the new FBX/Alembic camera.
+
+    Options to load with simple re-comp or st-map setup.
+
+Menus:
 
     Right-click in batch or on selected node -> Import... -> Import FBX
+
     Right-click in batch or on selected node -> Import... -> Import Alembic
 
 To install:
@@ -24,184 +28,118 @@ To install:
 
 Updates:
 
-v4.0 05.22.21
+    v4.3 03.15.22
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Moved UI widgets to external file
 
-    Redistort map will automatically be found if in the same folder as undistort map
+    v4.2 02.25.22
 
-    Speed improvements
+        Updated UI for Flame 2023
 
-v3.6 02.21.21
+        Updated config to XML
 
-    Updated UI
+    v4.1 01.04.22
 
-    Improved calculator
+        Files starting with '.' are ignored when searching for undistort map after distort map is selected.
 
-    Plate resize node in ST Map Setup now takes ratio from st map
+    v4.0 05.22.21
 
-v3.5 01.25.21
+        Updated to be compatible with Flame 2022/Python 3.7
 
-    Added ability to import Alembic(ABC) files
+        Redistort map will automatically be found if in the same folder as undistort map
 
-    Fixed UI font size for Linux
+        Speed improvements
 
-v3.4 11.05.20
+    v3.6 02.21.21
 
-    Updates to paths and description for Logik Portal
+        Updated UI
 
-v3.3 10.18.20
+        Improved calculator
 
-    ST Map search no longer case sensitive
+        Plate resize node in ST Map Setup now takes ratio from st map
 
-    If ST Map not found, file browser will open to manually select
+    v3.5 01.25.21
 
-v3.2 10.12.20
+        Added ability to import Alembic(ABC) files
 
-    Improved spinbox with calculator
+        Fixed UI font size for Linux
 
-v3.1 09.26.20
+    v3.4 11.05.20
 
-    Updated UI
+        Updates to paths and description for Logik Portal
 
-    Import FBX with Patch Setup - Will import FBX into an Action node and also create
-    other nodes to re-comp work done in FBX Action over original background
+    v3.3 10.18.20
 
-    Import FBX with ST map Setup - Will import FBX into an Action node and also build
-    a undistort/redistort setup using the ST maps. ST maps must be in the same folder or sub-folder of
-    FBX camera for this to work. ST Maps should also contain 'undistort' or 'redistort' in their file
-    names.
+        ST Map search no longer case sensitive
 
-v3.0 06.06.20
+        If ST Map not found, file browser will open to manually select
 
-    Code re-write
+    v3.2 10.12.20
 
-    Add FBX Action under cursor position
+        Improved spinbox with calculator
 
-    Fixed UI in Linux
+    v3.1 09.26.20
+
+        Updated UI
+
+        Import FBX with Patch Setup - Will import FBX into an Action node and also create
+        other nodes to re-comp work done in FBX Action over original background
+
+        Import FBX with ST map Setup - Will import FBX into an Action node and also build
+        a undistort/redistort setup using the ST maps. ST maps must be in the same folder or sub-folder of
+        FBX camera for this to work. ST Maps should also contain 'undistort' or 'redistort' in their file
+        names.
+
+    v3.0 06.06.20
+
+        Code re-write
+
+        Add FBX Action under cursor position
+
+        Fixed UI in Linux
 '''
 
-from __future__ import print_function
-import os
-from PySide2 import QtCore, QtWidgets
+import xml.etree.ElementTree as ET
+import os, re, ast, shutil
+from PySide2 import QtWidgets
+from flame_widgets_import_camera import FlameButton, FlameLabel, FlamePushButton, FlamePushButtonMenu, FlameMessageWindow, FlameSlider, FlameWindow
 
-VERSION = 'v4.0'
+VERSION = 'v4.3'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/import_camera'
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-    """
-
-    def __init__(self, button_name, connect, parent, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumSize(QtCore.QSize(150, 28))
-        self.setMaximumSize(QtCore.QSize(150, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(connect)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-    Options for normal, label with background color, and label with background color and outline
-    """
-
-    def __init__(self, label_name, label_type, parent, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent)
-        self.setMinimumSize(110, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-        elif label_type == 'outline':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"')
-
-class FlamePushButtonMenu(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Menu Widget
-    """
-
-    def __init__(self, button_name, menu_options, parent, *args, **kwargs):
-        super(FlamePushButtonMenu, self).__init__(*args, **kwargs)
-        from functools import partial
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        def create_menu(option):
-            self.setText(option)
-
-        pushbutton_menu = QtWidgets.QMenu(parent)
-        pushbutton_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        pushbutton_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-        for option in menu_options:
-            pushbutton_menu.addAction(option, partial(create_menu, option))
-
-        self.setMenu(pushbutton_menu)
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-    """
-
-    def __init__(self, button_name, parent, checked, connect, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setCheckable(True)
-        self.setChecked(checked)
-        self.setMinimumSize(150, 28)
-        self.setMaximumSize(150, 28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(connect)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #424142, stop: .91 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #4f4f4f, stop: .91 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #383838, stop: .94 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-# -------------------------------- #
 
 class Import(object):
 
     def __init__(self, selection, filter_type):
         import flame
-        import ast
 
-        print ('\n', '>' * 20, 'import fbx %s' % VERSION, '<' * 20, '\n')
+        print ('''
+ _____                            _    _____
+|_   _|                          | |  / ____|
+  | |  _ __ ___  _ __   ___  _ __| |_| |     __ _ _ __ ___   ___ _ __ __ _
+  | | | '_ ` _ \| '_ \ / _ \| '__| __| |    / _` | '_ ` _ \ / _ \ '__/ _` |
+ _| |_| | | | | | |_) | (_) | |  | |_| |___| (_| | | | | | |  __/ | | (_| |
+|_____|_| |_| |_| .__/ \___/|_|   \__|\_____\__,_|_| |_| |_|\___|_|  \__,_|
+                | |
+                |_|
+                ''')
+
+        print ('>' * 28, f'import camera {VERSION}', '<' * 27, '\n')
 
         self.filter_type = filter_type
 
         # Define paths
 
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
-        self.config_file = os.path.join(self.config_path, 'config')
+        self.config_xml = os.path.join(self.config_path, 'config.xml')
+
         self.batch_setup_path = os.path.join(SCRIPT_PATH, 'batch_setups')
 
-        self.check_config_file()
+        # Load config file
+
+        self.config()
+
+        # Get cursor position
 
         if selection != ():
             self.selection = selection[0]
@@ -212,22 +150,6 @@ class Import(object):
             self.master_pos_x = flame.batch.cursor_position[0]
             self.master_pos_y = flame.batch.cursor_position[1]
 
-        # get values from config file
-
-        get_config_values = open(self.config_file, 'r')
-        values = get_config_values.read().splitlines()
-
-        self.camera_path = values[2]
-        self.scene_scale = values[4]
-        self.import_type = values[6]
-        self.st_map_setup = ast.literal_eval(values[8])
-        self.patch_setup = ast.literal_eval(values[10])
-
-        get_config_values.close()
-
-        if not os.path.isdir(self.camera_path):
-            self.camera_path = self.camera_path.rsplit('/', 1)[0]
-
         self.undistort_map_path = ''
         self.redistort_map_path = ''
 
@@ -237,53 +159,74 @@ class Import(object):
 
         try:
             os.makedirs(self.temp_folder)
-            print ('\n>>> temp folder created <<<\n')
+            print ('--> temp folder created \n')
         except:
-            print ('temp folder already exists')
+            print ('temp folder already exists\n')
 
         self.camera_file_path = self.file_browse(self.camera_path, self.filter_type)
 
         if self.camera_file_path:
             self.main_window()
 
-    def check_config_file(self):
+    def config(self):
 
-        # Check for and load config file
-        #-------------------------------
+        def get_config_values():
 
-        if not os.path.isdir(self.config_path):
-            try:
-                os.makedirs(self.config_path)
-            except:
-                message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
 
-        if not os.path.isfile(self.config_file):
-            print ('>>> config file does not exist, creating new config file <<<')
+            # Get Settings from config XML
 
-            config_text = []
+            for setting in root.iter('import_camera_settings'):
+                self.camera_path = setting.find('camera_path').text
+                self.scene_scale = int(setting.find('scene_scale').text)
+                self.import_type = setting.find('import_type').text
+                self.st_map_setup = ast.literal_eval(setting.find('st_map_setup').text)
+                self.patch_setup = ast.literal_eval(setting.find('patch_setup').text)
 
-            config_text.insert(0, 'Setup values for pyFlame Import Camera script.')
-            config_text.insert(1, 'Camera Path:')
-            config_text.insert(2, '/')
-            config_text.insert(3, 'Scene Scale:')
-            config_text.insert(4, '10')
-            config_text.insert(5, 'Import Type:')
-            config_text.insert(6, 'Action Objects')
-            config_text.insert(7, 'Add ST Map Setup')
-            config_text.insert(8, 'False')
-            config_text.insert(9, 'Add Patch Setup')
-            config_text.insert(10, 'False')
+            if not os.path.isdir(self.camera_path):
+                self.camera_path = self.camera_path.rsplit('/', 1)[0]
 
-            out_file = open(self.config_file, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
+            print ('--> config loaded \n')
+
+        def create_config_file():
+
+            if not os.path.isdir(self.config_path):
+                try:
+                    os.makedirs(self.config_path)
+                except:
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
+
+            if not os.path.isfile(self.config_xml):
+                print ('--> config file does not exist, creating new config file \n')
+
+                config = """
+<settings>
+    <import_camera_settings>
+        <camera_path>/</camera_path>
+        <scene_scale>100</scene_scale>
+        <import_type>Action Objects</import_type>
+        <st_map_setup>False</st_map_setup>
+        <patch_setup>False</patch_setup>
+    </import_camera_settings>
+</settings>"""
+
+                with open(self.config_xml, 'a') as config_file:
+                    config_file.write(config)
+                    config_file.close()
+
+        if os.path.isfile(self.config_xml):
+            get_config_values()
+        else:
+            create_config_file()
+            if os.path.isfile(self.config_xml):
+                get_config_values()
 
     # -------------------------------- #
 
     def create_camera_action(self):
         '''
-        Create action and load FBX or ABC camera scene
+        Create action and load FBX or Alembic camera scene
         '''
 
         import flame
@@ -337,25 +280,25 @@ class Import(object):
             self.camera_action.pos_x = self.master_pos_x
             self.camera_action.pos_y = self.master_pos_y
 
-        print ('\n>>> action created <<<')
+        print ('--> action created \n')
 
         # Import FBX camera
 
         if self.camera_file_path.endswith('.fbx'):
             if self.import_type == 'Action Objects':
-                self.camera_action.import_fbx('%s' % self.camera_file_path, unit_to_pixels=int(self.scene_scale))
+                self.camera_action.import_fbx(f'{self.camera_file_path}', unit_to_pixels=int(self.scene_scale))
             else:
-                self.camera_action.read_fbx('%s' % self.camera_file_path, unit_to_pixels=int(self.scene_scale))
+                self.camera_action.read_fbx(f'{self.camera_file_path}', unit_to_pixels=int(self.scene_scale))
 
         # Import Alembic camera
 
         else:
             if self.import_type == 'Action Objects':
-                self.camera_action.import_abc('%s' % self.camera_file_path, unit_to_pixels=int(self.scene_scale))
+                self.camera_action.import_abc(f'{self.camera_file_path}', unit_to_pixels=int(self.scene_scale))
             else:
-                self.camera_action.read_abc('%s' % self.camera_file_path, unit_to_pixels=int(self.scene_scale))
+                self.camera_action.read_abc(f'{self.camera_file_path}', unit_to_pixels=int(self.scene_scale))
 
-        print ('\n>>> camera imported <<<\n')
+        print ('--> camera imported \n')
 
     def create_patch_setup(self):
         '''
@@ -384,7 +327,7 @@ class Import(object):
                     node_num += 1
                     name_nodes(node_num)
 
-            print ('new_node_names: ', new_node_names)
+            # print ('new_node_names: ', new_node_names)
 
             return new_node_names
 
@@ -395,7 +338,7 @@ class Import(object):
         st_map_node_names = ['mux_in', 'action_in', 'action_out', 'recomp', 'regrain', 'divide']
 
         existing_node_names = [node.name for node in flame.batch.nodes]
-        print ('existing_node_names:', existing_node_names)
+        # print ('existing_node_names:', existing_node_names)
 
         new_node_names = []
 
@@ -477,21 +420,22 @@ class Import(object):
         flame.batch.connect_nodes(action_out_mux, 'OutMatte', recomp_action_media, 'Matte')
         flame.batch.connect_nodes(divide_comp, 'Result', recomp_action_media, 'Front')
 
-        print ('\n>>> camera imported with patch setup <<<\n')
+        print ('--> camera imported with patch setup \n')
 
     def create_st_map_setup(self):
         '''
         Create setup with st map workflow with 3d camera. Recomps over original plate at end.
         '''
+
         import flame
 
         def get_st_maps():
             import flame
-            import re
 
             # Browse for undistort map
 
-            message_box('Select Undistort Map')
+            FlameMessageWindow('Import', 'message', 'Select ST undistort map')
+
             self.undistort_map_path = self.file_browse(self.camera_file_path.rsplit('/', 1)[0], 'EXR (*.exr)')
 
             print ('undistort_map_path:', self.undistort_map_path, '\n')
@@ -505,15 +449,18 @@ class Import(object):
 
             for root, dirs, files in os.walk(self.undistort_map_path.rsplit('/', 1)[0]):
                 for f in files:
-                    if re.search('redistort', f, re.I):
-                        self.redistort_map_path = os.path.join(root, f)
-                        print ('\n>>> st redistort map found <<<\n')
-                        break
+                    if not f.startswith('.'):
+                        if re.search('redistort', f, re.I):
+                            self.redistort_map_path = os.path.join(root, f)
+                            print ('\n--> st redistort map found \n')
+                            break
 
             # If redistort map not found, browse for it
 
             if self.redistort_map_path == '':
-                message_box('Select Redistort Map')
+
+                FlameMessageWindow('Import', 'message', 'Select ST Redistort map')
+
                 self.redistort_map_path = self.file_browse(self.undistort_map_path, 'EXR (*.exr)')
 
             print ('redistort_map_path:', self.redistort_map_path, '\n')
@@ -531,7 +478,7 @@ class Import(object):
             self.redistort_map = flame.batch.import_clip(self.redistort_map_path, 'st_maps')
             self.undistort_map = flame.batch.import_clip(self.undistort_map_path, 'st_maps')
 
-            print ('\n>>> st maps imported <<<\n')
+            print ('\n--> st maps imported \n')
             return True
 
         def build_st_map_setup():
@@ -563,7 +510,6 @@ class Import(object):
             def edit_resize_node():
 
                 def get_st_map_res():
-                    import re
 
                     # Get resolution of st map clips for resize node
 
@@ -595,7 +541,7 @@ class Import(object):
                     resize_file_name = save_resize_path + '.resize_node'
                     print ('resize_file_name:', resize_file_name)
 
-                    print ('\n>>> resize node saved <<<\n')
+                    print ('\n--> resize node saved \n')
 
                     return resize_file_name
 
@@ -652,7 +598,7 @@ class Import(object):
                 ratio_split01 = contents.split('<DestinationAspect>', 1)[0]
                 ratio_split02 = contents.split('</DestinationAspect>', 1)[1]
 
-                new_ratio = '<DestinationAspect>%s</DestinationAspect>' % undistort_clip_ratio
+                new_ratio = f'<DestinationAspect>{undistort_clip_ratio}</DestinationAspect>'
 
                 contents = ratio_split01 + new_ratio + ratio_split02
 
@@ -681,7 +627,7 @@ class Import(object):
                 flame.batch.connect_nodes(undistort_plate_resize, 'Result', plate_resize_media, 'Front')
                 flame.batch.connect_nodes(plate_in_mux, 'Result', undistort_plate_resize, 'Front')
 
-                print ('\n>>> resize node set to st map resolution <<<\n')
+                print ('\n--> resize node set to st map resolution \n')
 
             # Set node names
             # --------------
@@ -767,8 +713,6 @@ class Import(object):
             recomp_action = flame.batch.create_node('Action')
             recomp_action.name = new_node_names[4]
             recomp_action.collapsed = True
-            ####recomp_action.load_node_setup(os.path.join(SCRIPT_PATH, 'action_nodes/st_map_import/comp_redistort.flare.action'))
-            #### save_action_path, action_filename = self.save_action_node(recomp_action, new_node_names[4])
 
             recomp_action.pos_x = comp_redistort_in_mux.pos_x + 600
             recomp_action.pos_y = self.master_pos_y - 15
@@ -874,7 +818,7 @@ class Import(object):
 
             ###### edit_plate_undistort_action_node()
 
-            print ('\n>>> camera imported with st map setup <<<\n')
+            print ('\n--> camera imported with st map setup \n')
 
         # Load st maps
 
@@ -884,43 +828,42 @@ class Import(object):
             self.create_camera_action()
             build_st_map_setup()
         else:
-            print ('\n>>> import cancelled <<<\n')
+            print ('--> import cancelled \n')
 
     def config_save(self):
 
         #  Save settings
 
-        self.scene_scale = self.scale_spinbox.value()
+        self.scene_scale = self.scale_slider.text()
         self.import_type = self.import_type_btn.text()
 
-        print ('scene_scale:', self.scene_scale)
-        print ('import_type:', self.import_type)
+        # Save settings to config file
 
-        config_text = []
+        xml_tree = ET.parse(self.config_xml)
+        root = xml_tree.getroot()
 
-        config_text.insert(0, 'Setup values for pyFlame Import Camera script.')
-        config_text.insert(1, 'Camera Path:')
-        config_text.insert(2, self.camera_file_path)
-        config_text.insert(3, 'Scene Scale:')
-        config_text.insert(4, self.scene_scale)
-        config_text.insert(5, 'Import Type:')
-        config_text.insert(6, self.import_type)
-        config_text.insert(7, 'Add ST Map Setup')
-        config_text.insert(8, self.st_map_setup_button.isChecked())
-        config_text.insert(9, 'Add Patch Setup')
-        config_text.insert(10, self.patch_setup_button.isChecked())
+        camera_path = root.find('.//camera_path')
+        camera_path.text = self.camera_file_path
 
-        out_file = open(self.config_file, 'w')
-        for line in config_text:
-            print(line, file=out_file)
-        out_file.close()
+        scene_scale = root.find('.//scene_scale')
+        scene_scale.text = str(self.scene_scale)
 
-        print ('\n>>> config saved <<<\n')
+        import_type = root.find('.//import_type')
+        import_type.text = self.import_type
+
+        st_map_setup = root.find('.//st_map_setup')
+        st_map_setup.text = str(self.st_map_setup_button.isChecked())
+
+        patch_setup = root.find('.//patch_setup')
+        patch_setup.text = str(self.patch_setup_button.isChecked())
+
+        xml_tree.write(self.config_xml)
+
+        print ('--> config saved \n')
 
     # -------------------------------- #
 
     def main_window(self):
-        import shutil
 
         def load():
 
@@ -936,479 +879,32 @@ class Import(object):
             # Delete temp folder
 
             shutil.rmtree(self.temp_folder)
-            print ('\n>>> temp folder deleted <<<\n')
+            print ('--> temp folder deleted \n')
 
-            print ('done.')
+            print ('done.\n')
 
         def cancel():
-            import shutil
 
             shutil.rmtree(self.temp_folder)
 
             self.window.close()
 
-        self.window = QtWidgets.QWidget()
-        self.window.setMinimumSize(QtCore.QSize(300, 150))
-        self.window.setMaximumSize(QtCore.QSize(500, 300))
-        self.window.setWindowTitle('pyFlame Import FBX/Alembic %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setStyleSheet('background-color: #313131')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        vbox = QtWidgets.QVBoxLayout()
+        self.window = FlameWindow(f'Import Camera <small>{VERSION}', vbox, 500, 230)
 
         # Labels
 
-        self.scene_scale_label = FlameLabel('Scene Scale', 'normal', self.window)
-        self.import_type_label = FlameLabel('Import Type', 'normal', self.window)
+        self.scene_scale_label = FlameLabel('Scene Scale', 'normal', 110)
+        self.import_type_label = FlameLabel('Import Type', 'normal', 110)
 
-        # Scale Slider
+        # Slider
 
-        class FlameSliderLineEdit(QtWidgets.QLineEdit):
-            from PySide2 import QtGui
-
-            IntSpinBox = 0
-            DoubleSpinBox = 1
-
-            def __init__(self, spinbox_type, value, parent=None):
-                from PySide2 import QtGui
-
-                super(FlameSliderLineEdit, self).__init__(parent)
-
-                self.setAlignment(QtCore.Qt.AlignCenter)
-                self.setMinimumHeight(28)
-                self.setMinimumWidth(110)
-                self.setMaximumWidth(110)
-
-                if spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    self.setValidator(QtGui.QIntValidator(parent=self))
-                else:
-                    self.setValidator(QtGui.QDoubleValidator(parent=self))
-
-                self.spinbox_type = spinbox_type
-                self.min = None
-                self.max = None
-                self.steps = 1
-                self.value_at_press = None
-                self.pos_at_press = None
-
-                self.setValue(value)
-                self.setReadOnly(True)
-                self.textChanged.connect(self.value_changed)
-                self.setFocusPolicy(QtCore.Qt.NoFocus)
-                self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                   'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                                   'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-                self.clearFocus()
-
-            def calculator(self):
-                from functools import partial
-                from PySide2 import QtGui
-
-                def clear():
-                    calc_lineedit.setText('')
-
-                def button_press(key):
-
-                    if self.clean_line:
-                        calc_lineedit.setText('')
-
-                    calc_lineedit.insert(key)
-
-                    self.clean_line = False
-
-                def plus_minus():
-
-                    if calc_lineedit.text():
-                        calc_lineedit.setText(str(float(calc_lineedit.text()) * -1))
-
-                def add_sub(key):
-
-                    if calc_lineedit.text() == '':
-                        calc_lineedit.setText('0')
-
-                    if '**' not in calc_lineedit.text():
-                        try:
-                            calc_num = eval(calc_lineedit.text().lstrip('0'))
-
-                            calc_lineedit.setText(str(calc_num))
-
-                            calc_num = float(calc_lineedit.text())
-
-                            if calc_num == 0:
-                                calc_num = 1
-                            if key == 'add':
-                                self.setValue(float(self.text()) + float(calc_num))
-                            else:
-                                self.setValue(float(self.text()) - float(calc_num))
-
-                            self.clean_line = True
-                        except:
-                            pass
-
-                def enter():
-
-                    if self.clean_line == True:
-                        return calc_window.close()
-
-                    if calc_lineedit.text():
-                        try:
-
-                            # If only single number set slider value to that number
-
-                            self.setValue(float(calc_lineedit.text()))
-                        except:
-
-                            # Do math
-
-                            new_value = calculate_entry()
-                            self.setValue(float(new_value))
-
-                    close_calc()
-
-                def equals():
-
-                    if calc_lineedit.text() == '':
-                        calc_lineedit.setText('0')
-
-                    if calc_lineedit.text() != '0':
-
-                        calc_line = calc_lineedit.text().lstrip('0')
-                    else:
-                        calc_line = calc_lineedit.text()
-
-                    if '**' not in calc_lineedit.text():
-                        try:
-                            calc = eval(calc_line)
-                        except:
-                            calc = 0
-
-                        calc_lineedit.setText(str(calc))
-                    else:
-                        calc_lineedit.setText('1')
-
-                def calculate_entry():
-
-                    calc_line = calc_lineedit.text().lstrip('0')
-                    if '**' not in calc_lineedit.text():
-                        try:
-                            if calc_line.startswith('+'):
-                                calc = float(self.text()) + eval(calc_line[-1:])
-                            elif calc_line.startswith('-'):
-                                try:
-                                    if float(calc_lineedit.text()):
-                                        calc = float(self.text()) - eval(calc_line[-1:])
-                                except:
-                                    calc = eval(calc_line)
-                            elif calc_line.startswith('*'):
-                                calc = float(self.text()) * eval(calc_line[-1:])
-                            elif calc_line.startswith('/'):
-                                calc = float(self.text()) / eval(calc_line[-1:])
-                            else:
-                                calc = eval(calc_line)
-                        except:
-                            calc = 0
-                    else:
-                        calc = 1
-
-                    calc_lineedit.setText(str(float(calc)))
-
-                    return calc
-
-                def close_calc():
-                    calc_window.close()
-                    self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-                def revert_color():
-                    self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-                calc_version = '1.1'
-                self.clean_line = False
-
-                calc_window = QtWidgets.QWidget()
-                calc_window.setMinimumSize(QtCore.QSize(210, 280))
-                calc_window.setMaximumSize(QtCore.QSize(210, 280))
-                calc_window.setWindowTitle('pyFlame Calc %s' % calc_version)
-                calc_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.Popup)
-                calc_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-                calc_window.destroyed.connect(revert_color)
-                calc_window.move(QtGui.QCursor.pos().x() - 110, QtGui.QCursor.pos().y() - 290)
-                calc_window.setStyleSheet('background-color: #282828')
-
-                # Labels
-
-                calc_label = QtWidgets.QLabel('Calculator', calc_window)
-                calc_label.setAlignment(QtCore.Qt.AlignCenter)
-                calc_label.setMinimumHeight(28)
-                calc_label.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-
-                #  LineEdit
-
-                calc_lineedit = QtWidgets.QLineEdit('', calc_window)
-                calc_lineedit.setMinimumHeight(28)
-                calc_lineedit.setFocus()
-                calc_lineedit.returnPressed.connect(enter)
-                calc_lineedit.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}')
-
-                # Limit characters that can be entered into lineedit
-
-                regex = QtCore.QRegExp('[0-9_,=,/,*,+,\-,.]+')
-                validator = QtGui.QRegExpValidator(regex)
-                calc_lineedit.setValidator(validator)
-
-                # Buttons
-
-                def calc_null():
-                    # For blank button - this does nothing
-                    pass
-
-                class FlameCalcButton(QtWidgets.QPushButton):
-                    """
-                    Custom Qt Flame Button Widget
-                    """
-
-                    def __init__(self, button_name, size_x, size_y, connect, parent, *args, **kwargs):
-                        super(FlameCalcButton, self).__init__(*args, **kwargs)
-
-                        self.setText(button_name)
-                        self.setParent(parent)
-                        self.setMinimumSize(size_x, size_y)
-                        self.setMaximumSize(size_x, size_y)
-                        self.setFocusPolicy(QtCore.Qt.NoFocus)
-                        self.clicked.connect(connect)
-                        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                blank_btn = FlameCalcButton('', 40, 28, calc_null, calc_window)
-                blank_btn.setDisabled(True)
-                plus_minus_btn = FlameCalcButton('+/-', 40, 28, plus_minus, calc_window)
-                plus_minus_btn.setStyleSheet('color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"')
-                add_btn = FlameCalcButton('Add', 40, 28, (partial(add_sub, 'add')), calc_window)
-                sub_btn = FlameCalcButton('Sub', 40, 28, (partial(add_sub, 'sub')), calc_window)
-
-                #  --------------------------------------- #
-
-                clear_btn = FlameCalcButton('C', 40, 28, clear, calc_window)
-                equal_btn = FlameCalcButton('=', 40, 28, equals, calc_window)
-                div_btn = FlameCalcButton('/', 40, 28, (partial(button_press, '/')), calc_window)
-                mult_btn = FlameCalcButton('/', 40, 28, (partial(button_press, '*')), calc_window)
-
-                #  --------------------------------------- #
-
-                _7_btn = FlameCalcButton('7', 40, 28, (partial(button_press, '7')), calc_window)
-                _8_btn = FlameCalcButton('8', 40, 28, (partial(button_press, '8')), calc_window)
-                _9_btn = FlameCalcButton('9', 40, 28, (partial(button_press, '9')), calc_window)
-                minus_btn = FlameCalcButton('-', 40, 28, (partial(button_press, '-')), calc_window)
-
-                #  --------------------------------------- #
-
-                _4_btn = FlameCalcButton('4', 40, 28, (partial(button_press, '4')), calc_window)
-                _5_btn = FlameCalcButton('5', 40, 28, (partial(button_press, '5')), calc_window)
-                _6_btn = FlameCalcButton('6', 40, 28, (partial(button_press, '6')), calc_window)
-                plus_btn = FlameCalcButton('+', 40, 28, (partial(button_press, '+')), calc_window)
-
-                #  --------------------------------------- #
-
-                _1_btn = FlameCalcButton('1', 40, 28, (partial(button_press, '1')), calc_window)
-                _2_btn = FlameCalcButton('2', 40, 28, (partial(button_press, '2')), calc_window)
-                _3_btn = FlameCalcButton('3', 40, 28, (partial(button_press, '3')), calc_window)
-                enter_btn = FlameCalcButton('Enter', 40, 61, enter, calc_window)
-
-                #  --------------------------------------- #
-
-                _0_btn = FlameCalcButton('0', 86, 28, (partial(button_press, '0')), calc_window)
-                point_btn = FlameCalcButton('.', 40, 28, (partial(button_press, '.')), calc_window)
-
-                gridbox = QtWidgets.QGridLayout()
-                gridbox.setVerticalSpacing(5)
-                gridbox.setHorizontalSpacing(5)
-
-                gridbox.addWidget(calc_label, 0, 0, 1, 4)
-
-                gridbox.addWidget(calc_lineedit, 1, 0, 1, 4)
-
-                gridbox.addWidget(blank_btn, 2, 0)
-                gridbox.addWidget(plus_minus_btn, 2, 1)
-                gridbox.addWidget(add_btn, 2, 2)
-                gridbox.addWidget(sub_btn, 2, 3)
-
-                gridbox.addWidget(clear_btn, 3, 0)
-                gridbox.addWidget(equal_btn, 3, 1)
-                gridbox.addWidget(div_btn, 3, 2)
-                gridbox.addWidget(mult_btn, 3, 3)
-
-                gridbox.addWidget(_7_btn, 4, 0)
-                gridbox.addWidget(_8_btn, 4, 1)
-                gridbox.addWidget(_9_btn, 4, 2)
-                gridbox.addWidget(minus_btn, 4, 3)
-
-                gridbox.addWidget(_4_btn, 5, 0)
-                gridbox.addWidget(_5_btn, 5, 1)
-                gridbox.addWidget(_6_btn, 5, 2)
-                gridbox.addWidget(plus_btn, 5, 3)
-
-                gridbox.addWidget(_1_btn, 6, 0)
-                gridbox.addWidget(_2_btn, 6, 1)
-                gridbox.addWidget(_3_btn, 6, 2)
-                gridbox.addWidget(enter_btn, 6, 3, 2, 1)
-
-                gridbox.addWidget(_0_btn, 7, 0, 1, 2)
-                gridbox.addWidget(point_btn, 7, 2)
-
-                calc_window.setLayout(gridbox)
-
-                calc_window.show()
-
-            def value_changed(self):
-
-                # If value is greater or less than min/max values set values to min/max
-
-                if int(self.value()) < self.min:
-                    self.setText(str(self.min))
-                if int(self.value()) > self.max:
-                    self.setText(str(self.max))
-
-            def mousePressEvent(self, event):
-                from PySide2 import QtGui
-
-                if event.buttons() == QtCore.Qt.LeftButton:
-                    self.value_at_press = self.value()
-                    self.pos_at_press = event.pos()
-                    self.setCursor(QtGui.QCursor(QtCore.Qt.SizeHorCursor))
-                    self.setStyleSheet('QLineEdit {color: #d9d9d9; background-color: #474e58; selection-color: #d9d9d9; selection-background-color: #474e58; font: 14px "Discreet"}'
-                                       'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                                       'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-            def mouseReleaseEvent(self, event):
-                from PySide2 import QtGui
-
-                if event.button() == QtCore.Qt.LeftButton:
-
-                    # Open calculator if button is released within 10 pixels of button click
-
-                    if event.pos().x() in range((self.pos_at_press.x() - 10), (self.pos_at_press.x() + 10)) and event.pos().y() in range((self.pos_at_press.y() - 10), (self.pos_at_press.y() + 10)):
-                        self.calculator()
-                    else:
-                        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"}'
-                                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-                    self.value_at_press = None
-                    self.pos_at_press = None
-                    self.setCursor(QtGui.QCursor(QtCore.Qt.IBeamCursor))
-                    return
-
-                super(FlameSliderLineEdit, self).mouseReleaseEvent(event)
-
-            def mouseMoveEvent(self, event):
-
-                if event.buttons() != QtCore.Qt.LeftButton:
-                    return
-
-                if self.pos_at_press is None:
-                    return
-
-                steps_mult = self.getStepsMultiplier(event)
-
-                delta = event.pos().x() - self.pos_at_press.x()
-                delta /= 5  # Make movement less sensitive.
-                delta *= self.steps * steps_mult
-
-                value = self.value_at_press + delta
-                self.setValue(value)
-
-                super(FlameSliderLineEdit, self).mouseMoveEvent(event)
-
-            def getStepsMultiplier(self, event):
-
-                steps_mult = 1
-
-                if event.modifiers() == QtCore.Qt.CTRL:
-                    steps_mult = 10
-                elif event.modifiers() == QtCore.Qt.SHIFT:
-                    steps_mult = 0.10
-
-                return steps_mult
-
-            def setMinimum(self, value):
-
-                self.min = value
-
-            def setMaximum(self, value):
-
-                self.max = value
-
-            def setSteps(self, steps):
-
-                if self.spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    self.steps = max(steps, 1)
-                else:
-                    self.steps = steps
-
-            def value(self):
-
-                if self.spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    return int(self.text())
-                else:
-                    return float(self.text())
-
-            def setValue(self, value):
-
-                if self.min is not None:
-                    value = max(value, self.min)
-
-                if self.max is not None:
-                    value = min(value, self.max)
-
-                if self.spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    self.setText(str(int(value)))
-                else:
-                    # Keep float values to two decimal places
-
-                    value_string = str(float(value))
-
-                    if len(value_string.rsplit('.', 1)[1]) < 2:
-                        value_string = value_string + '0'
-
-                    if len(value_string.rsplit('.', 1)[1]) > 2:
-                        value_string = value_string[:-1]
-
-                    self.setText(value_string)
-
-        def slider(min_value, max_value, start_value, slider, lineedit):
-
-            def set_slider():
-                slider.setValue(float(lineedit.text()))
-
-            slider.setMaximumHeight(3)
-            slider.setMinimumWidth(110)
-            slider.setMaximumWidth(110)
-            slider.setMinimum(min_value)
-            slider.setMaximum(max_value)
-            slider.setValue(start_value)
-            slider.setStyleSheet('QSlider {color: #111111}'
-                                 'QSlider::groove:horizontal {background-color: #111111}'
-                                 'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-            slider.setDisabled(True)
-
-            lineedit.setMinimum(min_value)
-            lineedit.setMaximum(max_value)
-            lineedit.textChanged.connect(set_slider)
-            slider.raise_()
-
-        self.scale_spinbox_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.scale_spinbox = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, 10, parent=self.window)
-        slider(1, 1000, 10, self.scale_spinbox_slider, self.scale_spinbox)
+        self.scale_slider = FlameSlider(self.scene_scale, 1, 1000, False, 150)
 
         # Menu Pushbutton
 
         import_menu_options = ['Action Objects', 'Read File']
-        self.import_type_btn = FlamePushButtonMenu(self.import_type, import_menu_options, self.window)
+        self.import_type_btn = FlamePushButtonMenu(self.import_type, import_menu_options)
 
         #  Pushbuttons
 
@@ -1420,13 +916,16 @@ class Import(object):
             if self.patch_setup_button.isChecked():
                 self.st_map_setup_button.setChecked(False)
 
-        self.st_map_setup_button = FlamePushButton(' ST Map Setup', self.window, self.st_map_setup, st_map_setup_toggle)
-        self.patch_setup_button = FlamePushButton(' Patch Setup', self.window, self.patch_setup, patch_setup_toggle)
+        self.st_map_setup_button = FlamePushButton('ST Map Setup', self.st_map_setup)
+        self.st_map_setup_button.clicked.connect(st_map_setup_toggle)
+
+        self.patch_setup_button = FlamePushButton('Patch Setup', self.patch_setup)
+        self.patch_setup_button.clicked.connect(patch_setup_toggle)
 
         # Buttons
 
-        self.load_btn = FlameButton('Load', load, self.window)
-        self.cancel_btn = FlameButton('Cancel', cancel, self.window)
+        self.load_btn = FlameButton('Load', load)
+        self.cancel_btn = FlameButton('Cancel', cancel)
 
         # Window Layout
 
@@ -1437,8 +936,7 @@ class Import(object):
         gridbox.setColumnMinimumWidth(2, 50)
 
         gridbox.addWidget(self.scene_scale_label, 0, 0)
-        gridbox.addWidget(self.scale_spinbox_slider, 0, 1, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.scale_spinbox, 0, 1)
+        gridbox.addWidget(self.scale_slider, 0, 1)
         gridbox.addWidget(self.st_map_setup_button, 0, 3)
 
         gridbox.addWidget(self.import_type_label, 1, 0)
@@ -1453,7 +951,6 @@ class Import(object):
 
         # Main VBox
 
-        vbox = QtWidgets.QVBoxLayout()
         vbox.setMargin(20)
         vbox.addStretch(5)
         vbox.addLayout(gridbox)
@@ -1461,43 +958,19 @@ class Import(object):
         vbox.addLayout(hbox01)
         vbox.addStretch(5)
 
-        self.window.setLayout(vbox)
-
         self.window.show()
 
     def file_browse(self, path, filter_type):
 
         file_browser = QtWidgets.QFileDialog()
         file_browser.setDirectory(path)
-        file_browser.setOption(QtWidgets.QFileDialog.DontUseNativeDialog, True)
         file_browser.setNameFilter(filter_type)
         file_browser.setFileMode(QtWidgets.QFileDialog.ExistingFile) # Change to ExistingFiles to capture many files
         if file_browser.exec_():
             return str(file_browser.selectedFiles()[0])
 
-        print ('\n>>> import cancelled <<<\n')
+        print ('\n--> import cancelled \n')
         return
-
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
 
 # -------------------------------- #
 
@@ -1524,12 +997,12 @@ def get_batch_custom_ui_actions():
                 {
                     'name': 'Import FBX',
                     'execute': import_fbx,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Import Alembic',
                     'execute': import_abc,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 }
             ]
         }

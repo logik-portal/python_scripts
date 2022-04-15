@@ -1,16 +1,18 @@
 '''
-Script Name: Adjust Timeline Text FX
-Script Version: 2.0
-Flame Version: 2020
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Name: Adjust Text FX
+Script Version: 2.2
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 05.08.20
-Update Date: 05.22.21
+Update Date: 03.18.22
 
 Custom Action Type: Timeline
 
 Description:
 
     Interactively adjust timeline text fx settings that can then be applied to all selected timeline text fx
+
+Menu:
 
     Right-click on selected clips on timeline with text fx -> Text FX... -> Adjust Text FX
 
@@ -20,169 +22,48 @@ To install:
 
 Updates:
 
-v2.0 05.22.21
+    v2.2 03.18.22
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Moved UI widgets to external file
 
-v1.4 02.17.21
+    v2.1 02.25.22
 
-    Multiple text layers can now be repositioned properly
+        Updated UI for Flame 2023
 
-    Fixes to calculator
+    v2.0 05.22.21
 
-v1.3 02.06.21
+        Updated to be compatible with Flame 2022/Python 3.7
 
-    Misc calculator fixes
+    v1.4 02.17.21
 
-    Converted UI elements to classes
+        Multiple text layers can now be repositioned properly
+
+        Fixes to slider calculator
+
+    v1.3 02.06.21
+
+        Misc slider calculator fixes
+
+        Converted UI elements to classes
 '''
 
-from __future__ import print_function
+import xml.etree.cElementTree as ET
 from functools import partial
-import os
-from PySide2 import QtCore, QtWidgets
+import os, ast, shutil
+from PySide2 import QtWidgets
+from flame_widgets_adjust_text_fx import FlameButton, FlameLabel, FlameClickableLineEdit, FlamePushButton, FlamePushButtonMenu, FlameSlider, FlameWindow, FlameMessageWindow
 
-VERSION = 'v2.0'
+VERSION = 'v2.2'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/adjust_text_fx'
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-
-    For different label looks set label_type as: 'normal', 'background', or 'outline'
-
-    To use:
-
-    label = FlameLabel('Label Name', 'normal', window)
-    """
-
-    def __init__(self, label_name, label_type, parent_window, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(110, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-        elif label_type == 'outline':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"')
-
-class FlameClickableLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Clickable Line Edit Widget
-    """
-
-    clicked = QtCore.Signal()
-
-    def __init__(self, text, parent, *args, **kwargs):
-        super(FlameClickableLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setReadOnly(True)
-        self.setStyleSheet('QLineEdit {color: #898989; background-color: #373e47; font: 14px "Discreet"}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-
-    def mousePressEvent(self, event):
-
-        if event.button() == QtCore.Qt.LeftButton:
-            self.setStyleSheet('QLineEdit {color: #bbbbbb; background-color: #474e58; font: 14px "Discreet"}'
-                               'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-            self.clicked.emit()
-            self.setStyleSheet('QLineEdit {color: #898989; background-color: #373e47; font: 14px "Discreet"}'
-                               'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-        else:
-            super().mousePressEvent(event)
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-    """
-
-    def __init__(self, name, parent, checked, connect, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(name)
-        self.setParent(parent)
-        self.setCheckable(True)
-        self.setChecked(checked)
-        self.clicked.connect(connect)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setMinimumSize(110, 28)
-        self.setMaximumSize(110, 28)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #424142, stop: .91 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .90 #4f4f4f, stop: .91 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #383838, stop: .94 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}')
-
-class FlamePushButtonMenu(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Menu Widget
-    """
-
-    def __init__(self, button_name, menu_options, regen_text_fx, parent, *args, **kwargs):
-        super(FlamePushButtonMenu, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        def create_menu(option):
-
-            self.setText(option)
-            justify_changed = True
-            regen_text_fx(justify_changed)
-
-        pushbutton_menu = QtWidgets.QMenu(parent)
-        pushbutton_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        pushbutton_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-        for option in menu_options:
-            pushbutton_menu.addAction(option, partial(create_menu, option))
-
-        self.setMenu(pushbutton_menu)
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-    """
-
-    def __init__(self, name, parent, connect, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setParent(parent)
-        self.setText(name)
-        self.setMinimumSize(QtCore.QSize(110, 28))
-        self.setMaximumSize(QtCore.QSize(110, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(connect)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-# ---------------------------------------- #
 
 class AdjustFX(object):
 
     def __init__(self, selection):
         import xml.etree.cElementTree as ET
 
-        print ('\n', '>' * 20, 'adjust text fx %s' % VERSION, '<' * 20, '\n')
+        print ('\n')
+        print ('>' * 20, f'adjust text fx {VERSION}', '<' * 20, '\n')
 
         self.selection = selection
 
@@ -236,7 +117,7 @@ class AdjustFX(object):
         # Check text fx for text layers
 
         if not self.get_value('FontName'):
-            return message_box('Segment text fx contains no text layers')
+            return FlameMessageWindow('Error', 'error', 'Segment text fx contains no text layers')
 
         # Check number of fx on segment. If only one add additional fx
         # Needed for gap fx. Script deletes gap fx later. If no additional gap fx
@@ -258,8 +139,6 @@ class AdjustFX(object):
         self.main_window()
 
     def get_initial_text_fx(self):
-        # import shutil
-        # import flame
 
         def load_text_setup():
 
@@ -331,16 +210,12 @@ class AdjustFX(object):
 
         try:
             for elem in self.root.iter(value):
-                # print elem.attrib
-                # print elem.tag
                 item_value = elem.text
-            # print value, ':', elem.text
             return item_value
         except:
             return False
 
     def get_text_fx_values(self):
-        import ast
 
         def get_line_value(line_name, value):
             # Get values from lines that contain multiple values
@@ -348,8 +223,6 @@ class AdjustFX(object):
 
             for elem in self.root.iter(line_name):
                 elem_dict = elem.attrib
-            # print '\n', 'elem_dict:', elem_dict
-
             result = elem_dict.get(value)
 
             return result
@@ -551,543 +424,87 @@ class AdjustFX(object):
             elif 'all_shadows/translation/y' in channel_name:
                 self.all_shadows_translation_y = parse_xml(channel)
 
+    def regen_align(self):
+
+        self.regen_text_fx(True)
+
     def main_window(self):
 
-        self.window = QtWidgets.QWidget()
-        self.window.setMinimumSize(QtCore.QSize(1150, 375))
-        self.window.setMaximumSize(QtCore.QSize(1150, 375))
-        self.window.setWindowTitle('Adjust Timeline Text FX %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setStyleSheet('background-color: #272727')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        gridbox = QtWidgets.QGridLayout()
+        self.window = FlameWindow(f'Adjust Text FX <small>{VERSION}', gridbox, 1150, 445)
 
         # Labels
 
-        self.font_label = FlameLabel('Font', 'background', self.window)
-        self.position_offset_label = FlameLabel('Position Offset', 'background', self.window)
-        self.shadow_label = FlameLabel('Shadow', 'background', self.window)
+        self.font_label = FlameLabel('Font', label_type='underline', label_width=110)
+        self.position_offset_label = FlameLabel('Position Offset', label_type='underline',  label_width=110)
+        self.shadow_label = FlameLabel('Shadow', label_type='underline',  label_width=110)
 
-        self.font_path_label = FlameLabel('Font', 'normal', self.window)
-        self.font_size_label = FlameLabel('Font Size', 'normal', self.window)
-        self.italic_angle_label = FlameLabel('Italic Angle', 'normal', self.window)
-        self.kern_label = FlameLabel('Kern', 'normal', self.window)
-        self.align_label = FlameLabel('Align', 'normal', self.window)
-        self.fill_trans_label = FlameLabel('Transparency', 'normal', self.window)
-        self.softness_label = FlameLabel('Softness', 'normal', self.window)
-        self.separation_label = FlameLabel('Separation', 'normal', self.window)
-        self.offset_x_pos_label = FlameLabel('Offset X Pos', 'normal', self.window)
-        self.offset_y_pos_label = FlameLabel('Offset Y Pos', 'normal', self.window)
-        self.shadow_transp_label = FlameLabel('Transparency', 'normal', self.window)
-        self.shadow_softness_label = FlameLabel('Softness', 'normal', self.window)
-        self.shadow_x_pos_label = FlameLabel('X Pos', 'normal', self.window)
-        self.shadow_y_pos_label = FlameLabel('Y Pos', 'normal', self.window)
-        self.shadow_blur_label = FlameLabel('Blur', 'normal', self.window)
+        self.font_path_label = FlameLabel('Font', label_width=110)
+        self.font_size_label = FlameLabel('Font Size', label_width=110)
+        self.italic_angle_label = FlameLabel('Italic Angle', label_width=110)
+        self.kern_label = FlameLabel('Kern', label_width=110)
+        self.align_label = FlameLabel('Align', label_width=110)
+        self.fill_trans_label = FlameLabel('Transparency', label_width=110)
+        self.softness_label = FlameLabel('Softness', label_width=110)
+        self.separation_label = FlameLabel('Separation', label_width=110)
+        self.offset_x_pos_label = FlameLabel('Offset X Pos', label_width=110)
+        self.offset_y_pos_label = FlameLabel('Offset Y Pos', label_width=110)
+        self.shadow_transp_label = FlameLabel('Transparency', label_width=110)
+        self.shadow_softness_label = FlameLabel('Softness', label_width=110)
+        self.shadow_x_pos_label = FlameLabel('X Pos', label_width=110)
+        self.shadow_y_pos_label = FlameLabel('Y Pos', label_width=110)
+        self.shadow_blur_label = FlameLabel('Blur', label_width=110)
 
         # Font Line Edit
 
-        self.font_path_entry = FlameClickableLineEdit(self.font, self.window)
-        self.font_path_entry.clicked.connect(self.font_browse)
+        self.font_path_entry = FlameClickableLineEdit(self.font, self.font_browse)
         self.font_path_entry.clicked.connect(partial(self.regen_text_fx, self.align_changed))
 
         # Sliders
 
-        class FlameSliderLineEdit(QtWidgets.QLineEdit):
-            from PySide2 import QtWidgets, QtCore, QtGui
-
-            IntSpinBox = 0
-            DoubleSpinBox = 1
-
-            def __init__(self, spinbox_type, value, parent=None):
-                from PySide2 import QtGui
-
-                super(FlameSliderLineEdit, self).__init__(parent)
-
-                self.setAlignment(QtCore.Qt.AlignCenter)
-                self.setMinimumHeight(28)
-                self.setMinimumWidth(110)
-                self.setMaximumWidth(110)
-
-                if spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    self.setValidator(QtGui.QIntValidator(parent=self))
-                else:
-                    self.setValidator(QtGui.QDoubleValidator(parent=self))
-
-                self.spinbox_type = spinbox_type
-                self.min = None
-                self.max = None
-                self.steps = 1
-                self.value_at_press = None
-                self.pos_at_press = None
-
-                self.setValue(value)
-                self.setReadOnly(True)
-                self.textChanged.connect(self.value_changed)
-                self.setFocusPolicy(QtCore.Qt.NoFocus)
-                self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                                   'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                                   'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-                self.clearFocus()
-
-            def calculator(self):
-                from PySide2 import QtCore, QtWidgets, QtGui
-                from functools import partial
-
-                def clear():
-                    calc_lineedit.setText('')
-
-                def button_press(key):
-
-                    if self.clean_line == True:
-                        calc_lineedit.setText('')
-
-                    calc_lineedit.insert(key)
-
-                    self.clean_line = False
-
-                def plus_minus():
-
-                    if calc_lineedit.text():
-                        calc_lineedit.setText(str(float(calc_lineedit.text()) * -1))
-
-                def add_sub(key):
-
-                    if calc_lineedit.text() == '':
-                        calc_lineedit.setText('0')
-
-                    if '**' not in calc_lineedit.text():
-                        try:
-                            calc_num = eval(calc_lineedit.text().lstrip('0'))
-
-                            calc_lineedit.setText(str(calc_num))
-
-                            calc_num = float(calc_lineedit.text())
-
-                            if calc_num == 0:
-                                calc_num = 1
-                            if key == 'add':
-                                self.setValue(float(self.text()) + float(calc_num))
-                            else:
-                                self.setValue(float(self.text()) - float(calc_num))
-
-                            self.clean_line = True
-                        except:
-                            pass
-
-                def enter():
-
-                    if self.clean_line == True:
-                        return calc_window.close()
-
-                    if calc_lineedit.text():
-                        try:
-
-                            # If only single number set slider value to that number
-
-                            self.setValue(float(calc_lineedit.text()))
-                        except:
-
-                            # Do math
-
-                            new_value = calculate_entry()
-                            self.setValue(float(new_value))
-
-                    close_calc()
-
-                def equals():
-
-                    if calc_lineedit.text() == '':
-                        calc_lineedit.setText('0')
-
-                    if calc_lineedit.text() != '0':
-
-                        calc_line = calc_lineedit.text().lstrip('0')
-                    else:
-                        calc_line = calc_lineedit.text()
-
-                    if '**' not in calc_lineedit.text():
-                        try:
-                            calc = eval(calc_line)
-                        except:
-                            calc = 0
-
-                        calc_lineedit.setText(str(calc))
-                    else:
-                        calc_lineedit.setText('1')
-
-                def calculate_entry():
-
-                    calc_line = calc_lineedit.text().lstrip('0')
-                    print ('calc_line:', calc_line)
-                    if '**' not in calc_lineedit.text():
-                        try:
-                            if calc_line.startswith('+'):
-                                calc = float(self.text()) + eval(calc_line[-1:])
-                            elif calc_line.startswith('-'):
-                                try:
-                                    if float(calc_lineedit.text()):
-                                        calc = float(self.text()) - eval(calc_line[-1:])
-                                except:
-                                    calc = eval(calc_line)
-                            elif calc_line.startswith('*'):
-                                calc = float(self.text()) * eval(calc_line[-1:])
-                            elif calc_line.startswith('/'):
-                                calc = float(self.text()) / eval(calc_line[-1:])
-                            else:
-                                calc = eval(calc_line)
-                        except:
-                            calc = 0
-                    else:
-                        calc = 1
-
-                    calc_lineedit.setText(str(float(calc)))
-
-                    return calc
-
-                def close_calc():
-                    calc_window.close()
-                    self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-                def revert_color():
-                    self.setStyleSheet('color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"')
-
-                calc_version = '1.1'
-                self.clean_line = False
-
-                calc_window = QtWidgets.QWidget()
-                calc_window.setMinimumSize(QtCore.QSize(210, 280))
-                calc_window.setMaximumSize(QtCore.QSize(210, 280))
-                calc_window.setWindowTitle('pyFlame Calc %s' % calc_version)
-                calc_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.Popup)
-                calc_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-                calc_window.destroyed.connect(revert_color)
-                calc_window.move(QtGui.QCursor.pos().x() - 110, QtGui.QCursor.pos().y() - 290)
-                calc_window.setStyleSheet('background-color: #282828')
-
-                # Labels
-
-                calc_label = QtWidgets.QLabel('Calculator', calc_window)
-                calc_label.setAlignment(QtCore.Qt.AlignCenter)
-                calc_label.setMinimumHeight(28)
-                calc_label.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-
-                #  LineEdit
-
-                calc_lineedit = QtWidgets.QLineEdit('', calc_window)
-                calc_lineedit.setMinimumHeight(28)
-                calc_lineedit.setFocus()
-                calc_lineedit.returnPressed.connect(enter)
-                calc_lineedit.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}')
-
-                # Limit characters that can be entered into lineedit
-
-                regex = QtCore.QRegExp('[0-9_,=,/,*,+,\-,.]+')
-                validator = QtGui.QRegExpValidator(regex)
-                calc_lineedit.setValidator(validator)
-
-                # Buttons
-
-                def calc_null():
-                    # For blank button - this does nothing
-                    pass
-
-                class FlameCalcButton(QtWidgets.QPushButton):
-                    """
-                    Custom Qt Flame Button Widget
-                    """
-
-                    def __init__(self, button_name, size_x, size_y, connect, parent, *args, **kwargs):
-                        super(FlameCalcButton, self).__init__(*args, **kwargs)
-
-                        self.setText(button_name)
-                        self.setParent(parent)
-                        self.setMinimumSize(size_x, size_y)
-                        self.setMaximumSize(size_x, size_y)
-                        self.setFocusPolicy(QtCore.Qt.NoFocus)
-                        self.clicked.connect(connect)
-                        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-                blank_btn = FlameCalcButton('', 40, 28, calc_null, calc_window)
-                blank_btn.setDisabled(True)
-                plus_minus_btn = FlameCalcButton('+/-', 40, 28, plus_minus, calc_window)
-                plus_minus_btn.setStyleSheet('color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"')
-                add_btn = FlameCalcButton('Add', 40, 28, (partial(add_sub, 'add')), calc_window)
-                sub_btn = FlameCalcButton('Sub', 40, 28, (partial(add_sub, 'sub')), calc_window)
-
-                #  --------------------------------------- #
-
-                clear_btn = FlameCalcButton('C', 40, 28, clear, calc_window)
-                equal_btn = FlameCalcButton('=', 40, 28, equals, calc_window)
-                div_btn = FlameCalcButton('/', 40, 28, (partial(button_press, '/')), calc_window)
-                mult_btn = FlameCalcButton('/', 40, 28, (partial(button_press, '*')), calc_window)
-
-                #  --------------------------------------- #
-
-                _7_btn = FlameCalcButton('7', 40, 28, (partial(button_press, '7')), calc_window)
-                _8_btn = FlameCalcButton('8', 40, 28, (partial(button_press, '8')), calc_window)
-                _9_btn = FlameCalcButton('9', 40, 28, (partial(button_press, '9')), calc_window)
-                minus_btn = FlameCalcButton('-', 40, 28, (partial(button_press, '-')), calc_window)
-
-                #  --------------------------------------- #
-
-                _4_btn = FlameCalcButton('4', 40, 28, (partial(button_press, '4')), calc_window)
-                _5_btn = FlameCalcButton('5', 40, 28, (partial(button_press, '5')), calc_window)
-                _6_btn = FlameCalcButton('6', 40, 28, (partial(button_press, '6')), calc_window)
-                plus_btn = FlameCalcButton('+', 40, 28, (partial(button_press, '+')), calc_window)
-
-                #  --------------------------------------- #
-
-                _1_btn = FlameCalcButton('1', 40, 28, (partial(button_press, '1')), calc_window)
-                _2_btn = FlameCalcButton('2', 40, 28, (partial(button_press, '2')), calc_window)
-                _3_btn = FlameCalcButton('3', 40, 28, (partial(button_press, '3')), calc_window)
-                enter_btn = FlameCalcButton('Enter', 40, 61, enter, calc_window)
-
-                #  --------------------------------------- #
-
-                _0_btn = FlameCalcButton('0', 86, 28, (partial(button_press, '0')), calc_window)
-                point_btn = FlameCalcButton('.', 40, 28, (partial(button_press, '.')), calc_window)
-
-                gridbox = QtWidgets.QGridLayout()
-                gridbox.setVerticalSpacing(5)
-                gridbox.setHorizontalSpacing(5)
-
-                gridbox.addWidget(calc_label, 0, 0, 1, 4)
-
-                gridbox.addWidget(calc_lineedit, 1, 0, 1, 4)
-
-                gridbox.addWidget(blank_btn, 2, 0)
-                gridbox.addWidget(plus_minus_btn, 2, 1)
-                gridbox.addWidget(add_btn, 2, 2)
-                gridbox.addWidget(sub_btn, 2, 3)
-
-                gridbox.addWidget(clear_btn, 3, 0)
-                gridbox.addWidget(equal_btn, 3, 1)
-                gridbox.addWidget(div_btn, 3, 2)
-                gridbox.addWidget(mult_btn, 3, 3)
-
-                gridbox.addWidget(_7_btn, 4, 0)
-                gridbox.addWidget(_8_btn, 4, 1)
-                gridbox.addWidget(_9_btn, 4, 2)
-                gridbox.addWidget(minus_btn, 4, 3)
-
-                gridbox.addWidget(_4_btn, 5, 0)
-                gridbox.addWidget(_5_btn, 5, 1)
-                gridbox.addWidget(_6_btn, 5, 2)
-                gridbox.addWidget(plus_btn, 5, 3)
-
-                gridbox.addWidget(_1_btn, 6, 0)
-                gridbox.addWidget(_2_btn, 6, 1)
-                gridbox.addWidget(_3_btn, 6, 2)
-                gridbox.addWidget(enter_btn, 6, 3, 2, 1)
-
-                gridbox.addWidget(_0_btn, 7, 0, 1, 2)
-                gridbox.addWidget(point_btn, 7, 2)
-
-                calc_window.setLayout(gridbox)
-
-                calc_window.show()
-
-            def value_changed(self):
-
-                # If value is greater or less than min/max values set values to min/max
-
-                if int(self.value()) < self.min:
-                    self.setText(str(self.min))
-                if int(self.value()) > self.max:
-                    self.setText(str(self.max))
-
-            def mousePressEvent(self, event):
-                from PySide2 import QtGui
-
-                if event.buttons() == QtCore.Qt.LeftButton:
-                    self.value_at_press = self.value()
-                    self.pos_at_press = event.pos()
-                    self.setCursor(QtGui.QCursor(QtCore.Qt.SizeHorCursor))
-                    self.setStyleSheet('QLineEdit {color: #d9d9d9; background-color: #474e58; selection-color: #d9d9d9; selection-background-color: #474e58; font: 14px "Discreet"}'
-                                       'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                                       'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-            def mouseReleaseEvent(self, event):
-                from PySide2 import QtGui
-
-                if event.button() == QtCore.Qt.LeftButton:
-
-                    # Open calculator if button is released within 10 pixels of button click
-
-                    if event.pos().x() in range((self.pos_at_press.x() - 10), (self.pos_at_press.x() + 10)) and event.pos().y() in range((self.pos_at_press.y() - 10), (self.pos_at_press.y() + 10)):
-                        self.calculator()
-                    else:
-                        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #9a9a9a; selection-background-color: #373e47; font: 14px "Discreet"}'
-                                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-                    self.value_at_press = None
-                    self.pos_at_press = None
-                    self.setCursor(QtGui.QCursor(QtCore.Qt.IBeamCursor))
-                    return
-
-                super(FlameSliderLineEdit, self).mouseReleaseEvent(event)
-
-            def mouseMoveEvent(self, event):
-
-                if event.buttons() != QtCore.Qt.LeftButton:
-                    return
-
-                if self.pos_at_press is None:
-                    return
-
-                steps_mult = self.getStepsMultiplier(event)
-
-                delta = event.pos().x() - self.pos_at_press.x()
-                delta /= 5  # Make movement less sensitive.
-                delta *= self.steps * steps_mult
-
-                value = self.value_at_press + delta
-                self.setValue(value)
-
-                super(FlameSliderLineEdit, self).mouseMoveEvent(event)
-
-            def getStepsMultiplier(self, event):
-
-                steps_mult = 1
-
-                if event.modifiers() == QtCore.Qt.CTRL:
-                    steps_mult = 10
-                elif event.modifiers() == QtCore.Qt.SHIFT:
-                    steps_mult = 0.10
-
-                return steps_mult
-
-            def setMinimum(self, value):
-
-                self.min = value
-
-            def setMaximum(self, value):
-
-                self.max = value
-
-            def setSteps(self, steps):
-
-                if self.spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    self.steps = max(steps, 1)
-                else:
-                    self.steps = steps
-
-            def value(self):
-
-                if self.spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    return int(self.text())
-                else:
-                    return float(self.text())
-
-            def setValue(self, value):
-
-                if self.min is not None:
-                    value = max(value, self.min)
-
-                if self.max is not None:
-                    value = min(value, self.max)
-
-                if self.spinbox_type == FlameSliderLineEdit.IntSpinBox:
-                    self.setText(str(int(value)))
-                else:
-                    # Keep float values to two decimal places
-
-                    value_string = str(float(value))
-
-                    if len(value_string.rsplit('.', 1)[1]) < 2:
-                        value_string = value_string + '0'
-
-                    if len(value_string.rsplit('.', 1)[1]) > 2:
-                        value_string = value_string[:-1]
-
-                    self.setText(value_string)
-
-        def slider(min_value, max_value, start_value, slider, lineedit):
-
-            def set_slider():
-                slider.setValue(float(lineedit.text()))
-                justify_changed = False
-                self.regen_text_fx(justify_changed)
-
-            slider.setMaximumHeight(3)
-            slider.setMinimumWidth(110)
-            slider.setMaximumWidth(110)
-            slider.setMinimum(min_value)
-            slider.setMaximum(max_value)
-            slider.setValue(start_value)
-            slider.setStyleSheet('QSlider {color: #111111}'
-                                 'QSlider::groove:horizontal {background-color: #111111}'
-                                 'QSlider::handle:horizontal {background-color: #626467; width: 3px}')
-            slider.setDisabled(True)
-
-            lineedit.setMinimum(min_value)
-            lineedit.setMaximum(max_value)
-            lineedit.textChanged.connect(set_slider)
-            slider.raise_()
-
-        self.font_size_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
         if self.font_size_anim:
             minimum_value = 0
         else:
             minimum_value = 1
-        self.font_size_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, self.font_size, parent=self.window)
-        slider(minimum_value, 2000, int(self.font_size), self.font_size_slider, self.font_size_lineedit)
 
-        self.italic_angle_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.italic_angle_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, self.italic_angle, parent=self.window)
-        slider(-60, 60, self.italic_angle, self.italic_angle_slider, self.italic_angle_lineedit)
+        self.font_size_slider = FlameSlider(int(self.font_size), minimum_value, 2000)
+        self.font_size_slider.textChanged.connect(self.regen_text_fx)
 
-        self.kern_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.kern_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, self.kern, parent=self.window)
-        slider(-100, 100, self.kern, self.kern_slider, self.kern_lineedit)
+        self.italic_angle_slider = FlameSlider(self.italic_angle, -60, 60)
+        self.italic_angle_slider.textChanged.connect(self.regen_text_fx)
 
-        self.fill_transp_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.fill_transp_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, self.fill_transp, parent=self.window)
-        slider(0, 100, self.fill_transp, self.fill_transp_slider, self.fill_transp_lineedit)
+        self.kern_slider = FlameSlider(self.kern, -100, 100)
+        self.kern_slider.textChanged.connect(self.regen_text_fx)
 
-        self.softness_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.softness_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.DoubleSpinBox, self.char_soft, parent=self.window)
-        slider(-100, 100, self.char_soft, self.softness_slider, self.softness_lineedit)
+        self.fill_transp_slider = FlameSlider(self.fill_transp, 0, 100)
+        self.fill_transp_slider.textChanged.connect(self.regen_text_fx)
 
-        self.offset_x_pos_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.offset_x_pos_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.DoubleSpinBox, 0, parent=self.window)
-        slider(-99999, 99999, 0, self.offset_x_pos_slider, self.offset_x_pos_lineedit)
+        self.softness_slider = FlameSlider(self.char_soft, -100, 100, value_is_float=True)
+        self.softness_slider.textChanged.connect(self.regen_text_fx)
 
-        self.offset_y_pos_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.offset_y_pos_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.DoubleSpinBox, 0, parent=self.window)
-        slider(-99999, 99999, 0, self.offset_y_pos_slider, self.offset_y_pos_lineedit)
+        self.offset_x_pos_slider = FlameSlider(0, -99999, 99999, value_is_float=True)
+        self.offset_x_pos_slider.textChanged.connect(self.regen_text_fx)
 
-        self.separation_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.separation_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, self.separation, parent=self.window)
-        slider(0, 999, self.separation, self.separation_slider, self.separation_lineedit)
+        self.offset_y_pos_slider = FlameSlider(0, -99999, 99999, value_is_float=True)
+        self.offset_y_pos_slider.textChanged.connect(self.regen_text_fx)
 
-        self.shadow_transp_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.shadow_transp_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, self.shadow_transp, parent=self.window)
-        slider(0, 100, self.shadow_transp, self.shadow_transp_slider, self.shadow_transp_lineedit)
+        self.separation_slider = FlameSlider(self.separation, 0, 999)
+        self.separation_slider.textChanged.connect(self.regen_text_fx)
 
-        self.shadow_softness_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.shadow_softness_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.DoubleSpinBox, self.shadow_softness, parent=self.window)
-        slider(-100, 100, self.shadow_softness, self.shadow_softness_slider, self.shadow_softness_lineedit)
+        self.shadow_transp_slider = FlameSlider(self.shadow_transp, 0, 100)
+        self.shadow_transp_slider.textChanged.connect(self.regen_text_fx)
 
-        self.shadow_x_pos_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.shadow_x_pos_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.DoubleSpinBox, self.all_shadows_translation_x, parent=self.window)
-        slider(-9999, 9999, self.all_shadows_translation_x, self.shadow_x_pos_slider, self.shadow_x_pos_lineedit)
+        self.shadow_softness_slider = FlameSlider(self.shadow_softness, -100, 100, value_is_float=True)
+        self.shadow_softness_slider.textChanged.connect(self.regen_text_fx)
 
-        self.shadow_y_pos_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.shadow_y_pos_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.DoubleSpinBox, self.all_shadows_translation_y, parent=self.window)
-        slider(-9999, 9999, self.all_shadows_translation_y, self.shadow_y_pos_slider, self.shadow_y_pos_lineedit)
+        self.shadow_x_pos_slider = FlameSlider(self.all_shadows_translation_x, -9999, 9999, value_is_float=True)
+        self.shadow_x_pos_slider.textChanged.connect(self.regen_text_fx)
 
-        self.shadow_blur_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self.window)
-        self.shadow_blur_lineedit = FlameSliderLineEdit(FlameSliderLineEdit.IntSpinBox, self.shadow_blur_level, parent=self.window)
-        slider(0, 200, self.shadow_blur_level, self.shadow_blur_slider, self.shadow_blur_lineedit)
+        self.shadow_y_pos_slider = FlameSlider(self.all_shadows_translation_y, -9999, 9999, value_is_float=True)
+        self.shadow_y_pos_slider.textChanged.connect(self.regen_text_fx)
+
+        self.shadow_blur_slider = FlameSlider(self.shadow_blur_level, 0, 200)
+        self.shadow_blur_slider.textChanged.connect(self.regen_text_fx)
 
         # Shadow Pushbuttons
 
@@ -1108,54 +525,45 @@ class AdjustFX(object):
             if shadow_checked:
                 self.shadow_transp_label.setEnabled(True)
                 self.shadow_transp_slider.setEnabled(True)
-                self.shadow_transp_lineedit.setEnabled(True)
                 self.shadow_softness_label.setEnabled(True)
                 self.shadow_softness_slider.setEnabled(True)
-                self.shadow_softness_lineedit.setEnabled(True)
                 self.shadow_x_pos_label.setEnabled(True)
                 self.shadow_x_pos_slider.setEnabled(True)
-                self.shadow_x_pos_lineedit.setEnabled(True)
                 self.shadow_y_pos_label.setEnabled(True)
                 self.shadow_y_pos_slider.setEnabled(True)
-                self.shadow_y_pos_lineedit.setEnabled(True)
 
                 self.shadow_blur_pushbutton.setEnabled(True)
                 if self.shadow_blur_pushbutton.isChecked():
                     self.shadow_blur_label.setEnabled(True)
                     self.shadow_blur_slider.setEnabled(True)
-                    self.shadow_blur_lineedit.setEnabled(True)
             else:
                 self.shadow_transp_label.setEnabled(False)
                 self.shadow_transp_slider.setEnabled(False)
-                self.shadow_transp_lineedit.setEnabled(False)
                 self.shadow_softness_label.setEnabled(False)
                 self.shadow_softness_slider.setEnabled(False)
-                self.shadow_softness_lineedit.setEnabled(False)
                 self.shadow_x_pos_label.setEnabled(False)
                 self.shadow_x_pos_slider.setEnabled(False)
-                self.shadow_x_pos_lineedit.setEnabled(False)
                 self.shadow_y_pos_label.setEnabled(False)
                 self.shadow_y_pos_slider.setEnabled(False)
-                self.shadow_y_pos_lineedit.setEnabled(False)
 
                 self.shadow_blur_pushbutton.setEnabled(False)
                 self.shadow_blur_label.setEnabled(False)
                 self.shadow_blur_slider.setEnabled(False)
-                self.shadow_blur_lineedit.setEnabled(False)
 
         def shadow_blur_options_toggle(shadow_blur_checked):
 
             if shadow_blur_checked:
                 self.shadow_blur_label.setEnabled(True)
                 self.shadow_blur_slider.setEnabled(True)
-                self.shadow_blur_lineedit.setEnabled(True)
             else:
                 self.shadow_blur_label.setEnabled(False)
                 self.shadow_blur_slider.setEnabled(False)
-                self.shadow_blur_lineedit.setEnabled(False)
 
-        self.shadow_pushbutton = FlamePushButton(' Shadow', self.window, self.drop_shadow, shadow_options)
-        self.shadow_blur_pushbutton = FlamePushButton(' Shadow Blur', self.window, self.shadow_blur, shadow_blur_options)
+        self.shadow_pushbutton = FlamePushButton('Shadow', self.drop_shadow, button_width=110)
+        self.shadow_pushbutton.clicked.connect(shadow_options)
+
+        self.shadow_blur_pushbutton = FlamePushButton('Shadow Blur', self.shadow_blur, button_width=110)
+        self.shadow_blur_pushbutton.clicked.connect(shadow_blur_options)
 
         if self.shadow_pushbutton.isChecked():
             shadow_options_toggle(True)
@@ -1165,23 +573,22 @@ class AdjustFX(object):
 
         if not self.shadow_blur_pushbutton.isChecked():
             self.shadow_blur_label.setEnabled(False)
-            self.shadow_blur_lineedit.setEnabled(False)
+            self.shadow_blur_slider.setEnabled(False)
 
         # Align Pushbutton Menu
 
-        menu_options = ['Left', 'Centre', 'Right']
-        self.align_push_btn = FlamePushButtonMenu(self.alignment, menu_options, self.regen_text_fx, self.window)
+        align_menu_options = ['Left', 'Centre', 'Right']
+        self.align_push_btn = FlamePushButtonMenu(self.alignment, align_menu_options, 110, menu_action=self.regen_align)
 
         # Buttons
 
-        self.cancel_btn = FlameButton('Cancel', self.window, self.cancel)
-        self.apply_btn = FlameButton('Apply', self.window, self.apply_text_fx)
+        self.cancel_btn = FlameButton('Cancel', self.cancel, button_width=110)
+        self.apply_btn = FlameButton('Apply', self.apply_text_fx, button_width=110)
 
         # -------------------------------------------------------------
 
         # Window Layout
 
-        gridbox = QtWidgets.QGridLayout()
         gridbox.setHorizontalSpacing(10)
         gridbox.setMargin(20)
 
@@ -1190,49 +597,38 @@ class AdjustFX(object):
         gridbox.addWidget(self.font_path_label, 1, 0)
         gridbox.addWidget(self.font_path_entry, 1, 1, 1, 3)
         gridbox.addWidget(self.font_size_label, 1, 4)
-        gridbox.addWidget(self.font_size_slider, 1, 5, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.font_size_lineedit, 1, 5)
+        gridbox.addWidget(self.font_size_slider, 1, 5)
 
         gridbox.addWidget(self.fill_trans_label, 2, 0)
-        gridbox.addWidget(self.fill_transp_slider, 2, 1, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.fill_transp_lineedit, 2, 1)
+        gridbox.addWidget(self.fill_transp_slider, 2, 1)
         gridbox.addWidget(self.italic_angle_label, 2, 2)
-        gridbox.addWidget(self.italic_angle_slider, 2, 3, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.italic_angle_lineedit, 2, 3)
+        gridbox.addWidget(self.italic_angle_slider, 2, 3)
 
         gridbox.addWidget(self.softness_label, 3, 0)
-        gridbox.addWidget(self.softness_slider, 3, 1, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.softness_lineedit, 3, 1)
+        gridbox.addWidget(self.softness_slider, 3, 1)
         gridbox.addWidget(self.kern_label, 3, 2)
-        gridbox.addWidget(self.kern_slider, 3, 3, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.kern_lineedit, 3, 3)
+        gridbox.addWidget(self.kern_slider, 3, 3)
 
         gridbox.addWidget(self.align_label, 4, 0)
         gridbox.addWidget(self.align_push_btn, 4, 1)
         gridbox.addWidget(self.separation_label, 4, 2)
-        gridbox.addWidget(self.separation_slider, 4, 3, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.separation_lineedit, 4, 3)
+        gridbox.addWidget(self.separation_slider, 4, 3)
 
         gridbox.addWidget(self.shadow_label, 0, 7, 1, 3)
 
         gridbox.addWidget(self.shadow_pushbutton, 1, 7)
         gridbox.addWidget(self.shadow_transp_label, 1, 8)
-        gridbox.addWidget(self.shadow_transp_slider, 1, 9, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.shadow_transp_lineedit, 1, 9)
+        gridbox.addWidget(self.shadow_transp_slider, 1, 9)
         gridbox.addWidget(self.shadow_softness_label, 2, 8)
-        gridbox.addWidget(self.shadow_softness_slider, 2, 9, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.shadow_softness_lineedit, 2, 9)
+        gridbox.addWidget(self.shadow_softness_slider, 2, 9)
         gridbox.addWidget(self.shadow_x_pos_label, 3, 8)
-        gridbox.addWidget(self.shadow_x_pos_slider, 3, 9, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.shadow_x_pos_lineedit, 3, 9)
+        gridbox.addWidget(self.shadow_x_pos_slider, 3, 9)
         gridbox.addWidget(self.shadow_y_pos_label, 4, 8)
-        gridbox.addWidget(self.shadow_y_pos_slider, 4, 9, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.shadow_y_pos_lineedit, 4, 9)
+        gridbox.addWidget(self.shadow_y_pos_slider, 4, 9)
 
         gridbox.addWidget(self.shadow_blur_pushbutton, 7, 7)
         gridbox.addWidget(self.shadow_blur_label, 7, 8)
-        gridbox.addWidget(self.shadow_blur_slider, 7, 9, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.shadow_blur_lineedit, 7, 9)
+        gridbox.addWidget(self.shadow_blur_slider, 7, 9)
 
         gridbox.setColumnMinimumWidth(6, 25)
         gridbox.setRowMinimumHeight(6, 28)
@@ -1240,18 +636,14 @@ class AdjustFX(object):
         gridbox.addWidget(self.position_offset_label, 7, 0, 1, 4)
 
         gridbox.addWidget(self.offset_x_pos_label, 8, 0)
-        gridbox.addWidget(self.offset_x_pos_slider, 8, 1, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.offset_x_pos_lineedit, 8, 1)
+        gridbox.addWidget(self.offset_x_pos_slider, 8, 1)
         gridbox.addWidget(self.offset_y_pos_label, 8, 2)
-        gridbox.addWidget(self.offset_y_pos_slider, 8, 3, QtCore.Qt.AlignBottom)
-        gridbox.addWidget(self.offset_y_pos_lineedit, 8, 3)
+        gridbox.addWidget(self.offset_y_pos_slider, 8, 3)
 
         gridbox.setRowMinimumHeight(11, 28)
 
         gridbox.addWidget(self.cancel_btn, 12, 8)
         gridbox.addWidget(self.apply_btn, 12, 9)
-
-        self.window.setLayout(gridbox)
 
         self.window.show()
 
@@ -1277,7 +669,6 @@ class AdjustFX(object):
         self.font = self.font.rsplit('.', 1)[0]
 
     def apply_text_fx(self):
-        import shutil
         import flame
 
         print ('\n', '>' * 20, 'applying changes', '<' * 20, '\n')
@@ -1297,13 +688,13 @@ class AdjustFX(object):
                         fx.save_setup(self.temp_text_file)
                         self.save_text_fx(fx, seg, self.align_changed)
 
-        print ('\n>>> Changes applied to all selected timeline seqments <<<\n')
+        print ('\n--> Changes applied to all selected timeline seqments \n')
 
         # Remove temp files
 
         shutil.rmtree(self.temp_save_path)
 
-        print ('\n>>> Temp files removed <<<\n')
+        print ('\n--> Temp files removed \n')
 
         # Restore playhead position
 
@@ -1316,7 +707,7 @@ class AdjustFX(object):
     def regen_text_fx(self, align_changed):
 
         self.playhead_position = self.seq.current_time.get_value()
-        print ('playhead_position:', self.playhead_position, '\n')
+        #print ('playhead_position:', self.playhead_position, '\n')
 
         if align_changed:
             self.align_changed = True
@@ -1332,67 +723,65 @@ class AdjustFX(object):
         print ('-' * 30, '\n\n\n')
 
     def save_text_fx(self, fx, seg, align_changed):
-        import xml.etree.cElementTree as ET
-        import shutil
         import flame
 
         def get_ui_values():
 
-            print ('\n', 'new text values', '\n------------------------------------------\n')
+            print ('\nnew text values', '\n------------------------------------------\n')
 
             # If channel has animation use spinbox value to offset current channel value
             # If channel has no animation use spinbox value as new channel value
             # Offset X and Y Position spinbox value is always used to offset current value
 
             if self.font_size_anim:
-                self.new_font_size = str(int(self.font_size_lineedit.text()) + self.font_size)
+                self.new_font_size = str(int(self.font_size_slider.text()) + self.font_size)
             else:
-                self.new_font_size = self.font_size_lineedit.text()
+                self.new_font_size = self.font_size_slider.text()
             print ('new_font_size:', self.new_font_size)
 
             if self.italic_angle_anim:
-                self.new_italic_angle = str(int(self.italic_angle_lineedit.text()) + self.italic_angle)
+                self.new_italic_angle = str(int(self.italic_angle_slider.text()) + self.italic_angle)
             else:
-                self.new_italic_angle = self.italic_angle_lineedit.text()
+                self.new_italic_angle = self.italic_angle_slider.text()
             print ('new_italic_angle:', self.new_italic_angle)
 
             if self.kern_anim:
-                self.new_kern = str(int(self.kern_lineedit.text()) + self.kern)
+                self.new_kern = str(int(self.kern_slider.text()) + self.kern)
             else:
-                self.new_kern = self.kern_lineedit.text()
+                self.new_kern = self.kern_slider.text()
             print ('new_kern:', self.new_kern)
 
             self.new_align = 'Justify_' + self.align_push_btn.text()
             print ('new_align:', self.new_align)
 
             if self.fill_transp_anim:
-                self.new_fill_transp = str(int(self.fill_transp_lineedit.text()) + self.fill_transp)
+                self.new_fill_transp = str(int(self.fill_transp_slider.text()) + self.fill_transp)
             else:
-                self.new_fill_transp = str(self.fill_transp_lineedit.text())
+                self.new_fill_transp = str(self.fill_transp_slider.text())
             print ('new_fill_transp:', self.new_fill_transp)
 
             if self.char_soft_anim:
-                self.new_char_soft = str(float(self.softness_lineedit.text()) + self.char_soft)
+                self.new_char_soft = str(float(self.softness_slider.text()) + self.char_soft)
             else:
-                self.new_char_soft = str(self.softness_lineedit.text())
+                self.new_char_soft = str(self.softness_slider.text())
             print ('new_char_soft:', self.new_char_soft)
 
             # self.new_offset_x = str(float(self.offset_x_pos_lineedit.text()) + self.translation_x)
             # print 'new_offset_x:', self.new_offset_x
 
-            self.new_translation_x_list = [str(x + float(self.offset_x_pos_lineedit.text())) for x in self.translation_x_list]
+            self.new_translation_x_list = [str(x + float(self.offset_x_pos_slider.text())) for x in self.translation_x_list]
             print ('new_translation_x_list:', self.new_translation_x_list)
 
             # self.new_offset_y = str(float(self.offset_y_pos_lineedit.text()) + self.translation_y)
             # print 'new_offset_y:', self.new_offset_y
 
-            self.new_translation_y_list = [str(y + float(self.offset_y_pos_lineedit.text())) for y in self.translation_y_list]
+            self.new_translation_y_list = [str(y + float(self.offset_y_pos_slider.text())) for y in self.translation_y_list]
             print ('new_translation_y_list:', self.new_translation_y_list)
 
             if self.separation_anim:
-                self.new_separation = str(self.separation_lineedit.text() + self.separation)
+                self.new_separation = str(self.separation_slider.text() + self.separation)
             else:
-                self.new_separation = str(self.separation_lineedit.text())
+                self.new_separation = str(self.separation_slider.text())
             print ('new_separation:', self.new_separation)
 
             # Shadow
@@ -1404,27 +793,27 @@ class AdjustFX(object):
             print ('new_shadow:', self.new_shadow)
 
             if self.shadow_transp_anim:
-                self.new_shadow_transp = str(self.shadow_transp_lineedit.text() + self.shadow_transp)
+                self.new_shadow_transp = str(self.shadow_transp_slider.text() + self.shadow_transp)
             else:
-                self.new_shadow_transp = str(self.shadow_transp_lineedit.text())
+                self.new_shadow_transp = str(self.shadow_transp_slider.text())
             print ('new_shadow_transp:', self.new_shadow_transp)
 
             if self.shad_soft_anim:
-                self.new_shad_softness = str(float(self.shadow_softness_lineedit.text()) + self.shad_soft)
+                self.new_shad_softness = str(float(self.shadow_softness_slider.text()) + self.shad_soft)
             else:
-                self.new_shad_softness = str(self.shadow_softness_lineedit.text())
+                self.new_shad_softness = str(self.shadow_softness_slider.text())
             print ('new_shad_softness:', self.new_shad_softness)
 
             if self.all_shadows_translation_x_anim:
-                self.new_all_shadows_translation_x = str(float(self.shadow_x_pos_lineedit.text()) + self.all_shadows_translation_x)
+                self.new_all_shadows_translation_x = str(float(self.shadow_x_pos_slider.text()) + self.all_shadows_translation_x)
             else:
-                self.new_all_shadows_translation_x = str(self.shadow_x_pos_lineedit.text())
+                self.new_all_shadows_translation_x = str(self.shadow_x_pos_slider.text())
             print ('new_all_shadows_translation_x:', self.new_all_shadows_translation_x)
 
             if self.all_shadows_translation_y_anim:
-                self.new_all_shadows_translation_y = str(float(self.shadow_y_pos_lineedit.text()) + self.all_shadows_translation_y)
+                self.new_all_shadows_translation_y = str(float(self.shadow_y_pos_slider.text()) + self.all_shadows_translation_y)
             else:
-                self.new_all_shadows_translation_y = str(self.shadow_y_pos_lineedit.text())
+                self.new_all_shadows_translation_y = str(self.shadow_y_pos_slider.text())
             print ('new_all_shadows_translation_y:', self.new_all_shadows_translation_y)
 
             # Shadow Blur
@@ -1432,7 +821,7 @@ class AdjustFX(object):
             self.new_shadow_blur = str(self.shadow_blur_pushbutton.isChecked())
             print ('new_shadow_blur:', self.new_shadow_blur)
 
-            self.new_shadow_blur_level = str(self.shadow_blur_lineedit.text())
+            self.new_shadow_blur_level = str(self.shadow_blur_slider.text())
             print ('new_shadow_blur_level:', self.new_shadow_blur_level)
 
         def replace_value(elem_name, new_value):
@@ -1514,7 +903,7 @@ class AdjustFX(object):
         if int(self.new_separation) != int(self.separation):
             replace_value('Separation', self.new_separation)
 
-        # Shadow values #### NOT WORKING
+        # Shadow values
 
         replace_equals_value('FontStyle', 'DropShadow', self.new_shadow)
 
@@ -1566,10 +955,9 @@ class AdjustFX(object):
         shutil.copy(self.temp_text_file, self.temp_xml_path)
 
     def cancel(self):
-        import shutil
         import flame
 
-        print ('\n>>> Apply Text FX Cancelled - Restoring original text fx <<<\n')
+        print ('\n--> Apply Text FX Cancelled - Restoring original text fx \n')
 
         # Add aditional timeline fx to prevent timeline gap from being deleted
 
@@ -1599,27 +987,6 @@ class AdjustFX(object):
 
 # -------------------------------------- #
 
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
-
 def scope_segment(selection):
     import flame
 
@@ -1640,7 +1007,7 @@ def get_timeline_custom_ui_actions():
                     'name': 'Adjust Text FX',
                     'isVisible': scope_segment,
                     'execute': AdjustFX,
-                    'minimumVersion': '2020'
+                    'minimumVersion': '2022'
                 }
             ]
         }

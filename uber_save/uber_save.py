@@ -1,60 +1,99 @@
 '''
 Script Name: Uber Save
-Script Version: 3.2
-Flame Version: 2021
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Version: 4.2
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 07.28.19
-Update Date: 10.11.21
+Update Date: 03.18.22
 
 Custom Action Type: Batch / Media Panel
 
 Description:
 
-    Save/Save Iterate batch group and batch setup file to custom path in one click
+    Save/Save Iterate batch group iteration and batch setup file to custom path in one click
 
-    Run script setup to set batch setup save path:
+    Before using for the first time at least one preset must be created.
 
-    Flame Main Menu -> Uber Save Setup
+    One preset can be assigned as the Global Default which will then be applied to all Flame projects.
 
-        Custom Root Path:
+    Global Default Preset:
 
-            The script will always save batch setups into the default project batch folder that is set when creating a project.
+        The preset that is set as the Global Default will be used by all Flame projects.
 
-            To use an alternate path, click Use Custom Path and select the new path. This path will be used for all projects and should be a root path
-            that can then have subfolder defined in the Batch Path entry.
+        Setting a preset as the Global Default can be done when creating a preset or editing an existing preset.
 
-            Example:
+        The Global Default preset can be overridden for individual projects by selecting a different preset in the Preset Selector Window.
 
-                /Jobs/<ProjectNickName>/<ProjectName>
+        The preset set as the Global Default will have an asterisk at the end of the name in the Preset Selector window.
 
-        Batch Path:
+    Menus:
 
-            Use this to define the folder structure that batch setups will be saved in. They will be sub folders of the path defined in the Project Root Path.
-            This works in a way similar to defining where renders go with the write node.
+        Flame Main Menu -> Uber Save Setup
 
-            Tokens:
+        Right-click selected batchgroups in desktop -> Uber Save... -> Save Selected Batchgroups
+        Right-click selected batchgroups in desktop -> Uber Save... -> Iterate and Save Selected Batchgroups
 
-                <ProjectName> - Adds name of current Flame project to path
-                <ProjectNickName> - Adds Flame project nicknick to path
-                <DesktopName> - Adds name of current desktop to path
-                <SeqName> - Will try to guess shot seqeunce name from the batch group name - for example: PYT_0100_comp will give a sequence name of PYT
-                <SEQNAME> - Will do the same as above but give the sequence name in all caps
-                <ShotName> - Will try to guess shot name from the batch group name - for example: PYT_0100_comp will give a shot name of PYT_0100
+        Right-click on desktop in media panel -> Uber Save... -> Save All Batchgroups
 
-        Shot Name From:
+        Right-click in batch -> Uber Save... -> Save Current Batchgroup
+        Right-click in batch -> Uber Save... -> Iterate and Save Current Batchgroup
 
-            Select: Shot Name when naming shots similar to this: PYT_0100, PYT_100, PYT100
-            Select: Batch Group Name when shots are named in an episodic format such as: 100_100_100 or PYT_100_100_100
+    Uber Save Setup:
 
-    To use:
+        Preset Selector Window:
 
-    Right-click selected batchgroups in desktop -> Uber Save... -> Save Selected Batchgroups
-    Right-click selected batchgroups in desktop -> Uber Save... -> Iterate and Save Selected Batchgroups
+            Presets can be created, edited, and set for the current project from this window.
 
-    Right-click on desktop in media panel -> Uber Save... -> Save All Batchgroups
+            New/Edit:
 
-    Right-click in batch -> Uber Save... -> Save Current Batchgroup
-    Right-click in batch -> Uber Save... -> Iterate and Save Current Batchgroup
+                Preset Name:
+
+                    Name of preset that will be used in the Preset Selector window dropdown menu.
+
+                Global Default:
+
+                    Enable this button to set a preset as the default. The first preset created will have this enabled by default.
+
+                Root Save Path menu:
+
+                    Default Project Path:
+
+                        Uses the project default batch folder to save shots. Usually: /opt/Autodesk/project/FLAME_PROJECT/batch/flame
+
+                    Custom Path:
+
+                        Enables: Custom Root Save Path entry. Select this to assign an alternate location to save batch files to.
+
+                    Custom Root Path:
+
+                        Enter/browse to a path to be used as an alternate to the default Flame batch save location. Tokens for Project Name and Project Nickname can be used here.
+
+                        Example:
+
+                            /Jobs/<ProjectNickName>/<ProjectName>
+
+                    Batch Path:
+
+                        Use this to define the folder structure that batch setups will be saved in. They will be sub folders of the path defined by the Root Save Path.
+                        This works in a way similar to defining where renders go with the write node.
+
+                        Tokens:
+
+                            <ProjectName> - Adds name of current Flame project to path
+                            <ProjectNickName> - Adds Flame project nicknick to path
+                            <DesktopName> - Adds name of current desktop to path
+                            <SeqName> - Will try to guess shot seqeunce name from the batch group name - for example: PYT_0100_comp will give a sequence name of: pyt
+                            <SEQNAME> - Will do the same as above but give the sequence name in all caps - for example: PYT_0100_comp will give a sequence name of: PYT
+                            <ShotName> - Will try to guess shot name from the batch group name - for example: PYT_0100_comp will give a shot name of PYT_0100
+
+                        Example:
+
+                            shots/<ShotName>/batch
+
+                    Shot Name From:
+
+                        ShotName: Use when naming shots similar to this: PYT_0100, PYT_100, PYT100
+                        BatchGroup: Use when the full name of the batch ground should be used as the shot name
 
 To install:
 
@@ -62,244 +101,74 @@ To install:
 
 Updates:
 
-v3.2 10.11.21
+    v4.2 03.18.22
 
-    Removed JobName token - not needed with new project nick name token
+        Moved UI widgets to external file
 
-    Removed Desktop Name token
+    v4.1 03.06.22
 
-    Shot name token improvements
+        Updated UI for Flame 2023
 
-v3.1 07.10.21
+    v4.0 12.28.21
 
-    Fixed problem when trying to save on a flare. Added check for flame and flare batch folders.
+        Added ability to save presets so different settings can be used with different Flame projects.
 
-    ProjectName token now uses exact flame project name. No longer tries to guess name of project on server. If flame project name is different than server project name, set flame project nickname
-    and use ProjectNickName token
+    v3.2 10.11.21
 
-    Fixed sequence token when using batch group name as save type
+        Removed JobName token - not needed with new project nick name token
 
-v3.0 06.08.21
+        Removed Desktop Name token
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Shot name token improvements
 
-    Improvements to shot name detection
+    v3.1 07.10.21
 
-    Speed improvements when saving
+        Fixed problem when trying to save on a flare. Added check for flame and flare batch folders.
 
-v2.0 10.08.20:
+        ProjectName token now uses exact flame project name. No longer tries to guess name of project on server. If flame
+        project name is different than server project name, set flame project nickname and use ProjectNickName token
 
-    Updated UI
+        Fixed sequence token when using batch group name as save type
 
-    Improved iteration handling
+    v3.0 06.08.21
 
-    Added SEQNAME token to add sequence name in caps to path
+        Updated to be compatible with Flame 2022/Python 3.7
 
-v1.91 05.13.20:
+        Improvements to shot name detection
 
-    Fixed iterating: When previous iterations were not in batchgroup, new itereations would reset to 1.
-    Iterations now continue from current iteration number.
+        Speed improvements when saving
 
-v1.9 03.10.20:
+    v2.0 10.08.20:
 
-    Fixed Setup UI for Linux
+        Updated UI
 
-v1.7 12.29.19
+        Improved iteration handling
 
-    Menu now appears as Uber Save in right-click menu
+        Added SEQNAME token to add sequence name in caps to path
+
+    v1.91 05.13.20:
+
+        Fixed iterating: When previous iterations were not in batchgroup, new itereations would reset to 1.
+
+        Iterations now continue from current iteration number.
+
+    v1.9 03.10.20:
+
+        Fixed Setup UI for Linux
+
+    v1.7 12.29.19:
+
+        Menu now appears as Uber Save in right-click menu
 '''
 
-from __future__ import print_function
-import os, re, ast
-from PySide2 import QtWidgets, QtCore
+from PySide2 import QtWidgets
 import xml.etree.ElementTree as ET
+import os, re, shutil
+from flame_widgets_uber_save import FlameButton, FlameLabel, FlameLineEdit, FlamePushButton, FlamePushButtonMenu, FlameTokenPushButton, FlameMessageWindow, FlameWindow
 
-VERSION = 'v3.2'
+VERSION = 'v4.2'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/uber_save'
-
-#-------------------------------------#
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-    Options for normal, label with background color, and label with background color and outline
-    """
-
-    def __init__(self, label_name, parent, label_type='normal', *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent)
-        self.setMinimumSize(150, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('color: #9a9a9a; background-color: #393939; font: 14px "Discreet"')
-        elif label_type == 'outline':
-            # self.setAlignment(QtCore.Qt.AlignLeft)
-            self.setStyleSheet('color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"')
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-    """
-
-    def __init__(self, button_name, connect, parent, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumSize(QtCore.QSize(150, 28))
-        self.setMaximumSize(QtCore.QSize(150, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(connect)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-class FlameLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Line Edit Widget
-
-    Main window should include this: window.setFocusPolicy(QtCore.Qt.StrongFocus)
-
-    To use:
-
-    line_edit = FlameLineEdit('Some text here', window)
-    """
-
-    def __init__(self, text, parent_window, *args, **kwargs):
-        super(FlameLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        # self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:focus {background-color: #474e58}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}')
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-
-    To use:
-
-    pushbutton = FlamePushButton(' Button Name', bool, window)
-    """
-
-    def __init__(self, button_name, button_checked, parent_window, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setCheckable(True)
-        self.setChecked(button_checked)
-        self.setMinimumSize(150, 28)
-        self.setMaximumSize(150, 28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #424142, stop: .94 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #4f4f4f, stop: .94 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .93 #383838, stop: .94 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlamePushButtonMenu(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Menu Push Button Widget
-
-    To use:
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu('push_button_name', push_button_menu_options, window)
-
-    or
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu(push_button_menu_options[0], push_button_menu_options, window)
-    """
-
-    def __init__(self, button_name, menu_options, parent_window, *args, **kwargs):
-        super(FlamePushButtonMenu, self).__init__(*args, **kwargs)
-        from functools import partial
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(150)
-        self.setMaximumWidth(150)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        def create_menu(option):
-            self.setText(option)
-
-        pushbutton_menu = QtWidgets.QMenu(parent_window)
-        pushbutton_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        pushbutton_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-        for option in menu_options:
-            pushbutton_menu.addAction(option, partial(create_menu, option))
-
-        self.setMenu(pushbutton_menu)
-
-class FlameTokenPushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Token Push Button Widget
-
-    To use:
-
-    token_dict = {'Token 1': '<Token1>', 'Token2': '<Token2>'}
-    token_push_button = FlameTokenPushButton('Add Token', token_dict, token_dest, window)
-
-    token_dict: Key in dictionary is what will show in button menu.
-                Value in dictionary is what will be applied to the button destination
-    token_dest: Where the Value of the item selected will be applied such as a LineEdit
-    """
-
-    def __init__(self, button_name, token_dict, token_dest, parent, *args, **kwargs):
-        super(FlameTokenPushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(150)
-        self.setMaximumWidth(150)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #6a6a6a}')
-
-        def token_action_menu():
-            from functools import partial
-
-            def insert_token(token):
-                for key, value in token_dict.items():
-                    if key == token:
-                        token_name = value
-                        token_dest.insert(token_name)
-
-            for key, value in token_dict.items():
-                token_menu.addAction(key, partial(insert_token, key))
-
-        token_menu = QtWidgets.QMenu(parent)
-        token_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        token_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                                 'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-
-        self.setMenu(token_menu)
-
-        token_action_menu()
-
-#-------------------------------------#
 
 class UberSave(object):
 
@@ -307,21 +176,15 @@ class UberSave(object):
         import flame
 
         print ('''
-                  _    _  _
-                 | |  | || |
-                 | |  | || |__    ___  _ __
-                 | |  | || '_ \  / _ \| '__|
-                 | |__| || |_) ||  __/| |
-                  \____/ |_.__/  \___||_|
-                   _____
-                  / ____|
-                 | (___    __ _ __   __ ___
-                  \___ \  / _` |\ \ / // _ \\
-                  ____) || (_| | \ V /|  __/
-                 |_____/  \__,_|  \_/  \___|
-        ''')
+       _    _ _               _____
+      | |  | | |             / ____|
+      | |  | | |__   ___ _ _| (___   __ ___   _____
+      | |  | | '_ \ / _ \ '__\___ \ / _` \ \ / / _ \\
+      | |__| | |_) |  __/ |  ____) | (_| |\ V /  __/
+       \____/|_.__/ \___|_| |_____/ \__,_| \_/ \___|
+       ''')
 
-        print ('\n', '>' * 20, ' uber save %s ' % VERSION, '<' * 20, '\n')
+        print ('>' * 20, f'uber save {VERSION}', '<' * 20, '\n')
 
         self.selection = selection
         self.iterate = ''
@@ -340,21 +203,18 @@ class UberSave(object):
         print ('flame_prj_nickname:', self.flame_prj_nickname)
 
         self.current_project_path = self.get_current_project_path()
-        print ('current_project_path:', self.current_project_path)
+        print ('current_project_path:', self.current_project_path, '\n')
 
         # Paths
 
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
         self.config_xml = os.path.join(self.config_path, 'config.xml')
+        self.preset_path = os.path.join(self.config_path, 'preset')
+        self.project_config_path = os.path.join(self.config_path, 'project')
 
         # Load config file
 
         self.config()
-
-        print ('save_custom:', self.use_custom_path)
-        print ('custom_path:', self.custom_path)
-        print ('batch_path:', self.batch_path)
-        print ('shot_name_type:', self.shot_name_type, '\n')
 
     def config(self):
 
@@ -366,31 +226,28 @@ class UberSave(object):
             # Get Settings
 
             for setting in root.iter('uber_save_settings'):
-                self.shot_name_type = setting.find('shot_name_type').text
-                self.use_custom_path = ast.literal_eval(setting.find('use_custom_path').text)
-                self.custom_path = setting.find('custom_path').text
-                self.batch_path = setting.find('batch_path').text
+                self.global_default = setting.find('global_default').text
 
-            print ('>>> config loaded <<<\n')
+            print ('global_default:', self.global_default, '\n')
+
+            print ('--> config loaded\n')
 
         def create_config_file():
 
             if not os.path.isdir(self.config_path):
                 try:
-                    os.makedirs(self.config_path)
+                    os.makedirs(self.preset_path)
+                    os.makedirs(self.project_config_path)
                 except:
-                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder:<br>{self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('>>> config file does not exist, creating new config file <<<')
+                print ('--> config file does not exist, creating new config file\n')
 
                 config = """
 <settings>
     <uber_save_settings>
-        <shot_name_type>Shot Name</shot_name_type>
-        <use_custom_path>False</use_custom_path>
-        <custom_path>/</custom_path>
-        <batch_path>&lt;ShotName&gt;</batch_path>
+        <global_default></global_default>
     </uber_save_settings>
 </settings>"""
 
@@ -404,6 +261,320 @@ class UberSave(object):
             create_config_file()
             if os.path.isfile(self.config_xml):
                 get_config_values()
+
+    #-------------------------------------#
+
+    def load_preset(self, preset_path):
+
+        print ('Loading preset:\n')
+
+        print ('    preset_path:', preset_path, '\n')
+
+        # Load settings from preset file
+
+        xml_tree = ET.parse(preset_path)
+        root = xml_tree.getroot()
+
+        # Assign values from preset file to variables
+
+        for setting in root.iter('uber_save_settings'):
+            self.preset_name = setting.find('preset_name').text
+            self.root_path = setting.find('root_path').text
+            self.custom_path = setting.find('custom_path').text
+            self.batch_path = setting.find('batch_path').text
+            self.shot_name_type = setting.find('shot_name_type').text
+
+        print ('    preset_name:', self.preset_name)
+        print ('    root_path:', self.root_path)
+        print ('    custom_path:', self.custom_path)
+        print ('    batch_path:', self.batch_path)
+        print ('    shot_name_type:', self.shot_name_type, '\n')
+
+        print (f'    preset loaded: {self.preset_name}\n')
+
+    def load_project_preset(self, project_preset_path):
+
+        # Load settings from project file
+
+        xml_tree = ET.parse(project_preset_path)
+        root = xml_tree.getroot()
+
+        # Assign values from config file to variables
+
+        for setting in root.iter('uber_save_settings'):
+            preset_name = setting.find('preset_name').text
+
+        return preset_name
+
+    def preset_selector(self):
+
+        def build_preset_list():
+
+            self.config()
+
+            preset_list = []
+
+            for f in os.listdir(self.preset_path):
+                f = f[:-4]
+                if f == self.global_default:
+                    f = f + '*'
+                preset_list.append(f)
+            return preset_list
+
+        def load_config():
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            # Get Settings
+
+            for setting in root.iter('uber_save_settings'):
+                self.global_default = setting.find('global_default').text
+
+            # Check for existing project preset
+
+            try:
+                project_preset = [f[:-4] for f in os.listdir(self.project_config_path) if f[:-4] == self.flame_prj_name][0]
+            except:
+                project_preset = False
+
+            if project_preset:
+
+                # Get current project preset name from project file
+
+                preset_name = self.load_project_preset(os.path.join(self.project_config_path, project_preset + '.xml'))
+
+                if preset_name == self.global_default:
+                    preset_name = preset_name + '*'
+
+                self.current_preset_push_btn.setText(preset_name)
+            else:
+                if os.listdir(self.preset_path):
+                    self.current_preset_push_btn.setText(self.global_default + '*')
+                else:
+                    self.current_preset_push_btn.setText('')
+
+            print ('--> config loaded\n')
+
+        def new_preset():
+
+            # Assign default settings
+
+            self.preset_name = ''
+            self.root_path = 'Default Project Path'
+            self.custom_path = ''
+            self.batch_path = ''
+            self.shot_name_type = 'Shot Name'
+
+            self.preset()
+
+        def edit_preset():
+
+            preset_name_text = self.current_preset_push_btn.text()
+            if preset_name_text.endswith('*'):
+                preset_name_text = preset_name_text[:-1]
+
+            if self.current_preset_push_btn.text():
+
+                preset_path = os.path.join(self.preset_path, preset_name_text + '.xml')
+
+                self.load_preset(preset_path)
+
+                self.preset()
+            else:
+                FlameMessageWindow('Error', 'error', 'No presets exist to edit')
+
+        def duplicate_preset():
+
+            def add_copy_to_filename(preset_name):
+
+                preset_name = preset_name + ' copy'
+
+                return preset_name
+
+            if self.current_preset_push_btn.text():
+
+                current_preset = self.current_preset_push_btn.text()
+                if current_preset.endswith('*'):
+                    current_preset = current_preset[:-1]
+
+                # Add 'copy' to the end of the new file being created.
+
+                existing_presets = [f[:-4] for f in os.listdir(self.preset_path)]
+
+                new_preset_name = add_copy_to_filename(current_preset)
+
+                while new_preset_name in existing_presets:
+                    new_preset_name = add_copy_to_filename(new_preset_name)
+
+                # Duplicate preset
+
+                source_file = os.path.join(self.preset_path, current_preset + '.xml')
+                dest_file = os.path.join(self.preset_path, new_preset_name + '.xml')
+                shutil.copyfile(source_file, dest_file)
+
+                self.selector_window.close()
+
+                # Save new preset name to duplicate preset file
+
+                xml_tree = ET.parse(dest_file)
+                root = xml_tree.getroot()
+
+                preset_name = root.find('.//preset_name')
+                preset_name.text = new_preset_name
+
+                xml_tree.write(dest_file)
+
+                print (f'Preset duplicate created: {new_preset_name}', '\n')
+
+                self.preset_selector()
+
+                self.current_preset_push_btn.setText(new_preset_name)
+
+        def delete_preset():
+
+            preset_name = self.current_preset_push_btn.text()
+            preset_path = os.path.join(self.preset_path, preset_name + '.xml')
+
+            if preset_name.endswith('*'):
+                return FlameMessageWindow('Error', 'error', 'Can not delete preset set as Global Default.<br>Set another preset to Global Default and try again.')
+
+            # Check all project config files for current preset before deleting.
+            # If the preset exists in other project files, delete project files. Confirm first.
+
+            preset_names = []
+
+            if os.listdir(self.project_config_path):
+                for n in os.listdir(self.project_config_path):
+                    saved_preset_name = self.load_project_preset(os.path.join(self.project_config_path, n))
+                    preset_names.append(saved_preset_name)
+
+                # If preset exists in other project configs, confirm deletion
+
+                if preset_name in preset_names:
+                    if FlameMessageWindow('Confirm Operation', 'warning', 'Selected preset is used by other projects. Deleting this preset will delete it for the other projects. Continue?'):
+                        for preset in preset_names:
+                            os.remove(os.path.join(self.project_config_path, n))
+                        os.remove(preset_path)
+                    else:
+                        return
+                else:
+                    # If preset is not found in any projects, delete. Confirm first.
+
+                    if FlameMessageWindow('Confirm Operation', 'warning', f'Delete: {preset_name}'):
+                        os.remove(preset_path)
+                    else:
+                        return
+
+                    # If preset is not found in any projects, delete. Confirm first.
+            else:
+                # If no project configs exist, delete preset. Confirm first.
+
+                if FlameMessageWindow('Confirm Operation', 'warning', f'Delete: {preset_name}'):
+                    os.remove(preset_path)
+                else:
+                    return
+
+            self.selector_window.close()
+
+            print (f'--> Preset deleted: {preset_name}\n')
+
+            self.preset_selector()
+
+        def save():
+
+            preset_name_text = self.current_preset_push_btn.text()
+            if preset_name_text.endswith('*'):
+                preset_name_text = preset_name_text[:-1]
+
+            if not preset_name_text:
+                return FlameMessageWindow('Error', 'error', 'Uber Save Preset must be created to save.')
+
+            preset_path = os.path.join(self.project_config_path, self.flame_prj_name + '.xml')
+
+            if preset_name_text != self.global_default:
+
+                if os.path.isfile(preset_path):
+                    os.remove(preset_path)
+
+                # Create project preset
+
+                preset = """
+<settings>
+    <uber_save_settings>
+        <preset_name></preset_name>
+    </uber_save_settings>
+</settings>"""
+
+                with open(preset_path, 'a') as xml_file:
+                    xml_file.write(preset)
+                    xml_file.close()
+
+                # Update config
+
+                xml_tree = ET.parse(preset_path)
+                root = xml_tree.getroot()
+
+                preset_name = root.find('.//preset_name')
+                preset_name.text = preset_name_text
+
+                xml_tree.write(preset_path)
+
+                print ('--> custom project uber save preset saved\n')
+            else:
+                try:
+                    os.remove(preset_path)
+                except:
+                    pass
+
+            self.selector_window.close()
+
+        gridbox = QtWidgets.QGridLayout()
+        self.selector_window = FlameWindow(f'Uber Save <small>{VERSION}', gridbox, 600, 260)
+
+        # Labels
+
+        self.preset_label = FlameLabel('Uber Save Current Project Preset', label_type='underline')
+
+        # Shot Name Type Pushbutton Menu
+
+        preset_list = build_preset_list()
+        self.current_preset_push_btn = FlamePushButtonMenu('', preset_list)
+
+        #  Buttons
+
+        self.new_btn = FlameButton('New', new_preset, button_width=100)
+        self.edit_btn = FlameButton('Edit', edit_preset, button_width=100)
+        self.delete_btn = FlameButton('Delete', delete_preset, button_width=100)
+        self.duplicate_btn = FlameButton('Duplicate', duplicate_preset, button_width=100)
+        self.save_btn = FlameButton('Save', save, button_width=100)
+        self.exit_btn = FlameButton('Exit', self.selector_window.close, button_width=100)
+
+        load_config()
+
+        # Preset Selector Window layout
+
+        gridbox.setMargin(20)
+
+        gridbox.addWidget(self.preset_label, 1, 1, 1, 6)
+
+        gridbox.addWidget(self.current_preset_push_btn, 2, 1, 1, 4)
+
+        gridbox.addWidget(self.new_btn, 2, 5)
+        gridbox.addWidget(self.edit_btn, 3, 5)
+        gridbox.addWidget(self.delete_btn, 2, 6)
+        gridbox.addWidget(self.duplicate_btn, 3, 6)
+
+        gridbox.setRowMinimumHeight(5, 28)
+
+        gridbox.addWidget(self.exit_btn, 6, 5)
+        gridbox.addWidget(self.save_btn, 6, 6)
+
+        self.selector_window.show()
+
+        return self.selector_window
+
+    #-------------------------------------#
 
     def get_current_project_path(self):
 
@@ -424,13 +595,34 @@ class UberSave(object):
     def translate_path(self):
         import flame
 
+        def load_preset_values():
+
+            # Check for existing project preset
+
+            try:
+                project_preset = [f[:-4] for f in os.listdir(self.project_config_path) if f[:-4] == self.flame_prj_name][0]
+            except:
+                project_preset = False
+
+            if project_preset:
+                preset_name = self.load_project_preset(os.path.join(self.project_config_path, project_preset + '.xml'))
+                preset_path = os.path.join(self.preset_path, preset_name + '.xml')
+                self.load_preset(preset_path)
+            else:
+                preset_path = os.path.join(self.preset_path, self.global_default + '.xml')
+                self.load_preset(preset_path)
+
+        load_preset_values()
+
+        print ('Translating path:\n')
+
         # If Use Custom button is selected use custom path provided
         # Otherwise use project default batch folder
 
         flame_batch_folder = os.path.join(self.current_project_path, 'batch/flame')
         flare_batch_folder = os.path.join(self.current_project_path, 'batch/flare')
 
-        if self.use_custom_path:
+        if self.root_path == 'Custom Path':
             self.save_path = os.path.join(self.custom_path, self.batch_path)
         else:
             if os.path.isdir(flame_batch_folder):
@@ -440,14 +632,13 @@ class UberSave(object):
             else:
                 os.makedirs(flame_batch_folder)
                 batch_folder = flame_batch_folder
-            print ('batch_folder:', batch_folder)
             self.save_path = os.path.join(batch_folder, self.batch_path)
-        print ('save_path:', self.save_path)
+        print ('    save_path:', self.save_path, '\n')
 
         #-------------------------------------#
 
         batch_name = str(self.selected_batch.name)[1:-1]
-        print ('batch_name:', batch_name)
+        print ('    batch_name:', batch_name)
 
         try:
             if self.shot_name_type == 'Shot Name':
@@ -481,12 +672,12 @@ class UberSave(object):
             if seq_name.endswith('_'):
                 seq_name = seq_name[:-1]
 
-        print ('shot_name:', shot_name)
-        print ('seq_name:', seq_name)
+        print ('    shot_name:', shot_name)
+        print ('    seq_name:', seq_name, '\n')
 
         #-------------------------------------#
 
-        print ('path_to_translate:', self.save_path)
+        print ('    path_to_translate:', self.save_path)
 
         # Translate tokens in path
 
@@ -505,37 +696,329 @@ class UberSave(object):
         if '<ShotName>' in self.save_path:
             self.save_path = re.sub('<ShotName>', shot_name, self.save_path)
 
-        print ('translated save_path:', self.save_path, '\n')
+        print ('    translated save_path:', self.save_path, '\n')
 
-    def save(self):
+    def preset_check(self):
+
+        # Check for presets in config/preset folder
+
+        if not os.listdir(self.preset_path):
+            return FlameMessageWindow('Setup Script', 'message','No Uber Save presets exists.<br>Run Uber Save setup.<br>Flame Main Menu -> pyFlame -> Uber Save Setup' )
+        return True
+
+    #-------------------------------------#
+
+    def batchgroup_save_all(self):
         import flame
 
+        preset = self.preset_check()
+
+        if preset:
+            self.iterate = False
+            batch_groups = flame.project.current_project.current_workspace.desktop.batch_groups
+
+            for self.selected_batch in batch_groups:
+                self.translate_path()
+                self.save_batchgroup()
+
+            print ('done.\n')
+
+    def batchgroup_save_selected(self):
+        import flame
+
+        preset = self.preset_check()
+
+        if preset:
+            self.iterate = False
+
+            for self.selected_batch in self.selection:
+                self.translate_path()
+                self.save_batchgroup()
+
+            print ('done.\n')
+
+    def batchgroup_save_selected_iterate(self):
+        import flame
+
+        preset = self.preset_check()
+
+        if preset:
+            self.iterate = True
+
+            for self.selected_batch in self.selection:
+                self.translate_path()
+                self.save_batchgroup()
+
+            print ('done.\n')
+
+    def batchgroup_save(self):
+        import flame
+
+        preset = self.preset_check()
+
+        if preset:
+            self.iterate = False
+            self.selected_batch = flame.batch
+            self.translate_path()
+            self.save_batchgroup()
+
+            print ('done.\n')
+
+    def batchgroup_save_iterate(self):
+        import flame
+
+        preset = self.preset_check()
+
+        if preset:
+            self.iterate = True
+            self.selected_batch = flame.batch
+            self.translate_path()
+            self.save_batchgroup()
+
+            print ('done.\n')
+
+    #-------------------------------------#
+
+    def preset(self):
+
+        def global_default_pressed():
+
+            if not os.listdir(self.preset_path):
+                self.global_default_pushbutton.setChecked(True)
+
+            if self.preset_name_lineedit.text() == self.global_default:
+                self.global_default_pushbutton.setChecked(True)
+
+        def global_default_state():
+
+            # Set global default button state
+
+            if not os.listdir(self.preset_path):
+                self.global_default_pushbutton.setChecked(True)
+            if self.preset_name_lineedit.text() == self.global_default:
+                self.global_default_pushbutton.setChecked(True)
+
+        def custom_path_browse():
+
+            file_path = str(QtWidgets.QFileDialog.getExistingDirectory(self.preset_window, 'Select Directory', self.custom_path_lineedit.text(), QtWidgets.QFileDialog.ShowDirsOnly))
+
+            if os.path.isdir(file_path):
+                self.custom_path_lineedit.setText(file_path)
+
+        def save_preset():
+
+            if not self.preset_name_lineedit.text():
+                return FlameMessageWindow('Error', 'error', 'Enter name for preset.')
+            if not self.root_path_push_btn.text() == 'Default Project Path':
+                if not self.custom_path_lineedit.text():
+                    return FlameMessageWindow('Error', 'error', 'Enter custom root path.')
+            if not self.batch_path_lineedit.text():
+                return FlameMessageWindow('Error', 'error', 'Enter batch path')
+
+            preset_name_text = self.preset_name_lineedit.text()
+
+            # Check if preset already exists with current name. Give option to delete.
+
+            if [f for f in os.listdir(self.preset_path) if f[:-4] == preset_name_text]:
+                if FlameMessageWindow('Confirm Operation', 'warning', 'Preset with this name already exists. Overwrite?'):
+                    os.remove(os.path.join(self.preset_path, preset_name_text + '.xml'))
+                else:
+                    return
+
+            # Save empty preset file
+
+            preset_path = os.path.join(self.preset_path, preset_name_text + '.xml')
+
+            preset = """
+<settings>
+    <uber_save_settings>
+        <preset_name></preset_name>
+        <root_path></root_path>
+        <custom_path></custom_path>
+        <batch_path></batch_path>
+        <shot_name_type></shot_name_type>
+    </uber_save_settings>
+</settings>"""
+
+            with open(preset_path, 'a') as xml_file:
+                xml_file.write(preset)
+                xml_file.close()
+
+            # Save settings to preset file
+
+            xml_tree = ET.parse(preset_path)
+            root = xml_tree.getroot()
+
+            preset_name = root.find('.//preset_name')
+            preset_name.text = preset_name_text
+
+            root_path = root.find('.//root_path')
+            root_path.text = self.root_path_push_btn.text()
+
+            custom_path = root.find('.//custom_path')
+            custom_path.text = self.custom_path_lineedit.text()
+
+            batch_path = root.find('.//batch_path')
+            batch_path.text = self.batch_path_lineedit.text()
+
+            shot_name_type = root.find('.//shot_name_type')
+            shot_name_type.text = self.shot_name_type_push_btn.text()
+
+            xml_tree.write(preset_path)
+
+            # Remove old preset if preset name is changed.
+
+            if self.preset_name and preset_name_text != self.preset_name:
+                os.remove(os.path.join(self.preset_path, self.preset_name + '.xml'))
+
+            # Update config
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            if self.global_default_pushbutton.isChecked():
+                global_default = root.find('.//global_default')
+                global_default.text = preset_name_text
+                preset_name_text = preset_name_text + '*'
+
+                xml_tree.write(self.config_xml)
+
+            # Close preset window and reload settings
+
+            self.preset_window.close()
+
+            print ('--> preset saved\n')
+
+            self.selector_window.close()
+
+            self.preset_selector()
+
+            self.current_preset_push_btn.setText(preset_name_text)
+
+        gridbox = QtWidgets.QGridLayout()
+        self.preset_window = FlameWindow(f'Uber Save Preset Setup <small>{VERSION}', gridbox, 1000, 370)
+
+        # Labels
+
+        self.preset_name_label = FlameLabel('Preset Name', 'normal')
+        self.custom_path_label = FlameLabel('Custom Root Save Path', 'normal')
+        self.batch_path_label = FlameLabel('Batch Path', 'normal')
+        self.shot_name_label = FlameLabel('Shot Name From', 'normal')
+        self.root_path_label = FlameLabel('Root Save Path', 'normal')
+
+        # LineEdits
+
+        self.preset_name_lineedit = FlameLineEdit(self.preset_name)
+        self.custom_path_lineedit = FlameLineEdit(self.custom_path)
+        self.batch_path_lineedit = FlameLineEdit(self.batch_path)
+
+        # Pushbutton
+
+        self.global_default_pushbutton = FlamePushButton('Global Default', False)
+        self.global_default_pushbutton.clicked.connect(global_default_pressed)
+        global_default_state()
+
+        # Shot Name Type Pushbutton Menu
+
+        shot_name_options = ['Shot Name', 'Batch Group Name']
+        self.shot_name_type_push_btn = FlamePushButtonMenu(self.shot_name_type, shot_name_options, max_menu_width=150)
+
+        # Custom Path Token Pushbutton Menu
+
+        custom_token_dict = {'Project Name': '<ProjectName>', 'Project Nick Name': '<ProjectNickName>'}
+        self.custom_token_push_btn = FlameTokenPushButton('Add Token', custom_token_dict, self.custom_path_lineedit)
+
+        # Batch Path Token Pushbutton Menu
+
+        batch_token_dict = {'Project Name': '<ProjectName>', 'Project Nick Name': '<ProjectNickName>', 'Sequence Name': '<SeqName>', 'SEQUENCE NAME': '<SEQNAME>', 'Shot Name': '<ShotName>'}
+        self.batch_token_push_btn = FlameTokenPushButton('Add Token', batch_token_dict, self.batch_path_lineedit)
+
+        #  Buttons
+
+        self.browse_btn = FlameButton('Browse', custom_path_browse)
+        self.save_btn = FlameButton('Save', save_preset)
+        self.cancel_btn = FlameButton('Cancel', self.preset_window.close)
+
+        # Batch Root Path Pushbutton Menu
+
+        def root_path_toggle():
+            if self.root_path_push_btn.text() == 'Default Project Path':
+                self.root_path_push_btn.setText('Default Project Path')
+                self.custom_path_label.setEnabled(False)
+                self.custom_path_lineedit.setEnabled(False)
+                self.custom_token_push_btn.setEnabled(False)
+                self.browse_btn.setEnabled(False)
+            else:
+                self.root_path_push_btn.setText('Custom Path')
+                self.custom_path_label.setEnabled(True)
+                self.custom_path_lineedit.setEnabled(True)
+                self.custom_token_push_btn.setEnabled(True)
+                self.browse_btn.setEnabled(True)
+
+        root_path_menu_options = ['Default Project Path', 'Custom Path']
+        self.root_path_push_btn =  FlamePushButtonMenu(self.root_path, root_path_menu_options, max_menu_width=150, menu_action=root_path_toggle)
+
+        root_path_toggle()
+
+        # Setup window layout
+
+        gridbox.setMargin(20)
+
+        gridbox.addWidget(self.preset_name_label, 0, 0)
+        gridbox.addWidget(self.preset_name_lineedit, 0, 1)
+        gridbox.addWidget(self.global_default_pushbutton, 0, 4)
+
+        gridbox.setRowMinimumHeight(1, 30)
+
+        gridbox.addWidget(self.root_path_label, 2, 0)
+        gridbox.addWidget(self.root_path_push_btn, 2, 1)
+
+        gridbox.addWidget(self.custom_path_label, 3, 0)
+        gridbox.addWidget(self.custom_path_lineedit, 3, 1, 1, 2)
+        gridbox.addWidget(self.custom_token_push_btn, 3, 3)
+        gridbox.addWidget(self.browse_btn, 3, 4)
+
+        gridbox.addWidget(self.batch_path_label, 4, 0)
+        gridbox.addWidget(self.batch_path_lineedit, 4, 1, 1, 2)
+        gridbox.addWidget(self.batch_token_push_btn, 4, 3)
+
+        gridbox.addWidget(self.shot_name_label, 5, 0)
+        gridbox.addWidget(self.shot_name_type_push_btn, 5, 1)
+
+        gridbox.addWidget(self.save_btn, 7, 4)
+        gridbox.addWidget(self.cancel_btn, 8, 4)
+
+        self.preset_window.show()
+
+        return self.preset_window
+
+    #-------------------------------------#
+
+    def save_batchgroup(self):
+        import flame
+
+        print ('Saving batch group:\n')
+
         selected_batch_name = str(self.selected_batch.name)[1:-1]
-        print ('selected_batch_name:', selected_batch_name)
+        print ('    selected_batch_name:', selected_batch_name)
 
         # Open batch if closed
 
         self.selected_batch.open()
 
         # Get current iteration
+
         iteration_split = (re.split(r'(\d+)', str(self.selected_batch.current_iteration.name)[1:-1]))[1:-1]
-        # iteration_split = iteration_split[1:-1]
-        # iteration_split = filter(None, re.split(r'(\d+)', str(self.selected_batch.current_iteration.name)[1:-1]))
         current_iteration = int(iteration_split[-1])
-        print ('current_iteration:', current_iteration)
+        print ('    current_iteration:', current_iteration)
 
         # Get latest iteration if iterations are saved
-        print ('selected_batch.batch_iterations:', self.selected_batch.batch_iterations)
 
         if not self.selected_batch.batch_iterations == []:
-            print (str([i.name for i in self.selected_batch.batch_iterations][-1])[1:-1])
-            # print (filter(None, re.split(r'(\d+)', str([i.name for i in self.selected_batch.batch_iterations][-1])[1:-1])))
             latest_iteration = int(((re.split(r'(\d+)', str([i.name for i in self.selected_batch.batch_iterations][-1])[1:-1]))[1:-1])[-1])
-
-            # latest_iteration = int(filter(None, re.split(r'(\d+)', str([i.name for i in self.selected_batch.batch_iterations][-1])[1:-1]))[-1])
         else:
             latest_iteration = current_iteration
-        print ('latest_iteration:', latest_iteration)
+        print ('    latest_iteration:', latest_iteration)
 
         # If first save of batch group, create first iteration
 
@@ -544,7 +1027,7 @@ class UberSave(object):
 
         # Iterate up if iterate up menu selected
 
-        print ('iterate:', self.iterate)
+        print ('    iterate:', self.iterate, '\n')
 
         if self.iterate:
             if current_iteration == 1:
@@ -553,21 +1036,21 @@ class UberSave(object):
                 self.selected_batch.iterate(index = (latest_iteration + 1))
             else:
                 self.selected_batch.iterate(index = (current_iteration + 1))
-            print ('\n>>> iterating up <<<\n')
+            print ('    --> iterating up\n')
         else:
             self.selected_batch.iterate(index=current_iteration)
-            print ('\n>>> overwriting existing iteration <<<\n')
+            print ('    --> overwriting existing iteration\n')
 
         # Get current iteration
 
         current_iteration = str(self.selected_batch.current_iteration.name)[1:-1]
         current_iteration_no_spaces = current_iteration.replace(' ', '_')
-        print ('new current_iteration:', current_iteration)
+        print ('    new current_iteration:', current_iteration)
 
         # Set batch save path
 
         shot_save_path = os.path.join(self.save_path, current_iteration)
-        print ('shot_save_path:', shot_save_path)
+        print ('    shot_save_path:', shot_save_path)
 
         try:
             # Create shot save folder
@@ -581,234 +1064,18 @@ class UberSave(object):
 
             # edit_batch()
 
-            print ('\n', '>>> %s uber saved <<<' % selected_batch_name, '\n')
+            print ('\n', f'--> {selected_batch_name} uber saved', '\n')
 
         except:
-            message_box('Batch not saved. Check path in setup')
-
-    #-------------------------------------#
-
-    def batchgroup_save_all(self):
-        import flame
-
-        self.iterate = False
-        batch_groups = flame.project.current_project.current_workspace.desktop.batch_groups
-
-        for self.selected_batch in batch_groups:
-            self.translate_path()
-            self.save()
-
-        print ('done.\n')
-
-    def batchgroup_save_selected(self):
-        import flame
-
-        self.iterate = False
-
-        for self.selected_batch in self.selection:
-            self.translate_path()
-            self.save()
-
-        print ('done.\n')
-
-    def batchgroup_save_selected_iterate(self):
-        import flame
-
-        self.iterate = True
-
-        for self.selected_batch in self.selection:
-            self.translate_path()
-            self.save()
-
-        print ('done.\n')
-
-    def batchgroup_save(self):
-        import flame
-
-        self.iterate = False
-        self.selected_batch = flame.batch
-        self.translate_path()
-        self.save()
-
-        print ('done.\n')
-
-    def batchgroup_save_iterate(self):
-        import flame
-
-        self.iterate = True
-        self.selected_batch = flame.batch
-        self.translate_path()
-        self.save()
-
-        print ('done.\n')
-
-    #-------------------------------------#
-
-    def setup(self):
-
-        def custom_path_browse():
-
-            file_path = str(QtWidgets.QFileDialog.getExistingDirectory(self.setup_window, 'Select Directory', self.custom_path_lineedit.text(), QtWidgets.QFileDialog.ShowDirsOnly))
-
-            if os.path.isdir(file_path):
-                self.custom_path_lineedit.setText(file_path)
-
-        def save_config():
-
-            if self.custom_path_lineedit.text() == '':
-                message_box('Enter Project Root Path')
-            elif self.batch_path_lineedit.text() == '':
-                message_box('Enter Batch Path')
-            else:
-
-                # Save settings to config file
-
-                xml_tree = ET.parse(self.config_xml)
-                root = xml_tree.getroot()
-
-                shot_name_type = root.find('.//shot_name_type')
-                shot_name_type.text = self.shot_name_type_push_btn.text()
-
-                use_custom_path = root.find('.//use_custom_path')
-                use_custom_path.text = str(self.use_custom_push_btn.isChecked())
-
-                custom_path = root.find('.//custom_path')
-                custom_path.text = self.custom_path_lineedit.text()
-
-                batch_path = root.find('.//batch_path')
-                batch_path.text = self.batch_path_lineedit.text()
-
-                xml_tree.write(self.config_xml)
-
-                print ('>>> config saved <<<\n')
-
-                self.setup_window.close()
-
-                print ('done.\n')
-
-        self.setup_window = QtWidgets.QWidget()
-        self.setup_window.setMinimumSize(QtCore.QSize(1000, 250))
-        self.setup_window.setMaximumSize(QtCore.QSize(1000, 250))
-        self.setup_window.setWindowTitle('Uber Save Setup %s' % VERSION)
-        self.setup_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.setup_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.setup_window.setStyleSheet('background-color: #272727')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.setup_window.move((resolution.width() / 2) - (self.setup_window.frameSize().width() / 2),
-                               (resolution.height() / 2) - (self.setup_window.frameSize().height() / 2))
-
-        # Labels
-
-        self.custom_path_label = FlameLabel('Custom Root Path', self.setup_window, label_type='normal')
-        self.batch_path_label = FlameLabel('Batch Path', self.setup_window, label_type='normal')
-        self.shot_name_label = FlameLabel('Shot Name From', self.setup_window, label_type='normal')
-
-        # LineEdits
-
-        self.custom_path_lineedit = FlameLineEdit(self.custom_path, self.setup_window)
-        self.batch_path_lineedit = FlameLineEdit(self.batch_path, self.setup_window)
-
-        # Shot Name Type Pushbutton Menu
-
-        shot_name_options = ['Shot Name', 'Batch Group Name']
-        self.shot_name_type_push_btn = FlamePushButtonMenu(self.shot_name_type, shot_name_options, self.setup_window)
-
-        # Custom Path Token Pushbutton Menu
-
-        custom_token_dict = {'Project Name': '<ProjectName>', 'Project Nick Name': '<ProjectNickName>'}
-        self.custom_token_push_btn = FlameTokenPushButton('Add Token', custom_token_dict, self.custom_path_lineedit, self.setup_window)
-
-        # Batch Path Token Pushbutton Menu
-
-        batch_token_dict = {'Project Name': '<ProjectName>', 'Project Nick Name': '<ProjectNickName>', 'Sequence Name': '<SeqName>',
-                            'SEQUENCE NAME': '<SEQNAME>', 'Shot Name': '<ShotName>'} # , 'Episode Number': '<EpisodeNum>'}
-        self.batch_token_push_btn = FlameTokenPushButton('Add Token', batch_token_dict, self.batch_path_lineedit, self.setup_window)
-
-        #  Buttons
-
-        self.browse_btn = FlameButton('Browse', custom_path_browse, self.setup_window)
-        self.save_btn = FlameButton('Save', save_config, self.setup_window)
-        self.cancel_btn = FlameButton('Cancel', self.setup_window.close, self.setup_window)
-
-        # Push Button
-
-        def use_custom_path():
-            if self.use_custom_push_btn.isChecked() == True:
-                self.custom_path_label.setEnabled(True)
-                self.custom_path_lineedit.setEnabled(True)
-                self.custom_token_push_btn.setEnabled(True)
-                self.browse_btn.setEnabled(True)
-            else:
-                self.custom_path_label.setEnabled(False)
-                self.custom_path_lineedit.setEnabled(False)
-                self.custom_token_push_btn.setEnabled(False)
-                self.browse_btn.setEnabled(False)
-
-        self.use_custom_push_btn = FlamePushButton(' Use Custom Path', self.use_custom_path, self.setup_window)
-        self.use_custom_push_btn.clicked.connect(use_custom_path)
-        use_custom_path()
-
-        # Setup window layout
-
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setMargin(20)
-
-        gridbox.addWidget(self.use_custom_push_btn, 0, 0)
-
-        gridbox.addWidget(self.custom_path_label, 1 ,0)
-        gridbox.addWidget(self.custom_path_lineedit, 1 ,1, 1, 2)
-        gridbox.addWidget(self.custom_token_push_btn, 1 ,3)
-        gridbox.addWidget(self.browse_btn, 1 ,4)
-
-
-        gridbox.addWidget(self.batch_path_label, 2 ,0)
-        gridbox.addWidget(self.batch_path_lineedit, 2 ,1, 1, 2)
-        gridbox.addWidget(self.batch_token_push_btn, 2, 3)
-
-        gridbox.addWidget(self.shot_name_label, 3, 0)
-        gridbox.addWidget(self.shot_name_type_push_btn, 3 ,1)
-
-        gridbox.addWidget(self.save_btn, 4, 4)
-        gridbox.addWidget(self.cancel_btn, 5, 4)
-
-        self.setup_window.setLayout(gridbox)
-
-        self.setup_window.show()
-
-        return self.setup_window
-
+            FlameMessageWindow('Error', 'error', 'Batch not saved. Check path in setup')
 #-------------------------------------#
-
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14pt "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14pt "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14pt "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
 
 def uber_save_setup(selection):
 
     # Opens Uber Save Setup window
 
     uber_save = UberSave(selection)
-    return uber_save.setup()
+    uber_save.preset_selector()
 
 def uber_batchgroup_save(selection):
 
@@ -874,22 +1141,22 @@ def get_media_panel_custom_ui_actions():
             'name': 'Uber Save',
             'actions': [
                 {
-                    'name': 'Save All Batchgroups',
+                    'name': 'Save All Batch Groups',
                     'isVisible': scope_desktop,
                     'execute': uber_batchgroup_save_all,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
-                    'name': 'Save Selected Batchgroups',
+                    'name': 'Save Selected Batch Groups',
                     'isVisible': scope_batch,
                     'execute': uber_batchgroup_save_selected,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
-                    'name': 'Iterate and Save Selected Batchgroups',
+                    'name': 'Iterate and Save Selected Batch Groups',
                     'isVisible': scope_batch,
                     'execute': uber_batchgroup_iterate_save_selected,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 }
             ]
         }
@@ -902,14 +1169,14 @@ def get_batch_custom_ui_actions():
             'name': 'Uber Save',
             'actions': [
                 {
-                    'name': 'Save Current Batchgroup',
+                    'name': 'Save Current Batch Group',
                     'execute': uber_batchgroup_save,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
-                    'name': 'Iterate and Save Current Batchgroup',
+                    'name': 'Iterate and Save Current Batch Group',
                     'execute': uber_batchgroup_iterate_save,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 }
             ]
         }
@@ -924,7 +1191,7 @@ def get_main_menu_custom_ui_actions():
                 {
                     'name': 'Uber Save Setup',
                     'execute': uber_save_setup,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 }
             ]
         }

@@ -1,10 +1,11 @@
 '''
-Batch Nodes - Node Script
-Flame 2021 and higher
-Created by Michael Vaglienty
-email: michael@slaytan.net - www.pyflame.com
-Creation Date: 01.27.21
-Update Date: 05.20.21
+Script Name: Add Batch Nodes - Node Script
+Script Version: 3.2
+Flame Version: 2021
+Written by: Michael Vaglienty
+Creation Date: 04.18.20
+Update Date: 03.07.22
+
 
 Custom Action Type: Batch
 
@@ -12,7 +13,7 @@ Description:
 
     This script was created by Batch Nodes script
 
-    Right-click in batch -> Add Batch Nodes... -> <NodeName>
+    Right-click in batch -> Batch Nodes... -> <NodeName>
 '''
 
 from __future__ import print_function
@@ -87,7 +88,7 @@ def get_batch_custom_ui_actions():
 
     return [
         {
-            'name': 'Add Batch Nodes...',
+            'name': 'Batch Nodes...',
             'actions': [
                 {
                     'name': '<NodeName>',

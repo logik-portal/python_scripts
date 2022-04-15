@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 '''
 Script Name: Slate Maker
-Script Version: 4.3
-Flame Version: 2020.2
+Script Version: 4.6
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 12.29.18
-Update Date: 10.18.21
+Update Date: 03.18.22
 
 Custom Action Type: Media Panel
 
@@ -15,33 +15,35 @@ Description:
 
     *** DOES NOT WORK WITH FLARE ***
 
+    Detailed instructions to use this script can be found on pyflame.com
+
+    Example CSV and Text Node Template files can be found in /opt/autodesk/shared/python/slate_maker/example_files
+
+Menus:
+
     Right-click on clip to be used as slate background -> Slates... -> Slate Maker
 
-        Create slates of different aspect ratios from single CSV file
-
     Right-click on selection of clips to be used as slate backgrounds -> Slates... -> Slate Maker - Multi Ratio
-
-        For Multi Ratio to properly work you must do the following:
-
-            Slate clip names need to end with the aspect ratio. Such as: slate_bg_16x9
-
-            Text node templates should all end with the aspect ratio. Such as: slate_template_16x9
-
-            Text node templates for all the different aspect ratios should all be in one folder. The file browser
-            for Multi Ratio selects a folder, not a csv file. Any number of aspect ratio templates can be in this
-            folder. Only templates that correspond to selected background clip aspect ratios will be used. Although
-            there should only be one template per aspect ratio.
-
-            The aspect ratio should be somewhere in each line of the csv for each slate to be created.
-
-            Create Ratio Folders button: When enabled this will create separate folders in the newly created slates
-            library for each aspect ratio. When disabled all slates will be put together in the slates library.
 
 To install:
 
     Copy script into /opt/Autodesk/shared/python/slate_maker
 
 Updates:
+
+    v4.6 03.18.22
+
+        Moved UI widgets to external file
+
+    v4.5 03.06.22
+
+        Updated UI for Flame 2023
+
+    v4.4 11.16.21
+
+        Improved parsing of csv file
+
+        If current tab is MediaHub, switch to Timeline tab. Slates cannot be created in MediaHub tab.
 
     v4.3 10.18.21
 
@@ -94,166 +96,23 @@ Updates:
         Fixed bug - Script failed when token not present in slate template for column in csv file
 '''
 
-from __future__ import print_function
 from functools import partial
 from random import randint
-import os, re, ast, shutil, datetime
+import os, re, ast, csv, shutil, datetime
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore
+from flame_widgets_slate_maker import FlameLabel, FlameLineEdit, FlameButton, FlamePushButton, FlamePushButtonMenu, FlameMessageWindow, FlameWindow, FlameProgressWindow
 
-VERSION = 'v4.3'
+VERSION = 'v4.6'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/slate_maker'
-
-class FlameLabel(QtWidgets.QLabel):
-    """
-    Custom Qt Flame Label Widget
-
-    For different label looks set label_type as: 'normal', 'background', or 'outline'
-
-    To use:
-
-    label = FlameLabel('Label Name', 'normal', window)
-    """
-
-    def __init__(self, label_name, label_type, parent_window, *args, **kwargs):
-        super(FlameLabel, self).__init__(*args, **kwargs)
-
-        self.setText(label_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(125, 28)
-        self.setMaximumHeight(28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-        # Set label stylesheet based on label_type
-
-        if label_type == 'normal':
-            self.setStyleSheet('QLabel {color: #9a9a9a; border-bottom: 1px inset #282828; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'background':
-            self.setAlignment(QtCore.Qt.AlignCenter)
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #393939; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-        elif label_type == 'outline':
-            self.setStyleSheet('QLabel {color: #9a9a9a; background-color: #212121; border: 1px solid #404040; font: 14px "Discreet"}'
-                               'QLabel:disabled {color: #6a6a6a}')
-
-class FlameLineEdit(QtWidgets.QLineEdit):
-    """
-    Custom Qt Flame Line Edit Widget
-
-    Main window should include this: window.setFocusPolicy(QtCore.Qt.StrongFocus)
-
-    To use:
-
-    line_edit = FlameLineEdit('Some text here', window)
-    """
-
-    def __init__(self, text, parent_window, *args, **kwargs):
-        super(FlameLineEdit, self).__init__(*args, **kwargs)
-
-        self.setText(text)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(110)
-        # self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QLineEdit {color: #9a9a9a; background-color: #373e47; selection-color: #262626; selection-background-color: #b8b1a7; font: 14px "Discreet"}'
-                           'QLineEdit:focus {background-color: #474e58}'
-                           'QLineEdit:disabled {color: #6a6a6a; background-color: #373737}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlameButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Button Widget
-
-    To use:
-
-    button = FlameButton('Button Name', do_when_pressed, window)
-    """
-
-    def __init__(self, button_name, do_when_pressed, parent_window, *args, **kwargs):
-        super(FlameButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumSize(QtCore.QSize(150, 28))
-        self.setMaximumSize(QtCore.QSize(150, 28))
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clicked.connect(do_when_pressed)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlamePushButton(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Push Button Widget
-
-    To use:
-
-    pushbutton = FlamePushButton(' Button Name', bool, window)
-    """
-
-    def __init__(self, button_name, button_checked, parent_window, *args, **kwargs):
-        super(FlamePushButton, self).__init__(*args, **kwargs)
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setCheckable(True)
-        self.setChecked(button_checked)
-        self.setMinimumSize(150, 28)
-        self.setMaximumSize(150, 28)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #424142, stop: .93 #2e3b48); text-align: left; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                           'QPushButton:checked {color: #d9d9d9; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #4f4f4f, stop: .93 #5a7fb4); font: italic; border: 1px inset black; border-bottom: 1px inset #404040; border-right: 1px inset #404040}'
-                           'QPushButton:disabled {color: #6a6a6a; background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: .92 #383838, stop: .93 #353535); font: light; border-top: 1px solid #575757; border-bottom: 1px solid #242424; border-right: 1px solid #353535; border-left: 1px solid #353535}'
-                           'QToolTip {color: black; background-color: #ffffde; border: black solid 1px}')
-
-class FlamePushButtonMenu(QtWidgets.QPushButton):
-    """
-    Custom Qt Flame Menu Push Button Widget
-
-    To use:
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu('push_button_name', push_button_menu_options, window)
-
-    or
-
-    push_button_menu_options = ['Item 1', 'Item 2', 'Item 3', 'Item 4']
-    menu_push_button = FlamePushButtonMenu(push_button_menu_options[0], push_button_menu_options, window)
-    """
-
-    def __init__(self, button_name, menu_options, parent_window, *args, **kwargs):
-        super(FlamePushButtonMenu, self).__init__(*args, **kwargs)
-        from functools import partial
-
-        self.setText(button_name)
-        self.setParent(parent_window)
-        self.setMinimumHeight(28)
-        self.setMinimumWidth(150)
-        self.setMaximumWidth(150)
-        self.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14px "Discreet"}'
-                           'QPushButton:disabled {color: #747474; background-color: #353535; border-top: 1px solid #444444; border-bottom: 1px solid #242424}')
-
-        def create_menu(option):
-            self.setText(option)
-
-        pushbutton_menu = QtWidgets.QMenu(parent_window)
-        pushbutton_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        pushbutton_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color:#24303d; font: 14px "Discreet"}'
-                                      'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
-        for option in menu_options:
-            pushbutton_menu.addAction(option, partial(create_menu, option))
-
-        self.setMenu(pushbutton_menu)
 
 #-------------------------------------#
 
 class CreateSlates(object):
 
     def __init__(self, selection):
+        import flame
 
         print ('''
      _____ _       _         __  __       _
@@ -264,7 +123,7 @@ class CreateSlates(object):
    |_____/|_|\__,_|\__\___| |_|  |_|\__,_|_|\_\___|_|
         \n''')
 
-        print ('>' * 20, 'slate maker %s' % VERSION, '<' * 20, '\n')
+        print ('>' * 20, f'slate maker {VERSION}', '<' * 20, '\n')
 
         self.selection = selection
 
@@ -285,6 +144,12 @@ class CreateSlates(object):
         except:
             shutil.rmtree(self.temp_save_path)
             os.makedirs(self.temp_save_path)
+
+        # Switch tab to Timeline if current tab is MediaHub
+        # Slates cannot be created in the MediaHub tab
+
+        if flame.get_current_tab() == 'MediaHub':
+            flame.go_to('Timeline')
 
     def config(self):
 
@@ -323,7 +188,7 @@ class CreateSlates(object):
                 if not self.multi_ratio_template_folder_path:
                     self.multi_ratio_template_folder_path = ''
 
-            print ('>>> config loaded <<<\n')
+            print ('--> config loaded\n')
 
         def create_config_file():
 
@@ -331,10 +196,10 @@ class CreateSlates(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder:<br>{self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('>>> config file does not exist, creating new config file <<<\n')
+                print ('--> config file does not exist, creating new config file\n')
 
                 config = """
 <settings>
@@ -371,24 +236,23 @@ class CreateSlates(object):
         def save_config():
 
             if not self.csv_path_entry.text():
-                message_box('Enter Path to CSV File')
+                FlameMessageWindow('Error', 'error', 'Enter Path to CSV File')
                 return False
 
             elif not os.path.isfile(self.csv_path_entry.text()):
-                message_box('CSV file does not exist')
+                FlameMessageWindow('Error', 'error', 'CSV file does not exist')
                 return False
 
             elif not self.template_path_entry.text():
-
-                message_box('Enter Path to Text Node Template')
+                FlameMessageWindow('Error', 'error', 'Enter Path to Text Node Template')
                 return False
 
             elif not os.path.isfile(self.template_path_entry.text()):
-                message_box('Text node template file does not exist')
+                FlameMessageWindow('Error', 'error', 'Text node template file does not exist')
                 return False
 
             elif not self.slate_clip_name_entry.text():
-                message_box('Enter tokens for slate clip naming')
+                FlameMessageWindow('Error', 'error', 'Enter tokens for slate clip naming')
                 return False
 
             # Save settings to config file
@@ -398,125 +262,115 @@ class CreateSlates(object):
 
             csv_file_path = root.find('.//csv_file_path')
             csv_file_path.text = self.csv_path_entry.text()
+
             template_file_path = root.find('.//template_file_path')
             template_file_path.text = self.template_path_entry.text()
+
             date_format = root.find('.//date_format')
             date_format.text = self.date_push_btn.text()
+
             slate_clip_name = root.find('.//slate_clip_name')
             slate_clip_name.text = self.slate_clip_name_entry.text()
+
             spaces_to_underscores = root.find('.//spaces_to_underscores')
             spaces_to_underscores.text = str(self.convert_spaces_btn.isChecked())
 
             xml_tree.write(self.config_xml)
 
-            print ('>>> config saved <<<\n')
+            print ('--> config saved\n')
 
             self.multi_ratio = False
 
             self.template_path = self.template_path_entry.text()
 
-            # self.window.close()
-
             self.create_slates()
 
-        self.window = QtWidgets.QWidget()
-        self.window.setMinimumSize(QtCore.QSize(1000, 250))
-        self.window.setMaximumSize(QtCore.QSize(1000, 250))
-        self.window.setWindowTitle('Slate Maker %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setStyleSheet('background-color: #313131')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        grid = QtWidgets.QGridLayout()
+        self.window = FlameWindow(f'Slate Maker <small>{VERSION}', grid, 1000, 300)
 
         # Labels
 
-        self.csv_label = FlameLabel('CSV', 'normal', self.window)
-        self.template_label = FlameLabel('Template', 'normal', self.window)
-        self.date_format_label = FlameLabel('Date Format', 'normal', self.window)
-        self.slate_clip_name_label = FlameLabel('Slate Clip Name', 'normal', self.window)
+        self.csv_label = FlameLabel('CSV', 'normal')
+        self.template_label = FlameLabel('Template', 'normal')
+        self.date_format_label = FlameLabel('Date Format', 'normal')
+        self.slate_clip_name_label = FlameLabel('Slate Clip Name', 'normal')
 
         # Entry Boxes
 
-        self.csv_path_entry = FlameLineEdit(self.csv_file_path, self.window)
-        self.template_path_entry = FlameLineEdit(self.template_file_path, self.window)
-        self.slate_clip_name_entry = FlameLineEdit(self.slate_clip_name, self.window)
+        self.csv_path_entry = FlameLineEdit(self.csv_file_path)
+        self.template_path_entry = FlameLineEdit(self.template_file_path)
+        self.slate_clip_name_entry = FlameLineEdit(self.slate_clip_name)
 
         # Date Pushbutton Menu
 
         date_formats = ['yy/mm/dd', 'yyyy/mm/dd', 'mm/dd/yy', 'mm/dd/yyyy', 'dd/mm/yy', 'dd/mm/yyyy']
-        self.date_push_btn = FlamePushButtonMenu(self.date_format, date_formats, self.window)
+        self.date_push_btn = FlamePushButtonMenu(self.date_format, date_formats, max_menu_width=150)
 
         # Clip Name Pushbutton Menu
 
-        self.clip_name_menu = QtWidgets.QMenu(self.window)
+        self.clip_name_menu = QtWidgets.QMenu()
         self.clip_name_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clip_name_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
-                                          'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+        self.clip_name_menu.setStyleSheet('QMenu {color: rgb(154, 154, 154); background-color: rgb(45, 55, 68); border: none; font: 14px "Discreet"}'
+                                          'QMenu::item:selected {color: rgb(217, 217, 217); background-color: rgb(58, 69, 81)}')
 
-        self.clip_name_push_btn = QtWidgets.QPushButton('Add Token', self.window)
+        self.clip_name_push_btn = QtWidgets.QPushButton('Add Token')
         self.clip_name_push_btn.setMenu(self.clip_name_menu)
         self.clip_name_push_btn.setFocusPolicy(QtCore.Qt.NoFocus)
         self.clip_name_push_btn.setMinimumSize(QtCore.QSize(150, 28))
-        self.clip_name_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
-                                              'QPushButton:disabled {color: #6a6a6a}')
+        self.clip_name_push_btn.setStyleSheet('QPushButton {color: rgb(154, 154, 154); background-color: rgb(45, 55, 68); border: none; font: 14px "Discreet"}'
+                                              'QPushButton:disabled {color: rgb(116, 116, 116); background-color: rgb(45, 55, 68); border: none}'
+                                              'QPushButton:hover {border: 1px solid rgb(90, 90, 90)}'
+                                              'QPushButton::menu-indicator {image: none}')
+
+        #self.clip_name_push_btn = FlamePushButtonMenu(self.clip_name_menu, [])
 
         # Spaces to Underscore Pushbutton
 
-        self.convert_spaces_btn = FlamePushButton(' Convert Spaces', self.use_underscores, self.window)
+        self.convert_spaces_btn = FlamePushButton('Convert Spaces', self.use_underscores)
         self.convert_spaces_btn.setToolTip('Enable to convert spaces in clip name to underscores')
 
         # Buttons
 
-        self.csv_browse_btn = FlameButton('Browse', self.csv_browse, self.window)
-        self.template_browse_btn = FlameButton('Browse', self.template_browse, self.window)
-        self.cancel_btn = FlameButton('Cancel', self.window.close, self.window)
-        self.create_slates_btn = FlameButton('Create Slates', save_config, self.window)
+        self.csv_browse_btn = FlameButton('Browse', self.csv_browse)
+        self.template_browse_btn = FlameButton('Browse', self.template_browse)
+        self.cancel_btn = FlameButton('Cancel', self.window.close)
+        self.create_slates_btn = FlameButton('Create Slates', save_config)
 
         # Get clip name tokens from csv
 
-        if os.path.isfile(self.csv_path_entry.text()):
+        try:
             self.get_csv_tokens()
-            self.column_names = self.csv_token_line
-            self.create_clip_name_menu()
+        except:
+            pass
 
         #------------------------------------#
 
         # Window Layout
 
-        self.grid = QtWidgets.QGridLayout()
-        self.grid.setVerticalSpacing(5)
-        self.grid.setHorizontalSpacing(5)
-        self.grid.setMargin(20)
+        grid.setVerticalSpacing(5)
+        grid.setHorizontalSpacing(5)
+        grid.setMargin(20)
 
-        self.grid.setColumnMinimumWidth(3, 150)
+        grid.setColumnMinimumWidth(3, 150)
 
-        self.grid.addWidget(self.csv_label, 1, 0)
-        self.grid.addWidget(self.csv_path_entry, 1, 1, 1, 3)
-        self.grid.addWidget(self.csv_browse_btn, 1, 4)
+        grid.addWidget(self.csv_label, 1, 0)
+        grid.addWidget(self.csv_path_entry, 1, 1, 1, 3)
+        grid.addWidget(self.csv_browse_btn, 1, 4)
 
-        self.grid.addWidget(self.template_label, 2, 0)
-        self.grid.addWidget(self.template_path_entry, 2, 1, 1, 3)
-        self.grid.addWidget(self.template_browse_btn, 2, 4)
+        grid.addWidget(self.template_label, 2, 0)
+        grid.addWidget(self.template_path_entry, 2, 1, 1, 3)
+        grid.addWidget(self.template_browse_btn, 2, 4)
 
-        self.grid.addWidget(self.slate_clip_name_label, 3, 0)
-        self.grid.addWidget(self.slate_clip_name_entry, 3, 1)
-        self.grid.addWidget(self.clip_name_push_btn, 3, 2)
-        self.grid.addWidget(self.convert_spaces_btn, 3, 3)
+        grid.addWidget(self.slate_clip_name_label, 3, 0)
+        grid.addWidget(self.slate_clip_name_entry, 3, 1)
+        grid.addWidget(self.clip_name_push_btn, 3, 2)
+        grid.addWidget(self.convert_spaces_btn, 3, 3)
 
-        self.grid.addWidget(self.date_format_label, 4, 0)
-        self.grid.addWidget(self.date_push_btn, 4, 1)
+        grid.addWidget(self.date_format_label, 4, 0)
+        grid.addWidget(self.date_push_btn, 4, 1)
 
-        self.grid.addWidget(self.create_slates_btn, 5, 4)
-        self.grid.addWidget(self.cancel_btn, 6, 4)
-
-        self.window.setLayout(self.grid)
-
-        # ----------------------------------------------
+        grid.addWidget(self.create_slates_btn, 5, 4)
+        grid.addWidget(self.cancel_btn, 6, 4)
 
         self.window.show()
 
@@ -527,28 +381,29 @@ class CreateSlates(object):
         def save_config():
 
             if not self.csv_path_entry.text():
-                message_box('Enter Path to CSV File')
+                FlameMessageWindow('Error', 'error', 'Enter Path to CSV File')
                 return False
 
             elif not os.path.isfile(self.csv_path_entry.text()):
-                message_box('CSV file does not exist')
+                FlameMessageWindow('Error', 'error', 'CSV file does not exist')
                 return False
 
             elif not self.template_path_entry.text():
-                message_box('Enter Path to Text Node Templates')
+                FlameMessageWindow('Error', 'error', 'Enter Path to Text Node Templates')
                 return False
 
             elif not os.path.isdir(self.template_path_entry.text()):
-                message_box('Text node template folder does not exist')
+                FlameMessageWindow('Error', 'error', 'Text node template folder does not exist')
                 return False
 
             elif not self.slate_clip_name_entry.text():
-                message_box('Enter tokens for slate clip naming')
+                FlameMessageWindow('Error', 'error', 'Enter tokens for slate clip naming')
                 return False
 
             # Check for missing templates for selected slate backgrounds
 
             self.slate_bgs = [str(clip.name)[1:-1].rsplit('_', 1)[1] for clip in self.selection]
+            print ('slate_bgs:', self.slate_bgs)
 
             self.missing_templates = []
 
@@ -562,9 +417,17 @@ class CreateSlates(object):
 
             if self.missing_templates:
                 missing = ', '.join([str(elem) for elem in self.missing_templates])
-                return message_box('Text node templates not found for: %s' % missing)
+                return FlameMessageWindow('Error', 'error', f'Text node templates not found for: {missing}')
             else:
-                print ('>>> templates found for all slate backgrounds <<<\n')
+                print ('--> templates found for all slate backgrounds\n')
+
+            # CSV file should contain RATIO in first line - check for this
+
+            with open(self.csv_path_entry.text(), 'r') as csv_file:
+                csv_token_line = csv_file.readline().strip()
+            csv_token_line = csv_token_line.split(',')
+            if 'RATIO' not in csv_token_line:
+                return FlameMessageWindow('Error', 'error', 'CSV missing column called RATIO. <br><br>The RATIO field should contain the ratio of the slate to be created')
 
             # Save settings to config file
 
@@ -586,7 +449,7 @@ class CreateSlates(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('>>> config saved <<<\n')
+            print ('--> config saved\n')
 
             self.multi_ratio = True
 
@@ -601,115 +464,101 @@ class CreateSlates(object):
 
         get_slate_ratios()
 
-        self.window = QtWidgets.QWidget()
-        self.window.setMinimumSize(QtCore.QSize(1000, 250))
-        self.window.setMaximumSize(QtCore.QSize(1000, 250))
-        self.window.setWindowTitle('Slate Maker Multi Ratio %s' % VERSION)
-        self.window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.window.setStyleSheet('background-color: #313131')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.window.move((resolution.width() / 2) - (self.window.frameSize().width() / 2),
-                         (resolution.height() / 2) - (self.window.frameSize().height() / 2))
+        grid = QtWidgets.QGridLayout()
+        self.window = FlameWindow(f'Slate Maker - MultiRatio <small>{VERSION}', grid, 1000, 300)
 
         # Labels
 
-        self.selected_slate_ratio_label01 = FlameLabel('Selected Slate Ratios', 'normal', self.window)
-        self.selected_slate_ratio_label02 = FlameLabel(self.ratios, 'outline', self.window)
+        self.selected_slate_ratio_label01 = FlameLabel('Selected Slate Ratios', 'normal')
+        self.selected_slate_ratio_label02 = FlameLabel(self.ratios, 'background')
 
-        self.csv_label = FlameLabel('CSV', 'normal', self.window)
-        self.template_label = FlameLabel('Template Folder', 'normal', self.window)
-        self.date_format_label = FlameLabel('Date Format', 'normal', self.window)
-        self.slate_clip_name_label = FlameLabel('Slate Clip Name', 'normal', self.window)
+        self.csv_label = FlameLabel('CSV', 'normal')
+        self.template_label = FlameLabel('Template Folder', 'normal')
+        self.date_format_label = FlameLabel('Date Format', 'normal')
+        self.slate_clip_name_label = FlameLabel('Slate Clip Name', 'normal')
 
         # Entry Boxes
 
-        self.csv_path_entry = FlameLineEdit(self.multi_ratio_csv_file_path, self.window)
-        self.template_path_entry = FlameLineEdit(self.multi_ratio_template_folder_path, self.window)
-        self.slate_clip_name_entry = FlameLineEdit(self.multi_ratio_slate_clip_name, self.window)
+        self.csv_path_entry = FlameLineEdit(self.multi_ratio_csv_file_path)
+        self.template_path_entry = FlameLineEdit(self.multi_ratio_template_folder_path)
+        self.slate_clip_name_entry = FlameLineEdit(self.multi_ratio_slate_clip_name)
 
         # Date Pushbutton Menu
 
         date_formats = ['yy/mm/dd', 'yyyy/mm/dd', 'mm/dd/yy', 'mm/dd/yyyy', 'dd/mm/yy', 'dd/mm/yyyy']
-        self.date_push_btn = FlamePushButtonMenu(self.multi_ratio_date_format, date_formats, self.window)
+        self.date_push_btn = FlamePushButtonMenu(self.multi_ratio_date_format, date_formats, max_menu_width=150)
 
         # Clip Name Pushbutton Menu
 
-        self.clip_name_menu = QtWidgets.QMenu(self.window)
+        self.clip_name_menu = QtWidgets.QMenu()
         self.clip_name_menu.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.clip_name_menu.setStyleSheet('QMenu {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
-                                          'QMenu::item:selected {color: #d9d9d9; background-color: #3a4551}')
+        self.clip_name_menu.setStyleSheet('QMenu {color: rgb(154, 154, 154); background-color: rgb(45, 55, 68); border: none; font: 14px "Discreet"}'
+                                          'QMenu::item:selected {color: rgb(217, 217, 217); background-color: rgb(58, 69, 81)}')
 
-        self.clip_name_push_btn = QtWidgets.QPushButton('Add Token', self.window)
+        self.clip_name_push_btn = QtWidgets.QPushButton('Add Token')
         self.clip_name_push_btn.setMenu(self.clip_name_menu)
         self.clip_name_push_btn.setFocusPolicy(QtCore.Qt.NoFocus)
         self.clip_name_push_btn.setMinimumSize(QtCore.QSize(150, 28))
-        self.clip_name_push_btn.setStyleSheet('QPushButton {color: #9a9a9a; background-color: #24303d; font: 14pt "Discreet"}'
-                                              'QPushButton:disabled {color: #6a6a6a}')
+        self.clip_name_push_btn.setStyleSheet('QPushButton {color: rgb(154, 154, 154); background-color: rgb(45, 55, 68); border: none; font: 14px "Discreet"}'
+                                              'QPushButton:disabled {color: rgb(116, 116, 116); background-color: rgb(45, 55, 68); border: none}'
+                                              'QPushButton:hover {border: 1px solid rgb(90, 90, 90)}'
+                                              'QPushButton::menu-indicator {image: none}')
 
         # Spaces to Underscore Pushbutton
 
-        self.convert_spaces_btn = FlamePushButton(' Convert Spaces', self.multi_ratio_use_underscores, self.window)
+        self.convert_spaces_btn = FlamePushButton(' Convert Spaces', self.multi_ratio_use_underscores)
         self.convert_spaces_btn.setToolTip('Enable to convert spaces in clip name to underscores')
 
-        self.ratio_folders_btn = FlamePushButton(' Create Ratio Folders', self.multi_ratio_create_ratio_folders, self.window)
+        self.ratio_folders_btn = FlamePushButton(' Create Ratio Folders', self.multi_ratio_create_ratio_folders)
         self.ratio_folders_btn.setToolTip('Create separate folders for each ratio')
 
         # Buttons
 
-        self.csv_browse_btn = FlameButton('Browse', self.csv_browse, self.window)
-        self.template_browse_btn = FlameButton('Browse', self.template_folder_browse, self.window)
-        self.cancel_btn = FlameButton('Cancel', self.window.close, self.window)
-        self.create_slates_btn = FlameButton('Create Slates', save_config, self.window)
+        self.csv_browse_btn = FlameButton('Browse', self.csv_browse)
+        self.template_browse_btn = FlameButton('Browse', self.template_folder_browse)
+        self.cancel_btn = FlameButton('Cancel', self.window.close)
+        self.create_slates_btn = FlameButton('Create Slates', save_config)
 
         # Get clip name tokens from csv
 
-        if os.path.isfile(self.csv_path_entry.text()):
+        try:
             self.get_csv_tokens()
-            self.column_names = self.csv_token_line
-            self.create_clip_name_menu()
+        except:
+            pass
 
         #------------------------------------#
 
         # Window Layout
 
-        self.grid = QtWidgets.QGridLayout()
-        self.grid.setVerticalSpacing(5)
-        self.grid.setHorizontalSpacing(5)
+        grid.setVerticalSpacing(5)
+        grid.setHorizontalSpacing(5)
 
-        self.grid.setColumnMinimumWidth(3, 150)
+        grid.setColumnMinimumWidth(3, 150)
 
-        self.grid.setRowMinimumHeight(0, 33)
+        grid.setRowMinimumHeight(0, 33)
 
-        self.grid.addWidget(self.selected_slate_ratio_label01, 0, 0)
-        self.grid.addWidget(self.selected_slate_ratio_label02, 0, 1, 1, 2)
-        self.grid.addWidget(self.ratio_folders_btn, 0, 3)
+        grid.addWidget(self.selected_slate_ratio_label01, 0, 0)
+        grid.addWidget(self.selected_slate_ratio_label02, 0, 1, 1, 2)
+        grid.addWidget(self.ratio_folders_btn, 0, 3)
 
-        self.grid.addWidget(self.csv_label, 1, 0)
-        self.grid.addWidget(self.csv_path_entry, 1, 1, 1, 3)
-        self.grid.addWidget(self.csv_browse_btn, 1, 4)
+        grid.addWidget(self.csv_label, 1, 0)
+        grid.addWidget(self.csv_path_entry, 1, 1, 1, 3)
+        grid.addWidget(self.csv_browse_btn, 1, 4)
 
-        self.grid.addWidget(self.template_label, 2, 0)
-        self.grid.addWidget(self.template_path_entry, 2, 1, 1, 3)
-        self.grid.addWidget(self.template_browse_btn, 2, 4)
+        grid.addWidget(self.template_label, 2, 0)
+        grid.addWidget(self.template_path_entry, 2, 1, 1, 3)
+        grid.addWidget(self.template_browse_btn, 2, 4)
 
-        self.grid.addWidget(self.date_format_label, 4, 0)
-        self.grid.addWidget(self.date_push_btn, 4, 1)
+        grid.addWidget(self.date_format_label, 4, 0)
+        grid.addWidget(self.date_push_btn, 4, 1)
 
-        self.grid.addWidget(self.slate_clip_name_label, 3, 0)
-        self.grid.addWidget(self.slate_clip_name_entry, 3, 1, 1, 1)
-        self.grid.addWidget(self.clip_name_push_btn, 3, 2)
-        self.grid.addWidget(self.convert_spaces_btn, 3, 3)
+        grid.addWidget(self.slate_clip_name_label, 3, 0)
+        grid.addWidget(self.slate_clip_name_entry, 3, 1, 1, 1)
+        grid.addWidget(self.clip_name_push_btn, 3, 2)
+        grid.addWidget(self.convert_spaces_btn, 3, 3)
 
-        self.grid.addWidget(self.create_slates_btn, 5, 4)
-        self.grid.addWidget(self.cancel_btn, 6, 4)
-
-        self.window.setLayout(self.grid)
-
-        # ----------------------------------------------
+        grid.addWidget(self.create_slates_btn, 5, 4)
+        grid.addWidget(self.cancel_btn, 6, 4)
 
         self.window.show()
 
@@ -724,12 +573,12 @@ class CreateSlates(object):
         xml_tree = ET.parse(self.config_xml)
         root = xml_tree.getroot()
 
-        path_to_save = root.find('.//%s' % path_type)
+        path_to_save = root.find(f'.//{path_type}')
         path_to_save.text = path
 
         xml_tree.write(self.config_xml)
 
-        print ('>>> path saved <<<\n')
+        print ('--> path saved\n')
 
     def csv_browse(self):
 
@@ -743,9 +592,7 @@ class CreateSlates(object):
         if csv_file_path:
             self.save_path('csv_file_path', csv_file_path)
             self.csv_path_entry.setText(csv_file_path)
-            self.get_csv_tokens()
-            self.column_names = self.csv_token_line
-            self.create_clip_name_menu()
+            self.get_csv_tokens
 
     def template_browse(self):
 
@@ -753,7 +600,7 @@ class CreateSlates(object):
             path = self.template_path_entry.text().rsplit('/', 1)[0]
         else:
             path = self.template_path_entry.text()
-        print ('PATH:', path)
+        #print ('PATH:', path)
         template_file_path = QtWidgets.QFileDialog.getOpenFileName(self.window, "Select Script or Folder", path, "Text Node Setup Files (*.ttg)")[0]
 
         if template_file_path:
@@ -777,6 +624,9 @@ class CreateSlates(object):
         with open(self.csv_path_entry.text(), 'r') as csv_file:
             self.csv_token_line = csv_file.readline().strip()
         self.csv_token_line = self.csv_token_line.split(',')
+
+        self.column_names = self.csv_token_line
+        self.create_clip_name_menu()
 
     def create_clip_name_menu(self):
 
@@ -861,8 +711,8 @@ class CreateSlates(object):
                         contents = edit_text_node.readlines()
                         edit_text_node.close()
 
-                        contents[token_line_num] = '%s' % new_token_line
-                        contents[token_char_len_line_num] = '%s' % new_token_char_len_line
+                        contents[token_line_num] = f'{new_token_line}'
+                        contents[token_char_len_line_num] = f'{new_token_char_len_line}'
 
                         edit_text_node = open(temp_text_file, 'w')
                         contents = ''.join(contents)
@@ -902,22 +752,16 @@ class CreateSlates(object):
 
             temp_text_file = create_temp_text_file()
 
-            line_list = line.split(',')
-
-            # Merge column list with line list into dictionary
-
-            line_dict = dict(zip(token_list, line_list))
-
-            # for item in line_dict.iteritems():
-
-            for item in iter(line_dict.items()):
+            for item in iter(line.items()):
 
                 # Try to convert token in CSV
                 # If token not in template, pass
 
                 try:
-                    token = item[0]
+                    token = '<' + item[0] + '>'
                     token_value = item[1]
+                    # print ('token:', token)
+                    # print ('token_value:', token_value)
 
                     if token == '<CURRENT_DATE>':
                         token_value = get_date(self.date_push_btn.text())
@@ -939,10 +783,11 @@ class CreateSlates(object):
 
             # Get clip name pushbutton text to name clips
 
-            for item in iter(line_dict.items()):
+            for item in iter(line.items()):
 
-                token = item[0]
+                token = '<' + item[0] + '>'
                 token_value = item[1]
+                # print ('token:', token)
 
                 if token in clip_name:
                     clip_name = clip_name.replace(token, token_value)
@@ -954,6 +799,7 @@ class CreateSlates(object):
             # Remove bad characters from clip name
 
             clip_name = re.sub(r'[\\/*?:"<>|]', ' ', clip_name)
+            # print ('clip_name:', clip_name)
 
             # If Use Underscores in checked, replace spaces with underscores
 
@@ -985,9 +831,11 @@ class CreateSlates(object):
             text_file_path = os.path.join(self.temp_save_path, seg_name) + '.ttg'
             text_fx.load_setup(text_file_path)
 
+        self.window.hide()
+
         # Create slate library and set as slate dest
 
-        self.slate_library = flame.project.current_project.current_workspace.create_library('-Slates-')
+        self.slate_library = flame.project.current_project.current_workspace.create_library('- Slates -')
         self.slate_library.expanded = True
         self.slate_dest = self.slate_library
 
@@ -1000,11 +848,6 @@ class CreateSlates(object):
         token_list = ['<' + item.upper() + '>' for item in self.csv_token_line]
         print ('token_list:', token_list, '\n')
 
-        # Build list of lines from csv file - skip first row which should be token row
-
-        with open(self.csv_path_entry.text(), 'r') as csv_file:
-            csv_text = csv_file.read().splitlines()[1:]
-
         # --------------------
 
         # Create slates
@@ -1012,31 +855,61 @@ class CreateSlates(object):
         missing_slate_bgs = []
 
         if self.multi_ratio:
+
+            # Get list of all ratios from csv file
+
+            csv_ratios = []
+
+            with open(self.csv_path_entry.text(), 'r') as csv_file:
+                csv_text = csv.DictReader(csv_file)
+                for line in csv_text:
+                    for key, value in line.items():
+                        if key == 'RATIO':
+                            if value not in csv_ratios:
+                                csv_ratios.append(value)
+
+            print ('csv_ratios:', csv_ratios)
+
             for bg in self.slate_bgs:
 
                 # Remove slate background from list if not found is csv file
 
-                if not re.search(bg, str(csv_text), re.I):
+                slate_bg_missing = True
+
+                for r in csv_ratios:
+                    if re.search(bg, r, re.I):
+                        slate_bg_missing = False
+
+                if slate_bg_missing:
                     missing_slate_bgs.append(bg)
                     self.slate_bgs.remove(bg)
+
+            print ('missing_slate_bgs:', missing_slate_bgs)
 
             if self.slate_bgs:
 
                 # Get number of slates to be created then load progress bar window
 
-                self.num_of_slates = 0
-                for bg in self.slate_bgs:
-                    for line in csv_text:
-                        if bg.lower() in line.lower():
-                            self.num_of_slates += 1
+                num_of_slates = 0
 
-                slates_created = 0
-                self.progress_bar_window()
+                with open(self.csv_path_entry.text(), 'r') as csv_file:
+                    csv_text = csv.DictReader(csv_file)
+                    for line in csv_text:
+                        for bg in self.slate_bgs:
+                            if bg.lower() in str(line).lower():
+                                num_of_slates += 1
+
+                print ('num_of_slates:', num_of_slates)
+
+                slates_created = 1
+
+                self.progress_window = FlameProgressWindow('Creating Slates:', num_of_slates)
+                self.progress_window.enable_done_button(False)
 
                 # Iterate through selected slate backgrounds
 
                 for bg in self.slate_bgs:
-                    print ('\n>>> Creating %s Slates...\n' % bg)
+                    #print (f'\n--> Creating {bg} Slates...\n')
 
                     # If Create Ratio Folders button is enabled create folder for ratio in slate library then set folder as slate dest
 
@@ -1046,159 +919,82 @@ class CreateSlates(object):
 
                     # Find csv lines that matches background ratio
 
-                    for line in csv_text:
-                        if bg.lower() in line.lower():
+                    with open(self.csv_path_entry.text(), 'r') as csv_file:
+                        csv_text = csv.DictReader(csv_file)
+                        for line in csv_text:
+                            if bg.lower() in str(line).lower():
 
-                            # Get slate background clip object to use as background
+                                # Get slate background clip object to use as background
 
-                            for clip in self.selection:
-                                if bg in str(clip.name):
-                                    slate_background = clip
-                                    # print ('slate_background:', str(slate_background.name)[1:-1])
+                                for clip in self.selection:
+                                    if bg in str(clip.name):
+                                        slate_background = clip
+                                        print ('slate_background:', str(slate_background.name)[1:-1])
 
-                            # Find text node template that matches background ratio
+                                # Find text node template that matches background ratio
 
-                            for (root, dirs, files) in os.walk(self.template_path_entry.text()):
-                                for f in files:
-                                    if bg.lower() in f.lower() and f.endswith('.ttg'):
-                                        self.template_path = os.path.join(root, f)
+                                for (root, dirs, files) in os.walk(self.template_path_entry.text()):
+                                    for f in files:
+                                        if bg.lower() in f.lower() and f.endswith('.ttg'):
+                                            self.template_path = os.path.join(root, f)
 
-                            create_text_node(line)
-                            create_slate_clip(slate_background)
+                                create_text_node(line)
+                                create_slate_clip(slate_background)
 
-                            # Update progress window
+                                # Update progress window
 
-                            slates_created = self.update_progress_bar('Creating Slate', self.num_of_slates, slates_created)
+                                self.progress_window.set_progress_value(slates_created)
+                                self.progress_window.set_text(f'Processing Slate: {str(slates_created)} of {str(num_of_slates)}')
+                                slates_created += 1
 
         else:
             # Create text nodes for single slate bg/template
 
             # Get number of slates to be created then load progress bar window
 
-            self.num_of_slates = len(csv_text)
-            slates_created = 0
-            self.progress_bar_window()
+            with open(self.csv_path_entry.text(), 'r') as csv_file:
+                csv_text = csv.DictReader(csv_file)
+                num_of_slates = len([c for c in enumerate(csv_text)])
+
+            slates_created = 1
+
+            self.progress_window = FlameProgressWindow('Creating Slates:', num_of_slates)
+            self.progress_window.enable_done_button(False)
 
             # Get slate background clip from selection
 
             slate_background = self.selection[0]
             self.template_path = self.template_path_entry.text()
 
-            print ('\n>>> Creating slates...\n')
+            #print ('\n--> Creating slates...\n')
 
             # Create slates
 
-            for line in csv_text:
+            with open(self.csv_path_entry.text(), 'r') as csv_file:
+                csv_text = csv.DictReader(csv_file)
+                for line in csv_text:
+                    create_text_node(line)
+                    create_slate_clip(slate_background)
 
-                create_text_node(line)
-                create_slate_clip(slate_background)
+                    # Update progress window
 
-                # Update progress window
-
-                slates_created = self.update_progress_bar('Creating Slate', self.num_of_slates, slates_created)
+                    self.progress_window.set_progress_value(slates_created)
+                    self.progress_window.set_text(f'Processing Slate: {str(slates_created)} of {str(num_of_slates)}')
+                    slates_created += 1
 
         if missing_slate_bgs:
             missing = ', '.join(missing_slate_bgs)
-            message_box('No entries in csv for selected slate backgrounds: %s' % missing)
+            FlameMessageWindow('Error', 'error', f'No entries in csv for selected slate backgrounds: {missing}')
 
         # Delete temp folder
 
         shutil.rmtree(self.temp_save_path)
 
+        self.progress_window.enable_done_button(True)
+
+        self.window.close()
+
         print ('\ndone.\n')
-
-    # ----------------------- #
-
-    def update_progress_bar(self, task, num_to_do, num_done):
-        num_done += 1
-        self.progress_bar.setValue(num_done)
-        self.creating_slates_label.setText('%s %s of %s' % (task, num_done, num_to_do))
-        if num_done == num_to_do:
-            self.progress_done_btn.setEnabled(True)
-        return num_done
-
-    def progress_bar_window(self):
-
-        def close_windows():
-
-            self.window.close()
-            self.progress_window.close()
-
-        self.progress_window = QtWidgets.QWidget()
-        self.progress_window.setFixedSize(400, 160)
-        self.progress_window.setWindowTitle('Slate Maker %s' % VERSION)
-        self.progress_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.progress_window.setAttribute(QtCore.Qt.WA_DeleteOnClose)
-        self.progress_window.setStyleSheet('background-color: #313131')
-
-        # Center window in linux
-
-        resolution = QtWidgets.QDesktopWidget().screenGeometry()
-        self.progress_window.move((resolution.width() / 2) - (self.progress_window.frameSize().width() / 2),
-                                  (resolution.height() / 2) - (self.progress_window.frameSize().height() / 2))
-
-        # Label
-
-        self.creating_slates_label = FlameLabel('', 'normal', self.progress_window)
-        self.creating_slates_label.setAlignment(QtCore.Qt.AlignCenter)
-
-        # Buttons
-
-        self.progress_done_btn = FlameButton('Done', close_windows, self.progress_window)
-        self.progress_done_btn.setEnabled(False)
-        self.progress_done_btn.setMinimumWidth(125)
-
-        # Progress bar
-
-        self.progress_bar = QtWidgets.QProgressBar(self.progress_window)
-        self.progress_bar.setMaximum(self.num_of_slates)
-        self.progress_bar.setStyleSheet('QProgressBar {color: #9a9a9a; font: 14px "Discreet"; text-align: center}'
-                                        'QProgressBar:chunk {background-color: #373e47; border-top: 1px solid #242424; border-bottom: 1px solid #474747; border-left: 1px solid #242424; border-right: 1px solid #474747}')
-
-        #------------------------------------#
-
-        # Window Layout
-
-        self.hbox = QtWidgets.QHBoxLayout()
-        self.hbox.addWidget(self.creating_slates_label)
-
-        self.grid = QtWidgets.QGridLayout()
-        self.grid.setVerticalSpacing(5)
-        self.grid.setHorizontalSpacing(5)
-
-        self.grid.addWidget(self.progress_bar, 1, 0, 1, 3)
-        self.grid.addWidget(self.progress_done_btn, 2, 1)
-
-        self.grid.setColumnMinimumWidth(2, 125)
-
-        self.vbox = QtWidgets.QVBoxLayout()
-        self.vbox.addLayout(self.hbox)
-        self.vbox.addLayout(self.grid)
-
-        self.progress_window.setLayout(self.vbox)
-
-        self.progress_window.show()
-
-def message_box(message):
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14pt "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14pt "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14pt "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>', '<center>']
-
-    for code in code_list:
-        message = message.replace(code, '')
-
-    print ('>>> %s <<<\n' % message)
 
 #-------------------------------------#
 
@@ -1212,7 +1008,7 @@ def text_fx_check(selection):
                 for seg in track.segments:
                     for fx in seg.effects:
                         if fx.type == 'Text':
-                            message_box('<center>Slate background clip cannot have a timeline text fx applied. Remove and try again.')
+                            FlameMessageWindow('Error', 'error', 'Slate background clip cannot have a timeline text fx applied. Remove and try again.')
                             return True
     return False
 
@@ -1233,7 +1029,7 @@ def protect_from_editing_check(selection):
         return False
     except:
         flame.delete(new_clip)
-        message_box('<center>Turn off Protect from Editing:<br>Flame Preferences -> General.')
+        FlameMessageWindow('Error', 'error', 'Turn off Protect from Editing: Flame Preferences -> General.')
         return True
 
 def slate_maker(selection):
@@ -1264,9 +1060,9 @@ def slate_maker_multi_ratio(selection):
         try:
             slate_bgs = [str(clip.name)[1:-1].rsplit('_', 1)[1] for clip in selection if 'x' in str(clip.name)[1:-1].rsplit('_', 1)[1].lower()]
         except:
-            return message_box('<center>All selected slate backgrounds must have ratio at end of file name. Such as: slate_bg_16x9')
+            return FlameMessageWindow('Error', 'error', '<center>All selected slate backgrounds must have ratio at end of file name. Such as: slate_bg_16x9')
         if not slate_bgs:
-            return message_box('<center>All selected slate backgrounds must have ratio at end of file name. Such as: slate_bg_16x9')
+            return FlameMessageWindow('Error', 'error', '<center>All selected slate backgrounds must have ratio at end of file name. Such as: slate_bg_16x9')
 
         script.slate_maker_multi_ratio()
 
@@ -1292,13 +1088,13 @@ def get_media_panel_custom_ui_actions():
                     'name': 'Slate Maker',
                     'isVisible': scope_clip,
                     'execute': slate_maker,
-                    'minimumVersion': '2020.2'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Slate Maker - Multi Ratio',
                     'isVisible': scope_clip,
                     'execute': slate_maker_multi_ratio,
-                    'minimumVersion': '2020.2'
+                    'minimumVersion': '2022'
                 }
             ]
         }

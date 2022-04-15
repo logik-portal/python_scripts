@@ -1,10 +1,10 @@
 '''
 Script Name: Import ST Maps
-Script Version: 2.0
-Flame Version: 2021
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Version: 2.3
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 04.30.21
-Update Date: 05.19.21
+Update Date: 03.15.22
 
 Custom Action Type: Batch
 
@@ -14,23 +14,41 @@ Description:
 
     Comp work is recomped over original plate at end of setup
 
+Menu:
+
     Right-click in batch or on selected node -> Import... -> Import ST Maps
 
 To install:
 
-    Copy script into /opt/Autodesk/shared/python/import_st_maps
+    Copy script into /opt/Autodesk/shared/python/import_st_map
 
 Updates:
 
-v2.0 05.19.21
+    v2.3 03.15.22
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Updated UI for Flame 2023
+
+        Moved UI widgets to external file
+
+    v2.2 02.17.22
+
+        Updated config to XML
+
+    v2.1 01.04.21
+
+        Files starting with '.' are ignored when searching for undistort map after distort map is selected.
+
+    v2.0 05.19.21
+
+        Updated to be compatible with Flame 2022/Python 3.7
 '''
 
-from __future__ import print_function
-import os
+import xml.etree.ElementTree as ET
+import os, re, shutil
+from PySide2 import QtWidgets
+from flame_widgets_import_st_map import FlameMessageWindow
 
-VERSION = 'v2.0'
+VERSION = 'v2.3'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/import_st_map'
 
@@ -39,13 +57,29 @@ class ImportSTMap(object):
     def __init__(self, selection):
         import flame
 
-        print ('\n', '>' * 20, 'import fbx %s' % VERSION, '<' * 20, '\n')
+        print ('''
+ _____                            _    _____ _______ __  __
+|_   _|                          | |  / ____|__   __|  \/  |
+  | |  _ __ ___  _ __   ___  _ __| |_| (___    | |  | \  / | __ _ _ __
+  | | | '_ ` _ \| '_ \ / _ \| '__| __|\___ \   | |  | |\/| |/ _` | '_ \\
+ _| |_| | | | | | |_) | (_) | |  | |_ ____) |  | |  | |  | | (_| | |_) |
+|_____|_| |_| |_| .__/ \___/|_|   \__|_____/   |_|  |_|  |_|\__,_| .__/
+                | |                                              | |
+                |_|                                              |_|
+        ''')
 
-        # Define paths
+        print ('>' * 26, f'import st map {VERSION}', '<' * 26, '\n')
+
+        # Paths
 
         self.config_path = os.path.join(SCRIPT_PATH, 'config')
-        self.config_file = os.path.join(self.config_path, 'config')
+        self.config_xml = os.path.join(self.config_path, 'config.xml')
 
+        # Load config file
+
+        self.config()
+
+        # Get current cursor position
 
         if selection != ():
             self.selection = selection[0]
@@ -55,24 +89,6 @@ class ImportSTMap(object):
             self.selection = ''
             self.master_pos_x = flame.batch.cursor_position[0]
             self.master_pos_y = flame.batch.cursor_position[1]
-
-        # get values from config file
-
-        self.config_file_check()
-
-        get_config_values = open(self.config_file, 'r')
-        values = get_config_values.read().splitlines()
-
-        self.st_map_path = values[2]
-
-        get_config_values.close()
-
-        # Check st map path
-
-        if not os.path.isdir(self.st_map_path):
-            self.st_map_path = '/'
-
-        print ('st_map_path:', self.st_map_path)
 
         # Init variables
 
@@ -87,72 +103,91 @@ class ImportSTMap(object):
 
         try:
             os.makedirs(self.temp_folder)
-            print ('\n>>> temp folder created <<<\n')
+            print ('\n--> temp folder created \n')
         except:
-            print ('temp folder already exists')
+            print ('temp folder already exists\n')
 
         self.create_st_map_setup()
 
-    def config_file_check(self):
+    def config(self):
 
-        # Check for and load config file
-        #-------------------------------
+        def get_config_values():
 
-        if not os.path.isdir(self.config_path):
-            try:
-                os.makedirs(self.config_path)
-            except:
-                message_box('Unable to create folder:<br>%s<br>Check folder permissions' % self.config_path)
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
 
-        if not os.path.isfile(self.config_file):
-            print ('>>> config file does not exist, creating new config file <<<')
+            # Get Settings from config XML
 
-            config_text = []
+            for setting in root.iter('import_st_map_settings'):
+                self.st_map_path = setting.find('st_map_path').text
 
-            config_text.insert(0, 'Setup values for Import ST Map script.')
-            config_text.insert(1, 'ST Map Path:')
-            config_text.insert(2, '/')
+            # Check st map path
 
-            out_file = open(self.config_file, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
+            if not os.path.isdir(self.st_map_path):
+                self.st_map_path = '/'
+
+            print ('--> config loaded \n')
+
+        def create_config_file():
+
+            if not os.path.isdir(self.config_path):
+                try:
+                    os.makedirs(self.config_path)
+                except:
+                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
+
+            if not os.path.isfile(self.config_xml):
+                print ('--> config file does not exist, creating new config file \n')
+
+                config = """
+<settings>
+    <import_st_map_settings>
+        <st_map_path>/</st_map_path>
+    </import_st_map_settings>
+</settings>"""
+
+                with open(self.config_xml, 'a') as config_file:
+                    config_file.write(config)
+                    config_file.close()
+
+        if os.path.isfile(self.config_xml):
+            get_config_values()
+        else:
+            create_config_file()
+            if os.path.isfile(self.config_xml):
+                get_config_values()
 
     # -------------------------------- #
 
     def create_st_map_setup(self):
-        import shutil
 
         def config_save():
 
-            #  Save settings
+            # Save settings to config file
 
-            config_text = []
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
 
-            config_text.insert(0, 'Setup values for Import ST Map script.')
-            config_text.insert(1, 'ST Map Path:')
-            config_text.insert(2, self.undistort_map_path.rsplit('/', 1)[0])
+            st_map_path = root.find('.//st_map_path')
+            st_map_path.text = self.undistort_map_path.rsplit('/', 1)[0]
 
-            out_file = open(self.config_file, 'w')
-            for line in config_text:
-                print(line, file=out_file)
-            out_file.close()
+            xml_tree.write(self.config_xml)
 
-            print ('\n>>> config saved <<<\n')
+            print ('--> config saved \n')
 
         def get_st_maps():
             import flame
-            import re
 
             # Browse for undistort map
 
-            message_box('Select Undistort Map')
+            FlameMessageWindow('Import', 'message', 'Select File: ST Undistort Map')
+
             self.undistort_map_path = self.file_browse(self.st_map_path)
 
             print ('undistort_map_path:', self.undistort_map_path, '\n')
 
             if not self.undistort_map_path:
-                return
+                return False
 
             config_save()
 
@@ -160,21 +195,22 @@ class ImportSTMap(object):
 
             for root, dirs, files in os.walk(self.undistort_map_path.rsplit('/', 1)[0]):
                 for f in files:
-                    if re.search('redistort', f, re.I):
-                        self.redistort_map_path = os.path.join(root, f)
-                        print ('\n>>> st redistort map found <<<\n')
-                        break
+                    if not f.startswith('.'):
+                        if re.search('redistort', f, re.I):
+                            self.redistort_map_path = os.path.join(root, f)
+                            print ('--> st redistort map found \n')
+                            break
 
             # If redistort map not found, browse for it
 
             if self.redistort_map_path == '':
-                message_box('Select Redistort Map')
+                FlameMessageWindow('Import', 'message', 'Select File: ST Redistort Map')
                 self.redistort_map_path = self.file_browse(self.undistort_map_path)
 
-            print ('redistort_map_path:', self.redistort_map_path, '\n')
+            # print ('redistort_map_path:', self.redistort_map_path, '\n')
 
             if not self.redistort_map_path:
-                return
+                return False
 
             # create st maps schematic reel if it doesn't exist
 
@@ -186,7 +222,7 @@ class ImportSTMap(object):
             self.redistort_map = flame.batch.import_clip(self.redistort_map_path, 'st_maps')
             self.undistort_map = flame.batch.import_clip(self.undistort_map_path, 'st_maps')
 
-            print ('\n>>> st maps imported <<<\n')
+            print ('--> st maps imported \n')
             return True
 
         def build_st_map_setup():
@@ -212,31 +248,29 @@ class ImportSTMap(object):
                         node_num += 1
                         name_nodes(node_num)
 
-                print ('new_node_names: ', new_node_names)
+                # print ('new_node_names: ', new_node_names)
 
                 return new_node_names
 
             def edit_resize_node():
 
                 def get_st_map_res():
-                    import re
 
                     undistort_map_name = str(self.undistort_map.name)[1:-1]
-                    print ('undistort_map_name:', undistort_map_name)
+                    # print ('undistort_map_name:', undistort_map_name)
 
                     # Get resolution of st map clips for resize node
 
                     st_map_reel = [reel for reel in flame.batch.reels if reel.name == 'st_maps'][0]
 
-                    # clip = [clip for clip in st_map_reel.clips if re.search('undistort', str(clip.name), re.I)][0]
                     clip = [clip for clip in st_map_reel.clips if re.search(undistort_map_name, str(clip.name), re.I)][0]
 
                     undistort_clip_width = str(clip.width)
                     undistort_clip_height = str(clip.height)
                     undistort_clip_ratio = str(round(float(clip.ratio), 3))
-                    print ('undistort_clip_width:', undistort_clip_width)
-                    print ('undistort_clip_height:', undistort_clip_height)
-                    print ('undistort_clip_ratio:', undistort_clip_ratio, '\n')
+                    # print ('undistort_clip_width:', undistort_clip_width)
+                    # print ('undistort_clip_height:', undistort_clip_height)
+                    # print ('undistort_clip_ratio:', undistort_clip_ratio, '\n')
 
                     return undistort_clip_width, undistort_clip_height, undistort_clip_ratio
 
@@ -246,16 +280,16 @@ class ImportSTMap(object):
 
                     resize_node_name = str(undistort_plate_resize.name)[1:-1]
                     save_resize_path = os.path.join(self.temp_folder, resize_node_name)
-                    print ('save_resize_path:', save_resize_path)
+                    # print ('save_resize_path:', save_resize_path)
 
                     undistort_plate_resize.save_node_setup(save_resize_path)
 
                     # Set Resize path and filename variable
 
                     resize_file_name = save_resize_path + '.resize_node'
-                    print ('resize_file_name:', resize_file_name)
+                    # print ('resize_file_name:', resize_file_name)
 
-                    print ('\n>>> resize node saved <<<\n')
+                    # print ('--> resize node saved \n')
 
                     return resize_file_name
 
@@ -312,7 +346,7 @@ class ImportSTMap(object):
                 ratio_split01 = contents.split('<DestinationAspect>', 1)[0]
                 ratio_split02 = contents.split('</DestinationAspect>', 1)[1]
 
-                new_ratio = '<DestinationAspect>%s</DestinationAspect>' % undistort_clip_ratio
+                new_ratio = f'<DestinationAspect>{undistort_clip_ratio}</DestinationAspect>'
 
                 contents = ratio_split01 + new_ratio + ratio_split02
 
@@ -341,7 +375,7 @@ class ImportSTMap(object):
                 flame.batch.connect_nodes(undistort_plate_resize, 'Result', plate_resize_media, 'Front')
                 flame.batch.connect_nodes(plate_in_mux, 'Result', undistort_plate_resize, 'Front')
 
-                print ('\n>>> resize node set to st map resolution <<<\n')
+                # print ('\n--> resize node set to st map resolution \n')
 
             # Set node names
             # --------------
@@ -546,19 +580,17 @@ class ImportSTMap(object):
         if st_maps_loaded:
             config_save()
             build_st_map_setup()
+            print ('--> st map setup created \n')
         else:
-            print ('\n>>> import cancelled <<<\n')
+            print ('--> import cancelled \n')
 
         # Delete temp folder
 
         shutil.rmtree(self.temp_folder)
 
-        print ('\n>>> st map setup created <<<\n')
-
-        print ('\ndone.\n')
+        print ('done.\n')
 
     def file_browse(self, path):
-        from PySide2 import QtWidgets
 
         file_browser = QtWidgets.QFileDialog()
         file_browser.setDirectory(path)
@@ -567,28 +599,6 @@ class ImportSTMap(object):
         if file_browser.exec_():
             return str(file_browser.selectedFiles()[0])
         return
-
-def message_box(message):
-    from PySide2 import QtWidgets, QtCore
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setMinimumSize(400, 100)
-    msg_box.setText(message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 28))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; font: 14px "Discreet"}'
-                          'QLabel {color: #9a9a9a; font: 14px "Discreet"}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black; font: 14px "Discreet"}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font: italic}')
-    msg_box.exec_()
-
-    code_list = ['<br>', '<dd>']
-
-    for code in code_list:
-        message = message.replace(code, '\n')
-
-    print ('\n>>> %s <<<\n' % message)
 
 #---------------------------#
 
@@ -601,7 +611,7 @@ def get_batch_custom_ui_actions():
                 {
                     'name': 'Import ST Map',
                     'execute': ImportSTMap,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 }
             ]
         }
