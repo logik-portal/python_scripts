@@ -1,10 +1,10 @@
 '''
 Script Name: Add Audio
-Script Version: 1.1
+Script Version: 1.2
 Flame Version: 2023
 Written by: Michael Vaglienty
 Creation Date: 02.04.22
-Update Date: 03.15.22
+Update Date: 05.31.22
 
 Custom Action Type: Batch
 
@@ -36,32 +36,29 @@ To install:
 
 Updates:
 
+    v1.2 05.31.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
     v1.1 03.15.22
 
         Added new message window
 '''
 
-from flame_widgets_add_audio import FlameMessageWindow
+from pyflame_lib_add_audio import FlameMessageWindow, pyflame_print
 import re
 
-VERSION = 'v1.1'
-
+SCRIPT_NAME = 'Add Audio'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/add_audio'
+VERSION = 'v1.2'
 
-class AddAudio(object):
+class AddAudio():
 
     def __init__(self, selection):
         import flame
 
-        print ('''
-             _     _                     _ _
-    /\      | |   | |     /\            | (_)
-   /  \   __| | __| |    /  \  _   _  __| |_  ___
-  / /\ \ / _` |/ _` |   / /\ \| | | |/ _` | |/ _ \\
- / ____ \ (_| | (_| |  / ____ \ |_| | (_| | | (_) |
-/_/    \_\__,_|\__,_| /_/    \_\__,_|\__,_|_|\___/
- ''')
-        print ('>' * 18, f'add audio {VERSION}', '<' * 17, '\n')
+        print ('\n')
+        print ('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
         self.selection = selection
 
@@ -77,19 +74,19 @@ class AddAudio(object):
 
         self.audio_library.expanded = True
 
-        print ('--> New audio library created\n')
+        pyflame_print(SCRIPT_NAME, 'New audio library created.')
 
     def add_stereo_audio(self, timecode):
         import flame
 
         if len(self.selection) < 2:
-            return FlameMessageWindow('Error', 'error', 'At least one clip/sequence and audio clip must be selected.')
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'At least one clip/sequence and audio clip must be selected.')
 
         sequence_selection = self.selection[::2]
         audio_selection = self.selection[1::2]
 
         if len(sequence_selection) != len(audio_selection):
-            return FlameMessageWindow('Error', 'error', 'For every sequence/clip selected an audio clip must be selected.')
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'For every sequence/clip selected an audio clip must be selected.')
 
         self.create_new_library('Stereo Audio')
 
@@ -121,11 +118,7 @@ class AddAudio(object):
 
             open_sequence.insert(audio_clip, insert_time = insert_timecode)
 
-            print (f'--> Audio added to {str(open_sequence.name)[1:-1]} at {timecode}')
-
-        FlameMessageWindow('Operation Complete', 'message', f'Stereo audio added to selected clips at {timecode}.<br><br>New clips can be found here: {str(self.audio_library.name)[1:-1]} Library')
-
-        print ('\ndone.\n')
+        FlameMessageWindow('message', f'{SCRIPT_NAME}: Operation Complete', f'Stereo audio added to selected clips at {timecode}.<br><br>New clips can be found here: {str(self.audio_library.name)[1:-1]} Library')
 
     def add_surround_audio(self, timecode):
         import flame
@@ -153,7 +146,7 @@ class AddAudio(object):
 
         for group in selected_groups:
             if len(group) != 8:
-                return FlameMessageWindow('Error', 'error', 'Selection should be sequence followed by surround audio tracks:<br><br>LF, RF, C, LFE, LS, RS, Stereo.<br><br>Audio does not need to be in proper order.')
+                return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Selection should be sequence followed by surround audio tracks:<br><br>LF, RF, C, LFE, LS, RS, Stereo.<br><br>Audio does not need to be in proper order.')
 
         # Create new library for clips with audio added
 
@@ -168,7 +161,7 @@ class AddAudio(object):
             # Make sure 7 tracks are selected per clip
 
             if len(audio_selection) != 7:
-                return FlameMessageWindow('Error', 'error', 'Audio selection for 5.1 should contain these tracks:<br><br>LF, RF, C, LFE, LS, RS, Stereo<br><br>Audio does not need to be selected in proper order.')
+                return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Audio selection for 5.1 should contain these tracks:<br><br>LF, RF, C, LFE, LS, RS, Stereo<br><br>Audio does not need to be selected in proper order.')
 
             # Open sequence
 
@@ -198,11 +191,7 @@ class AddAudio(object):
 
                 open_sequence.overwrite(audio_clip, insert_timecode, audio_track)
 
-            print (f'--> Audio added to {str(open_sequence.name)[1:-1]} at {timecode}')
-
-        FlameMessageWindow('Operation Complete', 'message', f'5.1 audio added to selected clips at {timecode}.<br><br>New clips can be found here: {str(self.audio_library.name)[1:-1]} Library')
-
-        print ('done.\n')
+        FlameMessageWindow('message', f'{SCRIPT_NAME}: Operation Complete', f'5.1 audio added to selected clips at {timecode}.<br><br>New clips can be found here: {str(self.audio_library.name)[1:-1]} Library')
 
 def add_stereo_audio_one_hour(selection):
 

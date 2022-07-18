@@ -1,25 +1,20 @@
 '''
 Script Name: Rename Shots
-Script Version: 1.0
+Script Version: 1.2
 Flame Version: 2023
 Written by: Michael Vaglienty
 Creation Date: 04.05.22
-Update Date: 04.05.22
+Update Date: 05.24.22
 
 Custom Action Type: Media Panel/Timeline
 
 Description:
 
-    Save clip and/or shot name naming patterns with tokens, then apply them to segments in a timeline.
+    Save clip and/or shot name naming patterns with tokens, then apply both to segments in a timeline.
 
-    Go to Rename Shots Setup to set up pattern naming with tokens. By default shots will only be named
-    to whatever is entered into the Sequence Name field.
+    <index> token does not work as expected in python. Use other tokens to rename shots.
 
 Menus:
-
-    Setup:
-
-        Flame Main Menu -> pyFlame -> Rename Shots Setup
 
     Timeline:
 
@@ -32,28 +27,44 @@ Menus:
 To install:
 
     Copy script into /opt/Autodesk/shared/python/rename_shots
+
+Updates:
+
+    v1.2 05.24.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
+    v1.1 05.11.22
+
+        Removed setup window and eliminated sequence entry to simplify UI.
 '''
 
 import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets
-from flame_widgets_rename_shots import FlameButton, FlameLabel, FlameMessageWindow, FlameWindow, FlameLineEdit, FlameTokenPushButton
+from pyflame_lib_rename_shots import FlameWindow, FlameLabel, FlameLineEdit, FlameTokenPushButton, FlameButton, FlameMessageWindow, pyflame_print
 import os
 
-VERSION = 'v1.0'
-
+SCRIPT_NAME = 'Rename Shots'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/rename_shots'
+VERSION = 'v1.2'
 
-class RenameShots(object):
+class RenameShots():
 
     def __init__(self, selection):
+        import flame
 
-        print ('>' * 21, f'rename shots {VERSION}', '<' * 21, '\n')
+        print('\n')
+        print('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
-        self.selection = selection
+        # Make sure no cuts or transitions are selected
+
+        self.selection = [s for s in selection if s.type == 'Video Segment' or isinstance(s, flame.PySequence)]
 
         # Load config
 
         self.config()
+
+        self.rename_shots_main_window()
 
     def config(self):
 
@@ -68,7 +79,7 @@ class RenameShots(object):
                 self.clip_name = setting.find('clip_name').text
                 self.shot_name = setting.find('shot_name').text
 
-            print ('--> config loaded\n')
+            pyflame_print(SCRIPT_NAME, 'Config loaded.')
 
         def create_config_file():
 
@@ -76,16 +87,16 @@ class RenameShots(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br><br>Check folder permissions')
+                    FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', f'Unable to create folder: {self.config_path}<br><br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('--> config file does not exist, creating new config file\n')
+                pyflame_print(SCRIPT_NAME, 'Creating new config file.')
 
                 config = """
 <settings>
     <rename_shots_settings>
-        <clip_name>&lt;sequence name&gt;</clip_name>
-        <shot_name>&lt;sequence name&gt;</shot_name>
+        <clip_name></clip_name>
+        <shot_name></shot_name>
     </rename_shots_settings>
 </settings>"""
 
@@ -103,20 +114,15 @@ class RenameShots(object):
             if os.path.isfile(self.config_xml):
                 get_config_values()
 
-    def setup_main_window(self):
+    def rename_shots_main_window(self):
 
         def config_save():
 
             if not self.clip_name_entry.text() and not self.shot_name_entry.text():
-                return FlameMessageWindow('Rename Shots - Error', 'error', 'At least one name field must be filled in')
+                return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'At least one shot name field must be filled in')
 
-            sequence_error = '<br><br>The <b>Sequence Name</b> token is replaced by the sequence name given when the sequence shots are named'
-
-            if self.clip_name_entry.text() and '<sequence name>' not in self.clip_name_entry.text():
-                return FlameMessageWindow('Rename Shots - Error', 'error', f'<b>Sequence Name</b> (&lt;sequence name&gt;) token must be in the Clip Name field.{sequence_error}')
-
-            if self.shot_name_entry.text() and '<sequence name>' not in self.shot_name_entry.text():
-                return FlameMessageWindow('Rename Shots - Error', 'error', f'<b>Sequence Name</b> (&lt;sequence name&gt;) token must be in the Shot Name field.{sequence_error}')
+            self.clip_name = self.clip_name_entry.text()
+            self.shot_name = self.shot_name_entry.text()
 
             # Save settings to config file
 
@@ -124,21 +130,23 @@ class RenameShots(object):
             root = xml_tree.getroot()
 
             clip_name = root.find('.//clip_name')
-            clip_name.text = self.clip_name_entry.text()
+            clip_name.text = self.clip_name
 
             shot_name = root.find('.//shot_name')
-            shot_name.text = self.shot_name_entry.text()
+            shot_name.text = self.shot_name
 
             xml_tree.write(self.config_xml)
 
-            print ('--> config saved\n')
+            pyflame_print(SCRIPT_NAME, 'Config saved.')
 
-            self.setup_window.close()
+            self.rename_shots_window.close()
 
-        # Create main window
+            self.apply_name()
+
+        # Create window
 
         vbox = QtWidgets.QVBoxLayout()
-        self.setup_window = FlameWindow(f'Rename Shots - Setup <small>{VERSION}', vbox, 700, 230)
+        self.rename_shots_window = FlameWindow(f'{SCRIPT_NAME} <small>{VERSION}', vbox, 700, 250)
 
         # Labels
 
@@ -153,9 +161,9 @@ class RenameShots(object):
 
         # Token Push Buttons
 
-        token_dict = {'Sequence Name': '<sequence name>', 'Souce Name': '<source name>', 'Segment Index': '<segment>', 'Segment Name': '<segment name>', 'Shot Name': '<shot name>',
+        token_dict = {'Souce Name': '<source name>', 'Segment Index': '<segment>', 'Segment Name': '<segment name>', 'Shot Name': '<shot name>',
                       'Background Index': '<background segment>', 'Background Name': '<background name>', 'Background Shot Name': '<background shot name>',
-                      'Custom Index': '<index##@1+1>', 'Track': '<track>', 'Track Name': '<track name>', 'Record Frame': '<record frame>',
+                      'Track': '<track>', 'Track Name': '<track name>', 'Record Frame': '<record frame>',
                       'Event Number': '<event number>', 'Tape/Reel/Source': '<tape>', 'Resolution': '<resolution>', 'Width': '<width>', 'Height': '<height>',
                       'Depth': '<depth>', 'Colour Space': '<colour space>', 'Source Version Name': '<source version name>', 'Source Version ID': '<source version>',
                       'Clip Name': '<name>', 'Date': '<date>', 'Time': '<time>', 'Year YYYYY': '<YYYY>', 'Year YY': '<YY>', 'Month': '<MM>', 'Day': '<DD>',
@@ -167,14 +175,14 @@ class RenameShots(object):
 
         # Buttons
 
-        self.save_button = FlameButton('Save', config_save)
-        self.cancel_button = FlameButton('Cancel', self.setup_window.close)
+        self.apply_button = FlameButton('Apply', config_save, button_color='blue')
+        self.cancel_button = FlameButton('Cancel', self.rename_shots_window.close)
 
         # UI Widgets Layout
 
         hbox = QtWidgets.QHBoxLayout()
-        hbox.addWidget(self.save_button)
         hbox.addWidget(self.cancel_button)
+        hbox.addWidget(self.apply_button)
 
         grid = QtWidgets.QGridLayout()
         grid.setMargin(10)
@@ -190,93 +198,41 @@ class RenameShots(object):
         vbox.addLayout(grid)
         vbox.addLayout(hbox)
 
-        self.setup_window.show()
-
-    def rename_shots_main_window(self):
-
-        # Create window
-
-        vbox = QtWidgets.QVBoxLayout()
-        self.rename_shots_window = FlameWindow(f'Rename Shots <small>{VERSION}', vbox, 450, 200)
-
-        # Labels
-
-        self.sequence_name_label = FlameLabel('Sequence Name')
-
-        # LineEdits
-
-        self.sequence_name_entry = FlameLineEdit('')
-
-        # Buttons
-
-        self.apply_button = FlameButton('Apply', self.apply_name, button_color='blue')
-        self.cancel_button = FlameButton('Cancel', self.rename_shots_window.close)
-
-        # UI Widgets Layout
-
-        hbox1 = QtWidgets.QHBoxLayout()
-        hbox1.addWidget(self.sequence_name_label)
-        hbox1.addWidget(self.sequence_name_entry)
-
-        hbox2 = QtWidgets.QHBoxLayout()
-        hbox2.addWidget(self.cancel_button)
-        hbox2.addWidget(self.apply_button)
-
-        vbox.addLayout(hbox1)
-        vbox.addLayout(hbox2)
-
         self.rename_shots_window.show()
 
     def apply_name(self):
         import flame
 
-        if not self.sequence_name_entry.text():
-            return FlameMessageWindow('Rename Shots - Error', 'error', '<b>Sequence Name</b> field cannot be empty')
+        try:
+            # If selection is segments, rename segments
 
-        print ('--> naming shots:\n')
+            if isinstance(self.selection[0], flame.PySegment):
+                for segment in self.selection:
+                    self.rename_segment(segment)
 
-        # If selection is segments, rename segments
+            # If selection is sequence, rename segments in selected sequence
 
-        if isinstance(self.selection[0], flame.PySegment):
-            for segment in self.selection:
-                self.rename_segment(segment)
+            elif isinstance(self.selection[0], flame.PySequence):
+                for version in self.selection[0].versions:
+                    for track in version.tracks:
+                        for segment in track.segments:
+                            self.rename_segment(segment)
 
-        # If selection is sequence, rename segments in selected sequence
+            pyflame_print(SCRIPT_NAME, 'Shot renaming complete.')
 
-        elif isinstance(self.selection[0], flame.PySequence):
-            print (f'--> {str(self.selection[0].name)[1:-1]}\n')
-            for v in self.selection[0].versions:
-                for t in v.tracks:
-                    for s in t.segments:
-                        self.rename_segment(s)
-
-        self.rename_shots_window.close()
-
-        print ('\ndone.\n')
+        except RuntimeError:
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Clip is locked. Open the sequence or disable protect from editing in Flame preferences.')
 
     def rename_segment(self, segment):
 
         if self.clip_name:
-            clip_name = self.clip_name.replace('<sequence name>', self.sequence_name_entry.text())
-            segment.tokenized_name = clip_name
-            print ('    clip name:', str(segment.name)[1:-1])
+            segment.tokenized_name = self.clip_name
+            print('    clip name:', str(segment.name)[1:-1])
         if self.shot_name:
-            shot_name = self.shot_name.replace('<sequence name>', self.sequence_name_entry.text())
-            segment.tokenized_shot_name = shot_name
-            print ('    shot name:', str(segment.shot_name)[1:-1])
+            segment.tokenized_shot_name = self.shot_name
+            print('    shot name:', str(segment.shot_name)[1:-1])
 
-#-------------------------------------#
-
-def setup(selection):
-
-    rename = RenameShots(selection)
-    rename.setup_main_window()
-
-def rename_shots(selection):
-
-    rename = RenameShots(selection)
-    rename.rename_shots_main_window()
-    return rename
+        print('\n')
 
 #-------------------------------------#
 
@@ -305,7 +261,7 @@ def get_media_panel_custom_ui_actions():
                 {
                     'name': 'Rename Shots',
                     'isVisible': scope_sequence,
-                    'execute': rename_shots,
+                    'execute': RenameShots,
                     'minimumVersion': '2023'
                 }
             ]
@@ -321,22 +277,7 @@ def get_timeline_custom_ui_actions():
                 {
                     'name': 'Rename Shots',
                     'isVisible': scope_segment,
-                    'execute': rename_shots,
-                    'minimumVersion': '2023'
-                }
-            ]
-        }
-    ]
-
-def get_main_menu_custom_ui_actions():
-
-    return [
-        {
-            'name': 'pyFlame',
-            'actions': [
-                {
-                    'name': 'Rename Shots Setup',
-                    'execute': setup,
+                    'execute': RenameShots,
                     'minimumVersion': '2023'
                 }
             ]

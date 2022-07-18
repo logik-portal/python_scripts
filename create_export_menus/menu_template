@@ -1,10 +1,10 @@
 '''
 Script Name: <PresetName> Export Preset Menu Script
-Script Version: 3.7
+Script Version: 4.2
 Flame Version: <FlameMinMaxVersion>
 Written by: Michael Vaglienty
 Creation Date: 04.27.20
-Update Date: 01.06.22
+Update Date: 06.23.22
 
 Custom Action Type: Media Panel
 
@@ -13,8 +13,8 @@ Description:
     Right click on clip in media panel for custom export preset menu
 '''
 
-from __future__ import print_function
 import os, re, datetime, platform, subprocess
+from pyflame_lib_create_export_menus import *
 
 SCRIPT_PROJECT = '<ScriptProject>'
 
@@ -46,7 +46,7 @@ def export_clips(selection):
 
             return seq_name
 
-        print ('export_path:', export_path)
+        print('export_path:', export_path)
 
         date = datetime.datetime.now()
 
@@ -100,7 +100,8 @@ def export_clips(selection):
 
         return new_export_path
 
-    print ('\n', '>' * 20, ' Exporting with: %s preset' % '<PresetName>', '<' * 20, '\n')
+    print('\n')
+    print('>' * 10, 'Exporting: <PresetName>', '<' * 10, '\n')
 
     # Get time values for token conversion
 
@@ -124,7 +125,7 @@ def export_clips(selection):
     # Export selected clips
 
     for clip in selection:
-        print ('>>> Exported: %s <<<\n' % str(clip.name)[1:-1])
+        print (f'--> Exported: {str(clip.name)[1:-1]}\n')
 
     # Reveal in MediaHub
 
@@ -133,7 +134,7 @@ def export_clips(selection):
     if reveal_in_mediahub:
         flame.go_to('MediaHub')
         flame.mediahub.files.set_path(new_export_path)
-        print ('>>> MediaHub opened to export path <<<\n')
+        pyflame_print('Export Preset', 'MediaHub opened to export path.')
 
     # Reveal in Finder
 
@@ -144,25 +145,9 @@ def export_clips(selection):
             subprocess.Popen(['open', new_export_path])
         else:
             subprocess.Popen(['xdg-open', new_export_path])
+        pyflame_print('Export Preset', 'Finder opened to export path.')
 
-    print ('Done.\n')
-
-def message_box(message):
-    from PySide2 import QtWidgets, QtCore
-
-    msg_box = QtWidgets.QMessageBox()
-    msg_box.setText('<center>%s' % message)
-    msg_box_button = msg_box.addButton(QtWidgets.QMessageBox.Ok)
-    msg_box_button.setFocusPolicy(QtCore.Qt.NoFocus)
-    msg_box_button.setMinimumSize(QtCore.QSize(80, 24))
-    msg_box.setStyleSheet('QMessageBox {background-color: #313131; color: #9a9a9a}'
-                          'QPushButton {color: #9a9a9a; background-color: #424142; border-top: 1px inset #555555; border-bottom: 1px inset black}'
-                          'QPushButton:pressed {color: #d9d9d9; background-color: #4f4f4f; border-top: 1px inset #666666; font:italic}')
-    msg_box.exec_()
-
-    message = message.replace('<br>', '-')
-
-    print ('>>> %s <<<\n' % message)
+    pyflame_print('Export Preset', 'Export complete.')
 
 #-------------------------------------#
 

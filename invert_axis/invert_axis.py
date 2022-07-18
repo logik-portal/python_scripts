@@ -1,10 +1,10 @@
 '''
 Script Name: Invert Axis
-Script Version: 2.3
+Script Version: 2.4
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 07.26.19
-Update Date: 03.25.22
+Update Date: 07.17.22
 
 Custom Action Type: Action / GMask Tracer
 
@@ -31,6 +31,12 @@ To install:
     Copy script into /opt/Autodesk/shared/python/invert_axis
 
 Updates:
+
+    v2.4 07.17.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
+        Fixed: Right-clicking in Action or GMask Tracer with no axis selected causes error to show in shell.
 
     v2.3 03.25.22
 
@@ -62,24 +68,16 @@ Updates:
 '''
 
 import os, shutil
+from pyflame_lib_invert_axis import pyflame_print
 
-VERSION = 'v2.3'
-
+SCRIPT_NAME = 'Invert Axis'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/invert_axis'
+VERSION = 'v2.4'
 
-class InvertAxis(object):
+class InvertAxis():
 
     def __init__(self, selection):
         import flame
-
-        print ('''
-      _____                     _                  _
-     |_   _|                   | |     /\         (_)
-       | |  _ ____   _____ _ __| |_   /  \   __  ___ ___
-       | | | '_ \ \ / / _ \ '__| __| / /\ \  \ \/ / / __|
-      _| |_| | | \ V /  __/ |  | |_ / ____ \  >  <| \__ \\
-     |_____|_| |_|\_/ \___|_|   \__/_/    \_\/_/\_\_|___/
-        ''')
 
         self.current_frame = flame.batch.current_frame
 
@@ -89,7 +87,6 @@ class InvertAxis(object):
         self.axis_name = str(selection[0].name)[1:-1]
         self.selected_axis_parent = self.selected_axis.parent
         self.selected_node_type = str(self.selected_axis_parent.type)[1:-1]
-        #print ('selected node type:', self.selected_node_type)
 
         # Temp folder for saving node setup
 
@@ -98,7 +95,6 @@ class InvertAxis(object):
         # Selected node variables
 
         self.selected_node = self.get_selected_node()
-        #print ('selected node:', self.selected_node)
 
         self.selected_node_name = str(self.selected_node.name)[1:-1]
         self.save_node_path = os.path.join(self.temp_folder, self.selected_node_name)
@@ -107,7 +103,6 @@ class InvertAxis(object):
             self.node_filename = self.save_node_path + '.action'
         else:
             self.node_filename = self.save_node_path + '.mask'
-        #print ('node filename:', self.node_filename)
 
         # Init lists
 
@@ -117,7 +112,8 @@ class InvertAxis(object):
     def create_inverted_axis(self):
         import flame
 
-        print ('>' * 10, f'invert axis {VERSION} - create inverted axis', '<' * 10, '\n')
+        print ('\n')
+        print ('>' * 10, f'{SCRIPT_NAME} {VERSION} - Create Inverted Axis', '<' * 10, '\n')
 
         # Create new axis node
 
@@ -256,14 +252,13 @@ class InvertAxis(object):
 
         self.remove_temp_folder()
 
-        print ('--> inverted axis created\n')
-
-        print ('done.\n')
+        pyflame_print(SCRIPT_NAME, 'Inverted axis created.')
 
     def invert_parent_axis(self):
         import flame
 
-        print ('>' * 10, f'invert axis {VERSION} - invert parent axis', '<' * 10, '\n')
+        print ('\n')
+        print ('>' * 10, f'{SCRIPT_NAME} {VERSION} - Invert Parent Axis', '<' * 10, '\n')
 
         # Save selected node
 
@@ -350,16 +345,14 @@ class InvertAxis(object):
 
             self.remove_temp_folder()
 
-            print ('--> inverted axis created\n')
+            pyflame_print(SCRIPT_NAME, 'Inverted axis created.')
 
         else:
             # If no parent axis, remove temp file
 
             self.remove_temp_folder()
 
-            print ('--> no parent axis to invert\n')
-
-        print ('done.\n')
+            pyflame_print(SCRIPT_NAME, 'No parent axis to invert.', message_type='error')
 
     #-------------------------------------#
 
@@ -510,14 +503,14 @@ def invert_parent(selection):
 def scope_gmask_tracer_axis(selection):
     import flame
 
-    if selection[0].type == 'Axis' and selection[0].parent.type == 'GMask Tracer':
+    if selection and selection[0].type == 'Axis' and selection[0].parent.type == 'GMask Tracer':
         return True
     return False
 
 def scope_action_axis(selection):
     import flame
 
-    if selection[0].type == 'Axis' and selection[0].parent.type == 'Action':
+    if selection and selection[0].type == 'Axis' and selection[0].parent.type == 'Action':
         return True
     return False
 

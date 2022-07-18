@@ -1,10 +1,10 @@
 '''
 Script Name: Paint Node Edit
-Script Version: 3.2
+Script Version: 3.4
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 02.01.20
-Update Date: 03.16.22
+Update Date: 06.05.22
 
 Custom Action Type: Batch Paint Node
 
@@ -15,6 +15,7 @@ Description:
 Menus:
 
     Right-click on paint node -> Paint -> Delete Paint Strokes
+    Right-click on paint node -> Paint -> Slip Paint Strokes
     Right-click on paint node -> Paint -> Paint Strokes to Sequence: All
     Right-click on paint node -> Paint -> Paint Strokes to Range: All
     Right-click on paint node -> Paint -> Paint Strokes to Current: All
@@ -27,6 +28,16 @@ To install:
     Copy script into /opt/Autodesk/shared/python/paint_node_edit
 
 Updates:
+
+    v3.4 06.05.22
+
+        Added ability to slip paint strokes: Right-click on paint node -> Paint -> Slip Paint Strokes
+
+        Temp files are deleted when script is cancelled
+
+    v3.3 05.24.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
 
     v3.2 03.16.22
 
@@ -90,9 +101,10 @@ Updates:
 from PySide2 import QtWidgets
 from functools import partial
 import os, re, shutil
-from flame_widgets_paint_node_edit import FlameButton, FlameLabel, FlameMessageWindow, FlameSlider, FlameWindow
+from pyflame_lib_paint_node_edit import FlameLabel, FlameButton, FlameSlider, FlameMessageWindow, FlameWindow, pyflame_print
 
-VERSION = 'v3.2'
+SCRIPT_NAME = 'Paint Node Edit'
+VERSION = 'v3.4'
 
 # ------------------------------------- #
 
@@ -101,8 +113,8 @@ class EditPaint(object):
     def __init__(self, selection, lifespanstart, lifespanend, range_type, window_height):
         import flame
 
-        print ('\n')
-        print ('>' * 20, f'paint node edit {VERSION} - {range_type}', '<' * 20, '\n')
+        print('\n')
+        print('>' * 10, f'{SCRIPT_NAME} {VERSION} - {range_type.capitalize()}', '<' * 10, '\n')
 
         self.range_type = range_type
 
@@ -111,7 +123,7 @@ class EditPaint(object):
         self.paint_node = [n for n in selection][0]
 
         self.paint_node_name = str(self.paint_node.name)[1:-1]
-        print ('paint_node:', self.paint_node_name)
+        print('paint_node:', self.paint_node_name)
 
         self.lifespanstart = lifespanstart
         self.lifespanend = lifespanend
@@ -119,12 +131,12 @@ class EditPaint(object):
         # Get batch start frame
 
         self.batch_start_frame = int(str(flame.batch.start_frame))
-        print ('batch_start_frame:', self.batch_start_frame)
+        print('batch_start_frame:', self.batch_start_frame)
 
         # Get batch duration
 
         self.batch_duration = int(str(flame.batch.duration))
-        print ('batch_duration:', self.batch_duration)
+        print('batch_duration:', self.batch_duration, '\n')
 
         # Batch end frame
 
@@ -171,7 +183,7 @@ class EditPaint(object):
 
         try:
             self.last_stroke = int(re.findall('<stroke(.*?)>', self.paint_node_code)[-1])
-            print ('last_stroke:', self.last_stroke, '\n')
+            #print('last_stroke:', self.last_stroke, '\n')
         except:
             self.last_stroke = ''
 
@@ -179,13 +191,13 @@ class EditPaint(object):
 
         if self.last_stroke != '':
             if self.range_type == 'sequence all':
-                self.editpaint_node_all()
+                self.edit_paint_node_all()
             elif self.range_type == 'current frame all':
-                self.editpaint_node_all()
+                self.edit_paint_node_all()
             else:
                 self.main_window()
         else:
-            FlameMessageWindow('Error', 'error', 'No strokes to edit: Paint something!')
+            FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'No strokes to edit. Paint something!')
 
     def main_window(self):
         import flame
@@ -210,13 +222,13 @@ class EditPaint(object):
 
         def all_strokes_to_range():
 
-            self.window_title = f'Edit Paint Node <small>{VERSION}</small> - All Paint Strokes to Frame Range'
+            self.window_title = f'{SCRIPT_NAME}: All Paint Strokes to Frame Range <small>{VERSION}</small>'
 
             # Labels
 
-            self.range1_label = FlameLabel('Frame Range', 'underline')
-            self.range2_label = FlameLabel('Start', 'normal')
-            self.range3_label = FlameLabel('End', 'normal')
+            self.range1_label = FlameLabel('Frame Range', label_type='underline')
+            self.range2_label = FlameLabel('Start')
+            self.range3_label = FlameLabel('End')
 
             # Sliders
 
@@ -228,7 +240,7 @@ class EditPaint(object):
 
             # Buttons
 
-            self.apply_btn.clicked.connect(self.editpaint_node_range_all)
+            self.apply_btn.clicked.connect(self.edit_paint_node_range_all)
 
             # Window Layout
 
@@ -248,13 +260,13 @@ class EditPaint(object):
 
         def delete_strokes_window():
 
-            self.window_title = f'Edit Paint Node <small>{VERSION}</small> - Delete Paint Strokes'
+            self.window_title = f'{SCRIPT_NAME}: Delete Paint Strokes <small>{VERSION}</small>'
 
             # Labels
 
-            self.range1_label = FlameLabel('Stroke Range', 'underline')
-            self.range2_label = FlameLabel('Start', 'normal')
-            self.range3_label = FlameLabel('End', 'normal')
+            self.range1_label = FlameLabel('Stroke Range', label_type='underline')
+            self.range2_label = FlameLabel('Start')
+            self.range3_label = FlameLabel('End')
 
             # Sliders
 
@@ -286,16 +298,16 @@ class EditPaint(object):
 
         def range_window():
 
-            self.window_title = f'Edit Paint Node <small>{VERSION}</small> - Paint Stroke Range to Frame Range'
+            self.window_title = f'{SCRIPT_NAME}: Paint Stroke Range to Frame Range <small>{VERSION}</small>'
 
             # Labels
 
-            self.range1_label = FlameLabel('Stroke Range', 'underline')
-            self.range2_label = FlameLabel('Start', 'normal')
-            self.range3_label = FlameLabel('End', 'normal')
-            self.range4_label = FlameLabel('Frame Range', 'underline')
-            self.range5_label = FlameLabel('Start', 'normal')
-            self.range6_label = FlameLabel('End', 'normal')
+            self.range1_label = FlameLabel('Stroke Range', label_type='underline')
+            self.range2_label = FlameLabel('Start')
+            self.range3_label = FlameLabel('End')
+            self.range4_label = FlameLabel('Frame Range', label_type='underline')
+            self.range5_label = FlameLabel('Start')
+            self.range6_label = FlameLabel('End')
 
             # Sliders
 
@@ -313,7 +325,7 @@ class EditPaint(object):
 
             # Buttons
 
-            self.apply_btn.clicked.connect(self.editpaint_strokes_range_range)
+            self.apply_btn.clicked.connect(self.edit_paint_strokes_range_range)
 
             # Window Layout
 
@@ -348,13 +360,13 @@ class EditPaint(object):
             else:
                 title = 'Paint Strokes to Current Frame: Stroke Range'
 
-            self.window_title = f'Edit Paint Node <small>{VERSION}</small> - {title}'
+            self.window_title = f'{SCRIPT_NAME}: {title} <small>{VERSION}</small>'
 
             # Labels
 
-            self.range1_label = FlameLabel('Stroke Range', 'underline')
-            self.range2_label = FlameLabel('Start', 'normal')
-            self.range3_label = FlameLabel('End', 'normal')
+            self.range1_label = FlameLabel('Stroke Range', label_type='underline')
+            self.range2_label = FlameLabel('Start')
+            self.range3_label = FlameLabel('End')
 
             # Sliders
 
@@ -366,7 +378,7 @@ class EditPaint(object):
 
             # Buttons
 
-            self.apply_btn.clicked.connect(self.editpaint_strokes_range)
+            self.apply_btn.clicked.connect(self.edit_paint_strokes_range)
 
             # Window Layout
 
@@ -384,6 +396,50 @@ class EditPaint(object):
 
             self.gridbox.setRowMinimumHeight(3, 35)
 
+        def slip_window():
+
+            self.window_title = f'{SCRIPT_NAME}: Slip Paint Strokes <small>{VERSION}</small>'
+
+            # Labels
+
+            self.slip_label = FlameLabel('Slip', label_type='underline')
+            self.slip_num_of_frames_label = FlameLabel('Number of Frames')
+
+            self.slip_stroke_range_label = FlameLabel('Stroke Range', label_type='underline')
+            self.slip_start_stroke_label = FlameLabel('Start')
+            self.slip_end_stroke_label = FlameLabel('End')
+
+            # Sliders
+
+            self.slip_frame_slider = FlameSlider(0, -1000, 1000)
+            self.slip_start_stroke_slider = FlameSlider(0, 0, self.last_stroke)
+            self.slip_end_stroke_slider = FlameSlider(self.last_stroke, 0, self.last_stroke)
+
+            # Buttons
+
+            self.apply_btn.clicked.connect(self.edit_paint_node_slip)
+
+            # Window Layout
+
+            self.gridbox = QtWidgets.QGridLayout()
+
+            self.gridbox.addWidget(self.slip_label, 1, 0, 1, 5)
+
+            self.gridbox.addWidget(self.slip_num_of_frames_label, 2, 1)
+            self.gridbox.addWidget(self.slip_frame_slider, 2, 3)
+
+            self.gridbox.setRowMinimumHeight(3, 35)
+
+            self.gridbox.addWidget(self.slip_stroke_range_label, 4, 0, 1, 5)
+
+            self.gridbox.addWidget(self.slip_start_stroke_label, 6, 0)
+            self.gridbox.addWidget(self.slip_start_stroke_slider, 6, 1)
+
+            self.gridbox.addWidget(self.slip_end_stroke_label, 6, 3)
+            self.gridbox.addWidget(self.slip_end_stroke_slider, 6, 4)
+
+            self.gridbox.setRowMinimumHeight(7, 35)
+
         def close_window():
 
             self.window.close()
@@ -397,6 +453,8 @@ class EditPaint(object):
             all_strokes_to_range()
         elif self.range_type == 'delete strokes':
             delete_strokes_window()
+        elif self.range_type == 'slip':
+            slip_window()
         elif self.range_type == 'range range':
             range_window()
         elif 'sequence range' or 'current frame range' in self.range_type:
@@ -424,7 +482,7 @@ class EditPaint(object):
 
         self.window.show()
 
-    def editpaint_strokes_range_range(self):
+    def edit_paint_strokes_range_range(self):
 
         # Variables from window
 
@@ -469,11 +527,11 @@ class EditPaint(object):
 
                 self.save_paint_node()
             else:
-                FlameMessageWindow('Error', 'error', 'End frame should be equal to or higher than start frame')
+                FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'End frame should be equal to or higher than start frame')
         else:
-            FlameMessageWindow('Error', 'error', 'End stroke should be equal to or higher than start stroke')
+            FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'End stroke should be equal to or higher than start stroke')
 
-    def editpaint_strokes_range(self):
+    def edit_paint_strokes_range(self):
 
         start_stroke = int(str(self.start_stroke_slider.text()))
         end_stroke = int(str(self.end_stroke_slider.text()))
@@ -510,7 +568,7 @@ class EditPaint(object):
             self.save_paint_node()
 
         else:
-            FlameMessageWindow('Error', 'error', 'End stroke should be equal to or higher than start stroke')
+            FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'End stroke should be equal to or higher than start stroke')
 
     def delete_paint_strokes(self):
 
@@ -568,13 +626,11 @@ class EditPaint(object):
                 new_stroke_num = new_stroke_num + 1
                 stroke_num = stroke_num + 1
 
-            print (f'deleted strokes {delete_start} to {delete_end}\n')
-
             self.save_paint_node()
         else:
-            FlameMessageWindow('Error', 'error', 'End stroke should be equal to or higher than start stroke')
+            FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'End stroke should be equal to or higher than start stroke')
 
-    def editpaint_node_all(self):
+    def edit_paint_node_all(self):
 
         # Replace lifespan values
 
@@ -583,20 +639,71 @@ class EditPaint(object):
 
         self.save_paint_node()
 
-    def editpaint_node_range_all(self):
+    def edit_paint_node_range_all(self):
 
         start = int(str(self.start_frame_slider.text()))
         end = int(str(self.end_frame_slider.text()))
 
-        if end >= start:
-            self.lifespanstart = str(start)
-            self.lifespanend = str(end)
+        self.lifespanstart = str(start)
+        self.lifespanend = str(end)
 
-            self.window.close()
+        self.window.close()
 
-            self.editpaint_node_all()
-        else:
-            FlameMessageWindow('Error', 'error', 'End frame should be equal to or higher than start frame')
+        self.edit_paint_node_all()
+
+    def edit_paint_node_slip(self):
+
+        import xml.etree.ElementTree as ET
+
+        xml_tree = ET.parse(self.paint_node_path)
+        root = xml_tree.getroot()
+
+        for setting in root.iter('PrStroke'):
+            #print('setting:', setting.tag)
+
+            # Get stroke number
+
+            stroke = setting[0].tag
+            stroke_num = int(stroke[6:])
+            #print ('stroke_num:', stroke_num)
+
+            if stroke_num in range(int(self.slip_start_stroke_slider.text()), int(self.slip_end_stroke_slider.text()) + 1):
+
+                # Get stroke lifespan start and end
+
+                lifespanstart = setting[2].attrib['LifeSpanStart']
+                lifespanend = setting[2].attrib['LifeSpanEnd']
+
+                #print('lifespanstart:', lifespanstart)
+                #print('lifespanend:', lifespanend, '\n')
+
+                # Slip stroke lifespan
+
+                if lifespanstart != '-2147483648':
+                    new_lifespanstart = int(lifespanstart) + int(self.slip_frame_slider.text())
+                    setting[2].set('LifeSpanStart', str(new_lifespanstart))
+                    #print('new_lifespanstart:', new_lifespanstart, '\n')
+
+                if lifespanend != '2147483647':
+                    new_lifespanend = int(lifespanend) + int(self.slip_frame_slider.text())
+                    setting[2].set('LifeSpanEnd', str(new_lifespanend))
+                    #print('new_lifespanend:', new_lifespanend, '\n')
+
+        # Save adjusted paint node xml
+
+        xml_tree.write(self.paint_node_path)
+
+        # Reload paint node
+
+        self.paint_node.load_node_setup(self.paint_node_path)
+
+        # Delete temp folder
+
+        shutil.rmtree(self.temp_paint_path)
+
+        self.window.close()
+
+        pyflame_print(SCRIPT_NAME, f'Paint stokes slipped: {self.slip_frame_slider.text()} frames.')
 
     #------------------------------------#
 
@@ -622,9 +729,7 @@ class EditPaint(object):
 
         shutil.rmtree(self.temp_paint_path)
 
-        print ('--> paint node updated\n')
-
-        print ('done.\n')
+        pyflame_print(SCRIPT_NAME, 'Paint node updated.')
 
 # ----------- #
 
@@ -645,7 +750,6 @@ def edit_current_frame_all(selection):
     window_height = 220
 
     current_frame = str(flame.batch.current_frame)
-    print ('current_frame:', current_frame, '\n')
 
     lifespanstart = current_frame
     lifespanend = current_frame
@@ -714,6 +818,17 @@ def edit_current_frame_range(selection):
 
     return EditPaint(selection, lifespanstart, lifespanend, range_type, window_height)
 
+def edit_slip(selection):
+
+        window_height = 340
+
+        lifespanstart = 1
+        lifespanend = 1
+
+        range_type = 'slip'
+
+        return EditPaint(selection, lifespanstart, lifespanend, range_type, window_height)
+
 #------------------------------------#
 
 def scope_paint_node(selection):
@@ -736,6 +851,12 @@ def get_batch_custom_ui_actions():
                     'name': 'Delete Paint Strokes',
                     'isVisible': scope_paint_node,
                     'execute': delete_strokes,
+                    'minimumVersion': '2022'
+                },
+                {
+                    'name': 'Slip Paint Strokes',
+                    'isVisible': scope_paint_node,
+                    'execute': edit_slip,
                     'minimumVersion': '2022'
                 },
                 {

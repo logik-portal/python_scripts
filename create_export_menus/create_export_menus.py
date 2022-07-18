@@ -1,10 +1,10 @@
 '''
 Script Name: Create Export Menus
-Script Version: 4.1
+Script Version: 4.2
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 03.29.20
-Update Date: 03.19.22
+Update Date: 06.22.22
 
 Custom Action Type: Media Panel
 
@@ -28,6 +28,17 @@ To install:
     Copy script into /opt/Autodesk/shared/python/create_export_menus
 
 Updates:
+
+    v4.2 06.22.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
+        Updated browser window for Flame 2023.1 and later
+
+        Setup window no longer closes after creating a new export preset
+
+        Menu template updated - With template importing new pyflame_lib module, error appears during flame startup when loading
+        menu presets. There errors can be ignored. Errors might be due to order flame is loading modules. Menus work fine.
 
     v4.1 03.19.22
 
@@ -137,11 +148,11 @@ from PySide2 import QtCore, QtWidgets
 import xml.etree.ElementTree as ET
 from functools import partial
 import os, re, ast
-from flame_widgets_create_export_menus import FlameLabel, FlameLineEdit, FlameButton, FlamePushButton, FlamePushButtonMenu, FlameTokenPushButton, FlameMessageWindow, FlameWindow
+from pyflame_lib_create_export_menus import *
 
-VERSION = 'v4.1'
-
+SCRIPT_NAME = 'Create Export Menus'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/create_export_menus'
+VERSION = 'v4.2'
 
 # ------------------------------------ #
 
@@ -150,17 +161,8 @@ class ExportSetup(object):
     def __init__(self, selection):
         import flame
 
-        print ('''
-   _____                _       ______                       _   __  __
-  / ____|              | |     |  ____|                     | | |  \/  |
- | |     _ __ ___  __ _| |_ ___| |__  __  ___ __   ___  _ __| |_| \  / | ___ _ __  _   _ ___
- | |    | '__/ _ \/ _` | __/ _ \  __| \ \/ / '_ \ / _ \| '__| __| |\/| |/ _ \ '_ \| | | / __|
- | |____| | |  __/ (_| | ||  __/ |____ >  <| |_) | (_) | |  | |_| |  | |  __/ | | | |_| \__ \\
-  \_____|_|  \___|\__,_|\__\___|______/_/\_\ .__/ \___/|_|   \__|_|  |_|\___|_| |_|\__,_|___/
-                                           | |
-                                           |_|''')
-
-        print ('>' * 33, f'create export menus {VERSION}', '<' * 34, '\n')
+        print('\n')
+        print('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
         # Define Paths
 
@@ -182,9 +184,10 @@ class ExportSetup(object):
 
         self.config()
 
-        # Get current flame version
+        # Get current flame version and full flame version for export preset min/max version compatibility
 
-        self.get_flame_version()
+        self.flame_version = pyflame_get_flame_version()
+        self.flame_min_max_version = str(self.flame_version)[:4]
 
         # Export token menu
 
@@ -200,7 +203,7 @@ class ExportSetup(object):
         self.current_project = flame.project.current_project.name
 
         self.current_project_created_presets_path = os.path.join(SCRIPT_PATH, 'project_menus', self.current_project)
-        print ('current_project_created_presets_path:', self.current_project_created_presets_path)
+        #print ('current_project_created_presets_path:', self.current_project_created_presets_path)
 
         self.project_preset_path = '/opt/Autodesk/project/%s/export/presets/flame' % self.current_project
 
@@ -228,14 +231,14 @@ class ExportSetup(object):
             self.project_movie_preset_list = [x for x in os.listdir(self.project_movie_preset_path) if x.endswith('.xml')]
         except:
             self.project_movie_preset_list = []
-        print ('project_movie_preset_list:', self.project_movie_preset_list)
+        #print ('project_movie_preset_list:', self.project_movie_preset_list)
 
         try:
             self.project_file_seq_preset_path = os.path.join(self.project_preset_path, 'file_sequence')
             self.project_file_seq_preset_list = [x for x in os.listdir(self.project_file_seq_preset_path) if x.endswith('.xml')]
         except:
             self.project_file_seq_preset_list = []
-        print ('project_file_seq_preset_list:', self.project_file_seq_preset_list)
+        #print ('project_file_seq_preset_list:', self.project_file_seq_preset_list)
 
         try:
             self.shared_movie_preset_path = os.path.join(self.shared_preset_path, 'movie_file')
@@ -252,7 +255,7 @@ class ExportSetup(object):
                     self.shared_movie_preset_list.append(preset)
         except:
             self.shared_movie_preset_list = []
-        print ('shared_movie_preset_list:', self.shared_movie_preset_list)
+        #print ('shared_movie_preset_list:', self.shared_movie_preset_list)
 
         try:
             self.shared_file_seq_preset_path = os.path.join(self.shared_preset_path, 'file_sequence')
@@ -269,7 +272,7 @@ class ExportSetup(object):
                     self.shared_file_seq_preset_list.append(preset)
         except:
             self.shared_file_seq_preset_list = []
-        print ('shared_file_seq_preset_list:', self.shared_file_seq_preset_list, '\n')
+        #print ('shared_file_seq_preset_list:', self.shared_file_seq_preset_list, '\n')
 
         self.export_menu_text = ''
         self.format_preset_text = ''
@@ -293,7 +296,7 @@ class ExportSetup(object):
                 self.reveal_in_mediahub = ast.literal_eval(setting.find('reveal_in_mediahub').text)
                 self.reveal_in_finder = ast.literal_eval(setting.find('reveal_in_finder').text)
 
-            print ('--> config loaded \n')
+            pyflame_print(SCRIPT_NAME, 'Config loaded.')
 
         def create_config_file():
 
@@ -301,10 +304,10 @@ class ExportSetup(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br><br>Check folder permissions')
+                    FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('--> config file does not exist, creating new config file ')
+                pyflame_print(SCRIPT_NAME, 'Config file does not exist. Creating new config file.')
 
                 config = """
 <settings>
@@ -328,26 +331,6 @@ class ExportSetup(object):
             create_config_file()
             if os.path.isfile(self.config_xml):
                 get_config_values()
-
-    def get_flame_version(self):
-        import flame
-
-        # Get version of flame and convert to float
-
-        self.flame_version = flame.get_version()
-
-        if 'pr' in self.flame_version:
-            self.flame_version = self.flame_version.rsplit('.pr', 1)[0]
-
-        if len(self.flame_version) > 6:
-            self.flame_version = self.flame_version[:6]
-        self.flame_version = float(self.flame_version)
-        print ('flame version:', self.flame_version)
-
-        self.flame_min_max_version = flame.get_version_major()
-        if self.flame_min_max_version == '2021':
-            self.flame_min_max_version = '2021.2'
-        print ('flame_min_max_version:', self.flame_min_max_version, '\n')
 
     def check_preset_version(self, preset_path):
         '''
@@ -598,55 +581,55 @@ class ExportSetup(object):
 
                 # Menus for preset tabs two thru five
 
-                def set_export_push_button(export_btn, saved_presets_btn, saved_presets_menu):
+                # def set_export_push_button(export_btn, saved_presets_btn, saved_presets_menu):
 
-                    if self.project_movie_preset_list != []:
-                        preset_name = str(self.project_movie_preset_list[0])[:-4]
-                        export_btn.setText('Project: Movie')
-                        saved_presets_btn.setText(preset_name)
-                        build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     if self.project_movie_preset_list != []:
+                #         preset_name = str(self.project_movie_preset_list[0])[:-4]
+                #         export_btn.setText('Project: Movie')
+                #         saved_presets_btn.setText(preset_name)
+                #         build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                    elif self.shared_movie_preset_list != []:
-                        preset_name = str(self.shared_movie_preset_list[0])[:-4]
-                        export_btn.setText('Shared: Movie')
-                        saved_presets_btn.setText(preset_name)
-                        build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     elif self.shared_movie_preset_list != []:
+                #         preset_name = str(self.shared_movie_preset_list[0])[:-4]
+                #         export_btn.setText('Shared: Movie')
+                #         saved_presets_btn.setText(preset_name)
+                #         build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                    elif self.project_file_seq_preset_list != []:
-                        preset_name = str(self.project_file_seq_preset_list[0])[:-4]
-                        export_btn.setText('Project: File Sequence')
-                        saved_presets_btn.setText(preset_name)
-                        build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     elif self.project_file_seq_preset_list != []:
+                #         preset_name = str(self.project_file_seq_preset_list[0])[:-4]
+                #         export_btn.setText('Project: File Sequence')
+                #         saved_presets_btn.setText(preset_name)
+                #         build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                    elif self.shared_file_seq_preset_list != []:
-                        preset_name = str(self.shared_file_seq_preset_list[0])[:-4]
-                        export_btn.setText('Shared: File Sequence')
-                        saved_presets_btn.setText(preset_name)
-                        build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     elif self.shared_file_seq_preset_list != []:
+                #         preset_name = str(self.shared_file_seq_preset_list[0])[:-4]
+                #         export_btn.setText('Shared: File Sequence')
+                #         saved_presets_btn.setText(preset_name)
+                #         build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                    else:
-                        export_btn.setText('No Saved Export Presets')
-                        saved_presets_btn.setText('No Saved Export Presets')
+                #     else:
+                #         export_btn.setText('No Saved Export Presets')
+                #         saved_presets_btn.setText('No Saved Export Presets')
 
-                def project_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                # def project_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
 
-                    export_btn.setText('Project: Movie')
-                    build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     export_btn.setText('Project: Movie')
+                #     build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                def project_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                # def project_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
 
-                    export_btn.setText('Project: File Sequence')
-                    build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     export_btn.setText('Project: File Sequence')
+                #     build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                def shared_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                # def shared_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
 
-                    export_btn.setText('Shared: Movie')
-                    build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     export_btn.setText('Shared: Movie')
+                #     build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                def shared_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                # def shared_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
 
-                    export_btn.setText('Shared: File Sequence')
-                    build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                #     export_btn.setText('Shared: File Sequence')
+                #     build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
                 def build_format_preset_menus(preset_list, export_btn, saved_presets_btn, saved_presets_menu):
 
@@ -772,21 +755,21 @@ class ExportSetup(object):
 
                 # Build button menus for preset tabs
 
-                def project_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Project: Movie')
-                    build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                # def project_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                #     export_btn.setText('Project: Movie')
+                #     build_format_preset_menus(self.project_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                def project_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Project: File Sequence')
-                    build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                # def project_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                #     export_btn.setText('Project: File Sequence')
+                #     build_format_preset_menus(self.project_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                def shared_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Shared: Movie')
-                    build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                # def shared_movie_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                #     export_btn.setText('Shared: Movie')
+                #     build_format_preset_menus(self.shared_movie_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
-                def shared_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
-                    export_btn.setText('Shared: File Sequence')
-                    build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
+                # def shared_file_seq_menu(export_btn, saved_presets_btn, saved_presets_menu):
+                #     export_btn.setText('Shared: File Sequence')
+                #     build_format_preset_menus(self.shared_file_seq_preset_list, export_btn, saved_presets_btn, saved_presets_menu)
 
                 # -------------------------------------------------------
 
@@ -869,12 +852,12 @@ class ExportSetup(object):
 
             def load_preset():
 
-                print ('checking for existing presets...\n')
+                #print ('checking for existing presets...\n')
 
                 if self.edit_menu_push_btn.text() != 'No Saved Presets Found':
 
                     selected_script_name = self.edit_menu_push_btn.text().rsplit(': ', 1)[1]
-                    print ('selected_script_name:', selected_script_name)
+                    #print ('selected_script_name:', selected_script_name)
 
                     self.edit_menu_name_lineedit.setText(selected_script_name)
 
@@ -885,7 +868,7 @@ class ExportSetup(object):
                         self.edit_menu_visibility_push_btn.setText('Project')
                         selected_menu_path = os.path.join(self.project_menus_dir, self.current_project, selected_script_name) + '.py'
 
-                    print ('selected_menu_path:', selected_menu_path)
+                    #print ('selected_menu_path:', selected_menu_path)
 
                     # Read in menu script
                     #-----------------------------------------
@@ -1092,9 +1075,9 @@ class ExportSetup(object):
 
             def delete_preset():
 
-                if FlameMessageWindow('Confirm Operation', 'warning', 'Delete current preset?'):
+                script_name = self.edit_menu_push_btn.text().split(' ', 1)[1]
 
-                    script_name = self.edit_menu_push_btn.text().split(' ', 1)[1]
+                if FlameMessageWindow('warning', f'{SCRIPT_NAME}: Confirm Operation', f'Delete preset: <b>{script_name}'):
 
                     if 'Shared: ' in self.edit_menu_push_btn.text():
                         script_path = os.path.join(self.shared_menus_dir, script_name)
@@ -1108,14 +1091,16 @@ class ExportSetup(object):
                     except:
                         pass
 
-                    print ('--> menu deleted: %s \n' % script_name)
+                    pyflame_print(SCRIPT_NAME, f'Menu deleted: {script_name}')
 
                     # Reload button menus
 
                     build_main_menu_preset_menu(self.edit_menu_push_btn, self.edit_export_name_menu)
                     load_preset()
 
-                    self.refresh_hooks()
+                    # Refresh python hooks
+
+                    pyflame_refresh_hooks(SCRIPT_NAME)
 
             def build_main_menu_preset_menu(created_menu_btn, created_presets_menu):
 
@@ -1128,17 +1113,17 @@ class ExportSetup(object):
 
                 shared_menu_list = ['Shared: ' + menu[:-3] for menu in os.listdir(self.shared_menus_dir) if menu.endswith('.py')]
                 shared_menu_list.sort()
-                print ('shared_menu_list:', shared_menu_list)
+                #print ('shared_menu_list:', shared_menu_list)
 
                 if os.path.isdir(self.current_project_created_presets_path):
                     project_menu_list = ['Project: ' + menu[:-3] for menu in os.listdir(self.current_project_created_presets_path) if menu.endswith('.py')]
-                    print ('project_menu_list:', project_menu_list)
+                    #print ('project_menu_list:', project_menu_list)
                 else:
                     project_menu_list = []
                 project_menu_list.sort()
 
                 menu_list = shared_menu_list + project_menu_list
-                print ('menu_list:', menu_list)
+                #print ('menu_list:', menu_list)
 
                 # Clear Format Preset menu list
 
@@ -1243,9 +1228,9 @@ class ExportSetup(object):
 
     def server_path_browse(self, lineedit):
 
-        export_path = str(QtWidgets.QFileDialog.getExistingDirectory(self.window, "Select Directory", lineedit.text(), QtWidgets.QFileDialog.ShowDirsOnly))
+        export_path = pyflame_file_browser('Select Directory', [''], lineedit.text(), select_directory=True, window_to_hide=[self.window])
 
-        if export_path != '':
+        if export_path:
             lineedit.setText(export_path)
 
     def preset_check(self, tab_options_dict):
@@ -1313,7 +1298,7 @@ class ExportSetup(object):
 
             self.menu_save_file = os.path.join(menu_save_dir, self.python_file_name)
 
-            print ('menu_save_file:', self.menu_save_file, '\n')
+            # ('menu_save_file:', self.menu_save_file, '\n')
 
         def menu_template_replace_tokens():
 
@@ -1348,8 +1333,6 @@ class ExportSetup(object):
 
                 # Get selected preset path
 
-                #preset_type_menu = export_push_btn.text()
-
                 if 'Project' in preset_type_menu:
                     preset_path = self.project_preset_path
                 else:
@@ -1362,7 +1345,7 @@ class ExportSetup(object):
 
                 preset_file_path = os.path.join(preset_dir_path, preset_menu) + '.xml'
 
-                print ('preset path:', preset_file_path, '\n')
+                #print ('preset path:', preset_file_path, '\n')
 
                 return preset_file_path
 
@@ -1437,7 +1420,7 @@ class ExportSetup(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('--> config saved \n')
+            pyflame_print(SCRIPT_NAME, 'Config saved.')
 
         if tab == 'Create':
             tab_options_dict = {'create_tab_zero':{
@@ -1537,10 +1520,6 @@ class ExportSetup(object):
         # Get tab zero values
 
         for key, value in tab_options_dict.items():
-            print ('value:', key)
-
-        for key, value in tab_options_dict.items():
-            print ('key:', key)
             if 'tab_zero' in key:
                 menu_visibility = value['Menu Visibility']
                 menu_name = value['Menu Name']
@@ -1551,7 +1530,7 @@ class ExportSetup(object):
 
         preset_error = self.preset_check(tab_options_dict)
         if preset_error:
-            return FlameMessageWindow('Error', 'error', f'{preset_error}')
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', f'{preset_error}')
 
         set_menu_save_path()
 
@@ -1573,20 +1552,20 @@ class ExportSetup(object):
         # Check if new preset file already exists in current folder
 
         if os.path.isfile(self.menu_save_file):
-            if not FlameMessageWindow('Confirm Operation', 'warning', 'Overwrite exisitng file?'):
+            if not FlameMessageWindow('warning', f'{SCRIPT_NAME}: Confirm Operation', 'Overwrite exisitng file?'):
                 print ('--> save cancelled \n')
                 return
 
         # Check other folders for menu with same name
 
         menu_save_folder = self.menu_save_file.rsplit('/', 1)[0]
-        print ('menu_save_folder:', menu_save_folder, '\n')
+        # ('menu_save_folder:', menu_save_folder, '\n')
 
         for root, dirs, files in os.walk(SCRIPT_PATH):
             if root != menu_save_folder:
                 for f in files:
                     if f == self.python_file_name:
-                        if not FlameMessageWindow('Confirm Operation', 'warning', 'Overwrite exisitng file?'):
+                        if not FlameMessageWindow('warning', f'{SCRIPT_NAME}: Confirm Operation', 'Overwrite exisitng file?'):
                             return
 
                         # Delete old script file before saving new version
@@ -1607,20 +1586,19 @@ class ExportSetup(object):
             print(line, file=out_file)
         out_file.close()
 
-        self.refresh_hooks()
+        # Refresh python hooks
 
-        FlameMessageWindow('Operation Complete', 'message', f'Export Menu Saved: {menu_name}')
+        pyflame_refresh_hooks(SCRIPT_NAME)
+
+        FlameMessageWindow('message', f'{SCRIPT_NAME}: Operation Complete', f'Export Menu Saved: {menu_name}')
+
+        # Close setup window
 
         self.window.close()
 
-    def refresh_hooks(self):
-        import flame
+        # Reopen setup window. Passing SCRIPT_NAME as selection since some value has to be passed as selection. Selection isn't being used.
 
-        # Refresh python hooks
-
-        flame.execute_shortcut('Rescan Python Hooks')
-
-        print ('--> python hooks refreshed \n')
+        ExportSetup(SCRIPT_NAME)
 
 #-------------------------------------#
 

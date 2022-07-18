@@ -1,10 +1,10 @@
 '''
 Script Name: Multi Batch Render
-Script Version: 4.3
+Script Version: 4.4
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 12.12.18
-Update Date: 03.14.22
+Update Date: 05.27.22
 
 Custom Action Type: Batch / Media Panel Desktop
 
@@ -23,6 +23,14 @@ To install:
     Copy script into /opt/Autodesk/shared/python/multi_batch_render
 
 Updates:
+
+    v4.4 05.27.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
+        Fixed Exit Flame button
+
+        Added confirmation dialog for Exit Flame button
 
     v4.3 03.14.22
 
@@ -100,11 +108,11 @@ Updates:
 import xml.etree.ElementTree as ET
 import os, ast
 from PySide2 import QtWidgets
-from flame_widgets_multi_batch_render import FlameButton, FlameLabel, FlameListWidget, FlamePushButton, FlameMessageWindow, FlameProgressWindow, FlameWindow
+from pyflame_lib_multi_batch_render import FlameWindow, FlameProgressWindow, FlameMessageWindow, FlameLabel, FlamePushButton, FlameListWidget, FlameButton, pyflame_print
 
-VERSION = 'v4.3'
-
+SCRIPT_NAME = 'Multi Batch Render'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/multi_batch_render'
+VERSION = 'v4.4'
 
 class MultiBatchRender(object):
 
@@ -143,7 +151,7 @@ class MultiBatchRender(object):
             for setting in root.iter('multi_batch_render_settings'):
                 self.close_after_render = ast.literal_eval(setting.find('close_after_render').text)
 
-            print ('--> config loaded \n')
+            pyflame_print(SCRIPT_NAME, 'Config loaded.')
 
         def create_config_file():
 
@@ -151,9 +159,10 @@ class MultiBatchRender(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
+                    FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
+
             if not os.path.isfile(self.config_xml):
-                print ('--> config file does not exist, creating new config file \n')
+                pyflame_print(SCRIPT_NAME, 'Config file does not exist. Creating new config file.')
 
                 config = """
 <settings>
@@ -179,13 +188,11 @@ class MultiBatchRender(object):
             import flame
 
             current_batch_group = str(flame.batch.name)[1:-1]
-            # print ('current_batch_group: ', current_batch_group)
 
             # Get current batch number
 
             for i in [i for i, x in enumerate(self.desktop_batch_group_list) if x == current_batch_group]:
                 current_batch_num = int(i)
-            # print ('current_batch_num: ', current_batch_num)
 
             # Add names of batch groups to list
 
@@ -198,7 +205,6 @@ class MultiBatchRender(object):
             # List of all items in batchgroup list box
 
             all_batch_groups_list = [str(self.batch_group_list.item(index)) for index in range(self.batch_group_list.count())]
-            # print ('all_batch_groups_list:', all_batch_groups_list)
 
             # List of selected batchgroups
 
@@ -211,7 +217,7 @@ class MultiBatchRender(object):
                 for i in [i for i, x in enumerate(all_batch_groups_list) if x == batch]:
                     self.selected_batch_groups.append(i)
 
-        def render():
+        def save_config():
 
             # Save settings to config file
 
@@ -223,7 +229,16 @@ class MultiBatchRender(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('--> config saved \n')
+            pyflame_print(SCRIPT_NAME, 'Config saved.')
+
+        def render():
+
+            if self.exit_flame.isChecked():
+
+                if not FlameMessageWindow('confirm', f'{SCRIPT_NAME}: Confirm', 'Exit Flame when render is complete?'):
+                    return
+
+            save_config()
 
             self.window.hide()
 
@@ -241,7 +256,7 @@ class MultiBatchRender(object):
                 pass
 
         gridbox = QtWidgets.QGridLayout()
-        self.window = FlameWindow(f'Multi Batch Render <small>{VERSION}', gridbox, 575, 400)
+        self.window = FlameWindow(f'{SCRIPT_NAME} <small>{VERSION}', gridbox, 575, 400)
 
         # Labels
 
@@ -293,8 +308,6 @@ class MultiBatchRender(object):
                 batch_num = self.desktop_batch_group_object_list.index(b)
                 self.selected_batch_groups.append(batch_num)
 
-        print ('selected batchgroup numbers:', self.selected_batch_groups, '\n')
-
     def render_selected_batch_groups(self):
 
         self.get_selected_batch_groups()
@@ -328,13 +341,13 @@ class MultiBatchRender(object):
 
             if [node for node in batch_to_render.nodes if node.type in ('Render', 'Write File')] == []:
                 self.failed_render_list.append(batch_to_render.name)
-                print (f'--> {batch_to_render.name} has no render or write nodes. Skipping. \n')
+                pyflame_print(SCRIPT_NAME, f'{batch_to_render.name} has no render or write nodes. Skipping.', message_type='warning')
                 progress_text = f'Rendering Batch: {self.batch_groups_rendered} of {self.num_batch_groups}'
 
             else:
                 progress_text = f'Rendering Batch: {self.batch_groups_rendered} of {self.num_batch_groups}'
                 self.progress_window.set_text(progress_text)
-                print (progress_text)
+                pyflame_print(SCRIPT_NAME, progress_text)
 
                 # Replace render/write nodes - fix for flame render node bug
 
@@ -352,7 +365,7 @@ class MultiBatchRender(object):
             self.progress_window.set_progress_value(self.batch_groups_rendered)
 
             if self.batch_groups_rendered == self.num_batch_groups:
-                print ('\n--> rendering done ', '\n')
+                pyflame_print(SCRIPT_NAME, 'Rendering complete.')
 
                 # If any renders fail, show list when done
 
@@ -368,14 +381,14 @@ class MultiBatchRender(object):
                 self.progress_window.enable_done_button(True)
 
                 # If Exit/Save button is pressed, exit Flame when render is done
+                # Pass if render is executed from right click menu
 
                 try:
                     if self.exit_flame.isChecked():
-                        print ('\n--> Exiting Flame \n')
-                        self.render_window.close()
+                        pyflame_print(SCRIPT_NAME, 'Exiting Flame.')
+                        self.progress_window.close()
                         flame.exit()
                 except:
-                    # Render was submitted from right click menu. Do nothing.
                     pass
 
         self.num_batch_groups = len(self.selected_batch_groups)
@@ -412,8 +425,8 @@ class MultiBatchRender(object):
 
 def render_selected(selection):
 
-    print ('\n')
-    print ('>' * 20, f'multi batch render {VERSION} - render selected', '<' * 20, '\n')
+    print('\n')
+    print('>' * 10, f'{SCRIPT_NAME} {VERSION} - render selected', '<' * 10, '\n')
 
     script = MultiBatchRender(selection)
     script.render_selected_batch_groups()
@@ -421,8 +434,8 @@ def render_selected(selection):
 
 def main_render_window(selection):
 
-    print ('\n')
-    print ('>' * 20, f'multi batch render {VERSION}', '<' * 20, '\n')
+    print('\n')
+    print('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
     script = MultiBatchRender(selection)
     script.main_window()

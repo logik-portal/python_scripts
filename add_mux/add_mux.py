@@ -1,19 +1,25 @@
 '''
 Script Name: Add Mux
-Script Version: 2.1
-Flame Version: 2021
-Written by: Michael Vaglienty - michael@slaytan.net
+Script Version: 2.2
+Flame Version: 2022
+Written by: Michael Vaglienty
 Creation Date: 07.31.19
-Update Date: 05.19.21
+Update Date: 05.24.22
 
 Custom Action Type: Batch
 
 Description:
 
-    Add regular mux node or frame locked mux to batch
+    Add regular mux node or frame locked mux to batch.
+
+    Right-click on an existing node to add connected mux node after it.
+
+Menus:
 
     Right-click in batch -> Add Mux... -> Add MUX / Add Freeze Frame MUX
-    Right-click on node in batch -> Add Mux -> Add MUX / Add Freeze Frame MUX
+
+    Right-click in batch -> Add Mux -> Add MUX / Add Freeze Frame MUX
+
     Right-click on Mux node in batch -> Add Mux... -> Freeze Selected MUX
 
 To install:
@@ -22,39 +28,48 @@ To install:
 
 Updates:
 
-v2.1 05.19.21
+    v2.2 05.24.22
 
-    Updated to be compatible with Flame 2022/Python 3.7
+        Messages print to Flame message window - Flame 2023.1 and later
 
-v1.6 05.12.21
+    v2.1 05.19.21
 
-    Mux node can now be added at cursor position
+        Updated to be compatible with Flame 2022/Python 3.7
 
-    Regular MUX can now be added
+    v1.6 05.12.21
 
-v1.5 02.10.20
+        Mux node can now be added at cursor position
 
-    Freeze existing mux at current frame
+        Regular MUX can now be added
+
+    v1.5 02.10.20
+
+        Freeze existing mux at current frame
 '''
 
-from __future__ import print_function
+from pyflame_lib_add_mux import pyflame_print
 
-VERSION = 'v2.1'
+SCRIPT_NAME = 'Add Mux'
+VERSION = 'v2.2'
 
 def add_mux(selection):
     import flame
 
-    print ('\n', '>' * 10, 'Add MUX %s' % VERSION, '<' * 10, '\n')
+    print('\n')
+    print('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
     mux_node = flame.batch.create_node('MUX')
     mux_node.name = name_node('mux')
 
     position_mux(mux_node, selection)
 
+    pyflame_print(SCRIPT_NAME, 'Mux node added to batch.')
+
 def add_mux_freeze(selection):
     import flame
 
-    print ('\n', '>' * 10, 'Add MUX %s - Add MUX Freeze Frame' % VERSION, '<' * 10, '\n')
+    print('\n')
+    print('>' * 10, f'{SCRIPT_NAME} {VERSION} - Add MUX Freeze Frame', '<' * 10, '\n')
 
     current_frame = flame.batch.current_frame
 
@@ -67,6 +82,8 @@ def add_mux_freeze(selection):
     mux_node.after_range = 'Repeat Last'
 
     position_mux(mux_node, selection)
+
+    pyflame_print(SCRIPT_NAME, 'Mux node added to batch frozen at current frame.')
 
 def name_node(node_type, node_num=0):
     import flame
@@ -112,7 +129,8 @@ def position_mux(mux_node, selection):
 def freeze_existing_mux(selection):
     import flame
 
-    print ('\n', '>' * 10, 'Add MUX %s - Freeze exisiting MUX node' % VERSION, '<' * 10, '\n')
+    print('\n')
+    print('>' * 10, f'{SCRIPT_NAME} {VERSION} - Freeze exisiting MUX node', '<' * 10, '\n')
 
     current_frame = flame.batch.current_frame
 
@@ -122,6 +140,8 @@ def freeze_existing_mux(selection):
         mux_node.range_end = current_frame
         mux_node.before_range = 'Repeat First'
         mux_node.after_range = 'Repeat Last'
+
+    pyflame_print(SCRIPT_NAME, 'Existing Mux node frozen at current frame.')
 
 def scope_mux_node(selection):
 
@@ -139,18 +159,18 @@ def get_batch_custom_ui_actions():
                 {
                     'name': 'Add MUX',
                     'execute': add_mux,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Add Freeze Frame MUX',
                     'execute': add_mux_freeze,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 },
                 {
                     'name': 'Freeze Selected MUX',
                     'isVisible': scope_mux_node,
                     'execute': freeze_existing_mux,
-                    'minimumVersion': '2021'
+                    'minimumVersion': '2022'
                 }
             ]
         }

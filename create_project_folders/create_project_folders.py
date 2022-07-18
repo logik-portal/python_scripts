@@ -1,10 +1,10 @@
 '''
 Script Name: Create Project Folders
-Script Version: 1.2
+Script Version: 1.3
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 09.22.21
-Update Date: 03.28.22
+Update Date: 06.06.22
 
 Custom Action Type: Flame Project Launch
 
@@ -38,6 +38,10 @@ To install:
 
 Updates:
 
+    v1.3 06.06.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
     v1.2 03.28.22
 
         Tokens for <ProjectName> and <ProjectNickName> can be entered into library and folder names
@@ -63,11 +67,11 @@ from PySide2 import QtWidgets, QtCore, QtGui
 import xml.etree.ElementTree as ET
 from functools import partial
 import os, re, ast
-from flame_widgets_project_folders import FlameButton, FlameLabel, FlamePushButton, FlameTokenPushButton, FlameLineEdit, FlameTreeWidget, FlameMessageWindow, FlameWindow
+from pyflame_lib_create_project_folders import FlameWindow, FlameMessageWindow, FlameButton, FlameLabel, FlameLineEdit, FlameTreeWidget, FlameTokenPushButton, FlamePushButton, pyflame_print, pyflame_file_browser
 
-VERSION = 'v1.2'
-
+SCRIPT_NAME = 'Create Project Folders'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/create_project_folders'
+VERSION = 'v1.3'
 
 class CreateProjectFolders(object):
 
@@ -75,7 +79,7 @@ class CreateProjectFolders(object):
         import flame
 
         print ('\n')
-        print ('>' * 20, f'create project folders {VERSION}', '<' * 20, '\n')
+        print ('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
         # Paths
 
@@ -111,7 +115,7 @@ class CreateProjectFolders(object):
                 self.file_system_folders = ast.literal_eval(setting.find('file_system_folders').text)
                 self.media_panel_library_folders = ast.literal_eval(setting.find('media_panel_library_folders').text)
 
-            print ('--> config loaded \n')
+            pyflame_print(SCRIPT_NAME, 'Config loaded.')
 
         def create_config_file():
 
@@ -119,10 +123,10 @@ class CreateProjectFolders(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    FlameMessageWindow('Error', 'error', f'Unable to create folder:<br>{self.config_path}<br>Check folder permissions')
+                    FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('--> config file does not exist, creating new config file \n')
+                pyflame_print(SCRIPT_NAME, 'Config file does not exist. Creating new config file.')
 
                 config = """
 <settings>
@@ -211,7 +215,7 @@ class CreateProjectFolders(object):
                 for item in tree.selectedItems():
                     (item.parent() or root).removeChild(item)
             else:
-                return FlameMessageWindow('Error', 'error', 'Template must have at least one folder')
+                return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Template must have at least one folder')
 
         def add_tree_item(tree_top, tree, new_item_num=0):
 
@@ -262,9 +266,9 @@ class CreateProjectFolders(object):
 
         def folder_browse():
 
-            file_path = str(QtWidgets.QFileDialog.getExistingDirectory(self.setup_window, 'Select Directory', self.projects_path_lineedit.text(), QtWidgets.QFileDialog.ShowDirsOnly))
+            file_path = pyflame_file_browser('Select Directory', [''], self.projects_path_lineedit.text(), select_directory=True, window_to_hide=[self.setup_window])
 
-            if os.path.isdir(file_path):
+            if file_path:
                 self.projects_path_lineedit.setText(file_path)
 
         def save_config():
@@ -327,7 +331,7 @@ class CreateProjectFolders(object):
 
             if self.create_system_folders_push_button.isChecked() == True:
                 if self.projects_path_lineedit.text() == '/' or not self.projects_path_lineedit.text():
-                    return FlameMessageWindow('Error', 'error', '<b>Projects Path:</b> Enter path where folders will be created.')
+                    return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', '<b>Projects Path:</b> Enter path where folders will be created.')
 
             # Save settings to config file
 
@@ -354,7 +358,7 @@ class CreateProjectFolders(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('--> config saved \n')
+            pyflame_print(SCRIPT_NAME, 'Config saved.')
 
             self.setup_window.close()
 
@@ -370,7 +374,7 @@ class CreateProjectFolders(object):
 
             self.create_file_system_folders()
 
-            FlameMessageWindow('Operation Complete', 'message', 'File system folders created')
+            FlameMessageWindow('message', f'{SCRIPT_NAME}: Operation Complete', 'File system folders created')
 
         def manually_create_libraries():
 
@@ -381,7 +385,7 @@ class CreateProjectFolders(object):
             self.create_media_panel_folders()
 
         grid_layout = QtWidgets.QGridLayout()
-        self.setup_window = FlameWindow(f'Create Project Folders Setup <small>{VERSION}', grid_layout, 750, 750)
+        self.setup_window = FlameWindow(f'{SCRIPT_NAME}: Setup <small>{VERSION}', grid_layout, 750, 750)
 
         # Labels
 
@@ -530,7 +534,7 @@ class CreateProjectFolders(object):
 
             xml_tree.write(self.config_xml)
 
-            print ('--> config saved \n')
+            pyflame_print(SCRIPT_NAME, 'Config saved.')
 
         if not self.first_time:
 
@@ -542,22 +546,22 @@ class CreateProjectFolders(object):
 
                 # If create system folders is selected in Setup, create folders based on template
                 if self.create_file_system_folders_on_start:
-                    file_system_folders = FlameMessageWindow('Create File System Folders', 'confirm', 'Project file system folders not found. Create now?')
+                    file_system_folders = FlameMessageWindow('confirm', f'{SCRIPT_NAME}: Create File System Folders', 'Project file system folders not found. Create now?')
                     if file_system_folders:
                         self.create_file_system_folders()
-                        print ('--> Media panel libraries/folders created.\n')
+                        pyflame_print(SCRIPT_NAME, 'Media panel libraries/folders created.')
                     else:
-                        print ('--> Skipped creating file system folders.\n')
+                        pyflame_print(SCRIPT_NAME, 'Skipped creating file system folders.')
 
                 # If create media panel folders is selected in Setup, create folders based on template
 
                 if self.create_media_panel_folders_on_start:
-                    media_panel_folders = FlameMessageWindow('Create Media Panel Folders', 'warning', 'Create project libraries/folders?<br><br>This will delete the Default library.')
+                    media_panel_folders = FlameMessageWindow('warning', f'{SCRIPT_NAME}: Create Media Panel Folders', 'Create project libraries/folders?<br><br>This will delete the Default library.')
                     if media_panel_folders:
                         self.create_media_panel_folders()
-                        print ('--> Media panel libraries/folders created.\n')
+                        pyflame_print(SCRIPT_NAME, 'Media panel libraries/folders created.')
                     else:
-                        print ('--> Skipped creating media panel libraries/folders.\n')
+                        pyflame_print(SCRIPT_NAME, 'Skipped creating media panel libraries/folders.')
 
                 if self.create_file_system_folders_on_start or self.create_media_panel_folders_on_start:
 
@@ -570,14 +574,12 @@ class CreateProjectFolders(object):
                     # If neither file system or media panel folders are created, ask if user should be prompted for this project in the future
 
                     if not file_system_folders and not media_panel_folders:
-                        if FlameMessageWindow('Confirm Operation', 'confirm', 'Skipped Creating system folders and media panel libraries/folders.<br><br>Do not ask to create project folders for this project again?'):
+                        if FlameMessageWindow('confirm', f'{SCRIPT_NAME}: Confirm Operation', 'Skipped Creating system folders and media panel libraries/folders.<br><br>Do not ask to create project folders for this project again?'):
                             self.ignore_projects.append(self.project_name)
                             save_config()
 
             else:
                 print ('--> skipped creating file system folders and media panel libraries/folders.\n')
-
-            print ('done.\n')
 
         else:
 

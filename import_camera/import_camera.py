@@ -1,10 +1,10 @@
 '''
 Script Name: Import Camera
-Script Version: 4.3
+Script Version: 4.4
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 06.02.18
-Update Date: 03.15.22
+Update Date: 05.26.22
 
 Custom Action Type: Batch
 
@@ -27,6 +27,12 @@ To install:
     Copy script into /opt/Autodesk/shared/python/import_camera
 
 Updates:
+
+    v4.4 05.26.22
+
+        Added new flame browser window - Flame 2023.1 and later
+
+        Messages print to Flame message window - Flame 2023.1 and later
 
     v4.3 03.15.22
 
@@ -102,31 +108,19 @@ Updates:
 import xml.etree.ElementTree as ET
 import os, re, ast, shutil
 from PySide2 import QtWidgets
-from flame_widgets_import_camera import FlameButton, FlameLabel, FlamePushButton, FlamePushButtonMenu, FlameMessageWindow, FlameSlider, FlameWindow
+from pyflame_lib_import_camera import FlameWindow, FlameMessageWindow, FlameLabel, FlameButton, FlamePushButton, FlamePushButtonMenu, FlameSlider, pyflame_print, pyflame_file_browser
 
-VERSION = 'v4.3'
-
+SCRIPT_NAME = 'Import Camera'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/import_camera'
+VERSION = 'v4.4'
 
 class Import(object):
 
-    def __init__(self, selection, filter_type):
+    def __init__(self, selection, file_extension):
         import flame
 
-        print ('''
- _____                            _    _____
-|_   _|                          | |  / ____|
-  | |  _ __ ___  _ __   ___  _ __| |_| |     __ _ _ __ ___   ___ _ __ __ _
-  | | | '_ ` _ \| '_ \ / _ \| '__| __| |    / _` | '_ ` _ \ / _ \ '__/ _` |
- _| |_| | | | | | |_) | (_) | |  | |_| |___| (_| | | | | | |  __/ | | (_| |
-|_____|_| |_| |_| .__/ \___/|_|   \__|\_____\__,_|_| |_| |_|\___|_|  \__,_|
-                | |
-                |_|
-                ''')
-
-        print ('>' * 28, f'import camera {VERSION}', '<' * 27, '\n')
-
-        self.filter_type = filter_type
+        print('\n')
+        print('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
         # Define paths
 
@@ -157,16 +151,21 @@ class Import(object):
 
         self.temp_folder = os.path.join(SCRIPT_PATH, 'temp')
 
-        try:
-            os.makedirs(self.temp_folder)
+        if not os.path.exists(self.temp_folder):
+            os.mkdir(self.temp_folder)
             print ('--> temp folder created \n')
-        except:
-            print ('temp folder already exists\n')
 
-        self.camera_file_path = self.file_browse(self.camera_path, self.filter_type)
+        if file_extension == 'fbx':
+            self.camera_type = 'FBX'
+        elif file_extension == 'abc':
+            self.camera_type = 'Alembic'
+
+        self.camera_file_path = pyflame_file_browser(f'Load {self.camera_type}', ['fbx'], self.camera_path)
 
         if self.camera_file_path:
             self.main_window()
+        else:
+            pyflame_print(SCRIPT_NAME, 'Import Cancelled.')
 
     def config(self):
 
@@ -187,7 +186,7 @@ class Import(object):
             if not os.path.isdir(self.camera_path):
                 self.camera_path = self.camera_path.rsplit('/', 1)[0]
 
-            print ('--> config loaded \n')
+            pyflame_print(SCRIPT_NAME, 'Config loaded.')
 
         def create_config_file():
 
@@ -195,10 +194,10 @@ class Import(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    FlameMessageWindow('Error', 'error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
+                    FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('--> config file does not exist, creating new config file \n')
+                pyflame_print(SCRIPT_NAME, 'Config file does not exist. Creating new config file.')
 
                 config = """
 <settings>
@@ -231,7 +230,7 @@ class Import(object):
 
         import flame
 
-        def name_node(node_name, node_num=0):
+        def name_node(node_name: str, node_num=0) -> str:
             import flame
 
             # Create list of existing node names
@@ -280,8 +279,6 @@ class Import(object):
             self.camera_action.pos_x = self.master_pos_x
             self.camera_action.pos_y = self.master_pos_y
 
-        print ('--> action created \n')
-
         # Import FBX camera
 
         if self.camera_file_path.endswith('.fbx'):
@@ -298,16 +295,16 @@ class Import(object):
             else:
                 self.camera_action.read_abc(f'{self.camera_file_path}', unit_to_pixels=int(self.scene_scale))
 
-        print ('--> camera imported \n')
+        print('--> camera imported \n')
 
     def create_patch_setup(self):
         '''
-        Create setup for doing simple patching with 3d camera
+        Create setup for doing simple patching with 3d camera.
         '''
 
         import flame
 
-        def name_nodes(node_num=0):
+        def name_nodes(node_num=0) -> list:
 
             # Compare nodes to be crated against existing nodes. Remove 0 if first time
 
@@ -327,8 +324,6 @@ class Import(object):
                     node_num += 1
                     name_nodes(node_num)
 
-            # print ('new_node_names: ', new_node_names)
-
             return new_node_names
 
         self.config_save()
@@ -338,7 +333,6 @@ class Import(object):
         st_map_node_names = ['mux_in', 'action_in', 'action_out', 'recomp', 'regrain', 'divide']
 
         existing_node_names = [node.name for node in flame.batch.nodes]
-        # print ('existing_node_names:', existing_node_names)
 
         new_node_names = []
 
@@ -424,23 +418,22 @@ class Import(object):
 
     def create_st_map_setup(self):
         '''
-        Create setup with st map workflow with 3d camera. Recomps over original plate at end.
+        Create setup with st map workflow with 3d camera. Recomp over original plate at end.
         '''
 
         import flame
 
-        def get_st_maps():
+        def get_st_maps() -> bool:
             import flame
 
             # Browse for undistort map
 
-            FlameMessageWindow('Import', 'message', 'Select ST undistort map')
+            FlameMessageWindow('message', f'{SCRIPT_NAME}: Load ST Map', 'Select Undistort ST Map')
 
-            self.undistort_map_path = self.file_browse(self.camera_file_path.rsplit('/', 1)[0], 'EXR (*.exr)')
-
-            print ('undistort_map_path:', self.undistort_map_path, '\n')
+            self.undistort_map_path = pyflame_file_browser('Load Undistort ST Map (EXR)', ['exr'], self.camera_file_path.rsplit('/', 1)[0])
 
             if not self.undistort_map_path:
+                pyflame_print(SCRIPT_NAME, 'Import Cancelled.')
                 return
 
             self.config_save()
@@ -459,14 +452,13 @@ class Import(object):
 
             if self.redistort_map_path == '':
 
-                FlameMessageWindow('Import', 'message', 'Select ST Redistort map')
+                FlameMessageWindow('message', f'{SCRIPT_NAME}: Load ST Map', 'Select Redistort ST Map')
 
-                self.redistort_map_path = self.file_browse(self.undistort_map_path, 'EXR (*.exr)')
-
-            print ('redistort_map_path:', self.redistort_map_path, '\n')
+                self.redistort_map_path = pyflame_file_browser('Load Undistort ST Map (EXR)', ['exr'], self.undistort_map_path)
 
             if not self.redistort_map_path:
-                return
+                pyflame_print(SCRIPT_NAME, 'Import Cancelled.')
+                return False
 
             # create st maps schematic reel if it doesn't exist
 
@@ -479,11 +471,12 @@ class Import(object):
             self.undistort_map = flame.batch.import_clip(self.undistort_map_path, 'st_maps')
 
             print ('\n--> st maps imported \n')
+
             return True
 
-        def build_st_map_setup():
+        def build_st_map_setup() -> None:
 
-            def name_nodes(node_num=0):
+            def name_nodes(node_num=0) -> list:
 
                 # Compare nodes to be crated against existing nodes. Remove 0 if first time
 
@@ -503,15 +496,16 @@ class Import(object):
                         node_num += 1
                         name_nodes(node_num)
 
-                print ('new_node_names: ', new_node_names)
+                #print ('new_node_names: ', new_node_names)
 
                 return new_node_names
 
-            def edit_resize_node():
+            def edit_resize_node() -> None:
 
-                def get_st_map_res():
-
-                    # Get resolution of st map clips for resize node
+                def get_st_map_res() -> tuple:
+                    '''
+                    Return st map resolution to be applied to resize node
+                    '''
 
                     st_map_reel = [reel for reel in flame.batch.reels if reel.name == 'st_maps'][0]
 
@@ -520,28 +514,24 @@ class Import(object):
                     undistort_clip_width = str(clip.width)
                     undistort_clip_height = str(clip.height)
                     undistort_clip_ratio = str(round(float(clip.ratio), 3))
-                    print ('undistort_clip_width:', undistort_clip_width)
-                    print ('undistort_clip_height:', undistort_clip_height)
-                    print ('undistort_clip_ratio:', undistort_clip_ratio)
 
                     return undistort_clip_width, undistort_clip_height, undistort_clip_ratio
 
-                def save_resize_node():
+                def save_resize_node() -> str:
+                    '''
+                    Save resize node and return saved file path
+                    '''
 
                     # Save resize node
 
                     resize_node_name = str(undistort_plate_resize.name)[1:-1]
                     save_resize_path = os.path.join(self.temp_folder, resize_node_name)
-                    print ('save_resize_path:', save_resize_path)
 
                     undistort_plate_resize.save_node_setup(save_resize_path)
 
                     # Set Resize path and filename variable
 
                     resize_file_name = save_resize_path + '.resize_node'
-                    print ('resize_file_name:', resize_file_name)
-
-                    print ('\n--> resize node saved \n')
 
                     return resize_file_name
 
@@ -627,15 +617,13 @@ class Import(object):
                 flame.batch.connect_nodes(undistort_plate_resize, 'Result', plate_resize_media, 'Front')
                 flame.batch.connect_nodes(plate_in_mux, 'Result', undistort_plate_resize, 'Front')
 
-                print ('\n--> resize node set to st map resolution \n')
-
             # Set node names
             # --------------
 
             st_map_node_names = ['plate_undistort', 'plate_resize', 'st_map_undistort_in', 'comp_redistort_in', 'comp_redistort', 'st_map_redistort_in', 'mux_in', 'divide', 'regrain']
 
             existing_node_names = [node.name for node in flame.batch.nodes]
-            print ('existing_node_names:', existing_node_names)
+            #print ('existing_node_names:', existing_node_names)
 
             new_node_names = []
 
@@ -809,16 +797,10 @@ class Import(object):
             flame.batch.connect_nodes(recomp_action, 'Matte [ Matte ]', regrain_node, 'Matte')
 
             # Set resize node to match ST Map resolution
-            # ------------------------------------------
 
             edit_resize_node()
 
-            # Edit plate_undistort action node to turn back off
-            # -------------------------------------------------
-
-            ###### edit_plate_undistort_action_node()
-
-            print ('\n--> camera imported with st map setup \n')
+            print('--> camera imported with st map setup \n')
 
         # Load st maps
 
@@ -828,7 +810,7 @@ class Import(object):
             self.create_camera_action()
             build_st_map_setup()
         else:
-            print ('--> import cancelled \n')
+            print('--> import cancelled \n')
 
     def config_save(self):
 
@@ -859,13 +841,13 @@ class Import(object):
 
         xml_tree.write(self.config_xml)
 
-        print ('--> config saved \n')
+        pyflame_print(SCRIPT_NAME, 'config saved')
 
     # -------------------------------- #
 
     def main_window(self):
 
-        def load():
+        def load() -> None:
 
             self.window.close()
 
@@ -879,23 +861,23 @@ class Import(object):
             # Delete temp folder
 
             shutil.rmtree(self.temp_folder)
-            print ('--> temp folder deleted \n')
+            print('--> temp folder deleted \n')
 
-            print ('done.\n')
+            pyflame_print(SCRIPT_NAME, f'{self.camera_type} imported.')
 
-        def cancel():
+        def cancel() -> None:
 
             shutil.rmtree(self.temp_folder)
 
             self.window.close()
 
         vbox = QtWidgets.QVBoxLayout()
-        self.window = FlameWindow(f'Import Camera <small>{VERSION}', vbox, 500, 230)
+        self.window = FlameWindow(f'{SCRIPT_NAME}: {self.camera_type} <small>{VERSION}', vbox, 500, 260)
 
         # Labels
 
-        self.scene_scale_label = FlameLabel('Scene Scale', 'normal', 110)
-        self.import_type_label = FlameLabel('Import Type', 'normal', 110)
+        self.scene_scale_label = FlameLabel('Scene Scale', label_width=110)
+        self.import_type_label = FlameLabel('Import Type', label_width=110)
 
         # Slider
 
@@ -931,17 +913,17 @@ class Import(object):
 
         # Gridbox
 
-        gridbox = QtWidgets.QGridLayout()
-        gridbox.setHorizontalSpacing(5)
-        gridbox.setColumnMinimumWidth(2, 50)
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(5)
+        grid.setColumnMinimumWidth(2, 50)
 
-        gridbox.addWidget(self.scene_scale_label, 0, 0)
-        gridbox.addWidget(self.scale_slider, 0, 1)
-        gridbox.addWidget(self.st_map_setup_button, 0, 3)
+        grid.addWidget(self.scene_scale_label, 1, 0)
+        grid.addWidget(self.scale_slider, 1, 1)
+        grid.addWidget(self.st_map_setup_button, 1, 3)
 
-        gridbox.addWidget(self.import_type_label, 1, 0)
-        gridbox.addWidget(self.import_type_btn, 1, 1)
-        gridbox.addWidget(self.patch_setup_button, 1, 3)
+        grid.addWidget(self.import_type_label, 2, 0)
+        grid.addWidget(self.import_type_btn, 2, 1)
+        grid.addWidget(self.patch_setup_button, 2, 3)
 
         # Hbox01
 
@@ -953,38 +935,22 @@ class Import(object):
 
         vbox.setMargin(20)
         vbox.addStretch(5)
-        vbox.addLayout(gridbox)
+        vbox.addLayout(grid)
         vbox.addSpacing(40)
         vbox.addLayout(hbox01)
         vbox.addStretch(5)
 
         self.window.show()
 
-    def file_browse(self, path, filter_type):
-
-        file_browser = QtWidgets.QFileDialog()
-        file_browser.setDirectory(path)
-        file_browser.setNameFilter(filter_type)
-        file_browser.setFileMode(QtWidgets.QFileDialog.ExistingFile) # Change to ExistingFiles to capture many files
-        if file_browser.exec_():
-            return str(file_browser.selectedFiles()[0])
-
-        print ('\n--> import cancelled \n')
-        return
-
 # -------------------------------- #
 
 def import_fbx(selection):
 
-    filter_type = 'FBX (*.fbx)'
-
-    Import(selection, filter_type)
+    Import(selection, 'fbx')
 
 def import_abc(selection):
 
-    filter_type = 'Alembic (*.abc)'
-
-    Import(selection, filter_type)
+    Import(selection, 'abc')
 
 #---------------------------#
 

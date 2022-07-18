@@ -1,10 +1,10 @@
 '''
 Script Name: Master Builder
-Script Version: 1.0
+Script Version: 1.1
 Flame Version: 2023
 Written by: Michael Vaglienty
 Creation Date: 02.09.22
-Update Date: 03.15.22
+Update Date: 06.08.22
 
 Custom Action Type: Reel Group
 
@@ -46,30 +46,27 @@ Menu:
 To install:
 
     Copy script into /opt/Autodesk/shared/python/master_builder
+
+Updates:
+
+    v1.1 06.08.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
 '''
 
 from PySide2 import QtWidgets
-from flame_widgets_master_builder import FlameButton, FlameLabel, FlameMessageWindow, FlamePushButtonMenu, FlameWindow
+from pyflame_lib_master_builder import *
 
-VERSION = 'v1.0'
-
+SCRIPT_NAME = 'Master Builder'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/master_builder'
+VERSION = 'v1.1'
 
 class MasterBuilder(object):
 
     def __init__(self, selection):
-        import flame
 
-        print ('''
- __  __           _            ____        _ _     _
-|  \/  |         | |          |  _ \      (_) |   | |
-| \  / | __ _ ___| |_ ___ _ __| |_) |_   _ _| | __| | ___ _ __
-| |\/| |/ _` / __| __/ _ \ '__|  _ <| | | | | |/ _` |/ _ \ '__|
-| |  | | (_| \__ \ ||  __/ |  | |_) | |_| | | | (_| |  __/ |
-|_|  |_|\__,_|___/\__\___|_|  |____/ \__,_|_|_|\__,_|\___|_|
-        ''')
-
-        print ('>' * 21, f'master builder {VERSION}', '<' * 21, '\n')
+        print('\n')
+        print('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
         self.reel_group = selection[0]
 
@@ -77,19 +74,19 @@ class MasterBuilder(object):
 
         mixed_reels = self.check_reels()
         if mixed_reels:
-            return FlameMessageWindow('Error', 'error', 'Reels must contain either all clips or all sequences.')
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Reels must contain either all clips or all sequences.')
 
         # Check clip count on reels
 
         good_clip_count = self.check_clip_count()
         if not good_clip_count:
-            return FlameMessageWindow('Error', 'error', 'If a reel contains more than one clip it must contain the same number of clips as other reels with more than one clip.')
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'If a reel contains more than one clip it must contain the same number of clips as other reels with more than one clip.')
 
         # Check sequences for multiple versions - only one version allowed
 
         multiple_versions = self.check_versions()
         if multiple_versions:
-            return FlameMessageWindow('Error', 'error', 'Sequences may only have one version.<br>Remove extra versions and try again.')
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Sequences may only have one version.<br>Remove extra versions and try again.')
 
         self.main_window()
 
@@ -162,7 +159,7 @@ class MasterBuilder(object):
                 self.desktop_reel_options = [str(reel.name)[1:-1] for reel in self.reel_group.reels] + ['None']
 
         vbox = QtWidgets.QVBoxLayout()
-        self.window = FlameWindow(f'MasterBuilder <small>{VERSION}', vbox, 400, 200)
+        self.window = FlameWindow(f'{SCRIPT_NAME} <small>{VERSION}', vbox, 400, 200)
 
         # Labels
 
@@ -274,7 +271,8 @@ class MasterBuilder(object):
 
         flame.delete(self.temp_reel)
 
-        print ('\ndone.\n')
+        print('\n')
+        pyflame_print(SCRIPT_NAME, 'Operation Complete: Masters built.')
 
     def create_reels(self):
 

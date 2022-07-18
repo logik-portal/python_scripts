@@ -1,10 +1,10 @@
 '''
 Script Name: Add GMask
-Script Version: 2.2
+Script Version: 2.3
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 01.05.20
-Update Date: 03.16.22
+Update Date: 05.24.22
 
 Custom Action Type: Batch
 
@@ -24,6 +24,10 @@ To install:
 
 Updates:
 
+    v2.3 05.24.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
     v2.2 03.16.22
 
         Fixed float position error in 2022.3
@@ -37,15 +41,16 @@ Updates:
         Gmask nodes can now be added loose in batch at cursor position
 '''
 
-VERSION = 'v2.1'
+from pyflame_lib_add_gmask import pyflame_print
+
+SCRIPT_NAME = 'Add GMask'
+VERSION = 'v2.3'
 
 def create_gmask_node(selection, gmask_type):
     import flame
 
     def add_to_selected_node():
-        '''
-        Add gmask node to matte output of selected node
-        '''
+        '''Add gmask node to matte output of selected node'''
 
         selected_node = selection[0]
 
@@ -103,29 +108,27 @@ def create_gmask_node(selection, gmask_type):
             pass
 
     def add_loose():
-        '''
-        Add gmask node loose in batch at cursor position
-        '''
+        '''Add gmask node loose in batch at cursor position'''
+
         gmask_node = flame.batch.create_node(gmask_type)
 
         cursor_pos = flame.batch.cursor_position
 
-        gmask_node.pos_x = cursor_pos[0]
-        gmask_node.pos_y = cursor_pos[1]
+        gmask_node.pos_x, gmask_node.pos_y = cursor_pos
 
     if selection:
         add_to_selected_node()
     else:
         add_loose()
 
-    print ('done.\n')
+    pyflame_print(SCRIPT_NAME, f'{gmask_type} added to batch.')
 
 def add_gmask_tracer(selection):
 
     gmask_type = 'GMask Tracer'
 
-    print ('\n')
-    print ('>' * 20, f'add gmask {VERSION} - {gmask_type}', '<' * 20, '\n')
+    print('\n')
+    print('>' * 10, f'{SCRIPT_NAME} {VERSION} - {gmask_type}', '<' * 10, '\n')
 
     create_gmask_node(selection, gmask_type)
 
@@ -133,8 +136,8 @@ def add_gmask(selection):
 
     gmask_type = 'GMask'
 
-    print ('\n')
-    print ('>' * 20, f'add gmask {VERSION} - {gmask_type}', '<' * 20, '\n')
+    print('\n')
+    print('>' * 10, f'{SCRIPT_NAME} {VERSION} - {gmask_type}', '<' * 10, '\n')
 
     create_gmask_node(selection, gmask_type)
 

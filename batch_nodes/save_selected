@@ -1,11 +1,10 @@
 '''
-Script Name: Add Batch Nodes - Node Script
-Script Version: 3.2
-Flame Version: 2021
+Script Name: Batch Nodes - Node Script
+Script Version: 3.4
+Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 04.18.20
-Update Date: 03.07.22
-
+Update Date: 05.31.22
 
 Custom Action Type: Batch
 
@@ -16,7 +15,8 @@ Description:
     Right-click in batch -> Batch Nodes... -> <NodeName>
 '''
 
-from __future__ import print_function
+SCRIPT_NAME = 'Batch Nodes'
+from pyflame_lib_batch_nodes import pyflame_print
 import flame
 
 def create_node():
@@ -59,7 +59,7 @@ def create_connected_node(selected_node):
     new_node.pos_y = selected_node.pos_y
     flame.batch.connect_nodes(selected_node, 'Default', new_node, 'Default')
 
-    print ('\n>>> created <NodeName> node <<<\n')
+    pyflame_print(SCRIPT_NAME, 'Created <NodeName> node.')
 
 def create_free_node():
 
@@ -71,11 +71,12 @@ def create_free_node():
     new_node.pos_x = cursor_pos[0]
     new_node.pos_y = cursor_pos[1]
 
-    print ('\n>>> created <NodeName> node <<<\n')
+    pyflame_print(SCRIPT_NAME, 'Created <NodeName> node.')
 
 def scope_node(selection):
 
-    print ('\n', '>' * 20, 'batch node menu <Version> - added <NodeName>', '<' * 20, '\n')
+    print ('\n')
+    print ('>' * 10, f'{SCRIPT_NAME} <Version> - added <NodeName>', '<' * 10, '\n')
 
     if selection == ():
         create_free_node()

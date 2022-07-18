@@ -1,10 +1,10 @@
 '''
 Script Name: Create Shot
-Script Version: 4.6
+Script Version: 4.7
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 06.09.18
-Update Date: 03.24.22
+Update Date: 05.02.22
 
 Custom Action Type: Media Panel / Media Hub / Timeline
 
@@ -46,6 +46,10 @@ To install:
     Copy script into /opt/Autodesk/shared/python/create_shot
 
 Updates:
+
+    v4.7 05.02.22
+
+        Fixed error when importing plates to create shots
 
     v4.6 03.24.22
 
@@ -145,7 +149,7 @@ import xml.etree.ElementTree as ET
 from PySide2 import QtWidgets, QtCore, QtGui
 from flame_widgets_create_shot import FlameButton, FlameLabel, FlameLineEdit, FlamePushButton, FlamePushButtonMenu, FlameTokenPushButton, FlameSlider, FlameWindow, FlameMessageWindow
 
-VERSION = 'v4.6'
+VERSION = 'v4.7'
 
 SCRIPT_PATH = '/opt/Autodesk/shared/python/create_shot'
 
@@ -2123,7 +2127,7 @@ class CreateShotFolders(object):
             # Check if preset already exists with current name. Give option to delete.
 
             if [f for f in os.listdir(self.preset_path) if f[:-4] == preset_name_text]:
-                if FlameMessageWindow('Confirm Operation', 'warning', 'Preset with this name already exists. Overwrite?'):
+                if FlameMessageWindow('Confirm Operation', 'warning', f'Overwrite existing preset: {preset_name_text}'):
                     os.remove(os.path.join(self.preset_path, preset_name_text + '.xml'))
                 else:
                     return
@@ -3136,7 +3140,7 @@ class CreateShotFolders(object):
 
         # Create shot type based on saved settings
 
-        print ('--> creating shots...\n')
+        print ('--> creating shots:\n')
 
         if self.create_shot_type_folders:
             self.create_library('Folders')
@@ -3343,9 +3347,6 @@ class CreateShotFolders(object):
 
             for clip in self.temp_lib.clips:
                 new_shot_name = self.get_shot_name_from_clip_name(clip)
-                print ('NEW SHOT NAME:', new_shot_name)
-                clip.shotname = new_shot_name
-
                 if new_shot_name not in shot_name_list:
                     shot_name_list.append(new_shot_name)
 
@@ -3444,8 +3445,8 @@ class CreateShotFolders(object):
 
     def help(self):
 
-        webbrowser.open('https://www.pyflame.com/create-shot')
-        print ('openning www.pyflame.com/create-shot...\n')
+        webbrowser.open('https://www.pyflame.com/python-scripts/create-shot')
+        print ('openning www.pyflame.com/python-scripts/create-shot...\n')
 
     def sort_tree_items(self, tree):
         tree.sortItems(0, QtGui.Qt.AscendingOrder)

@@ -1,10 +1,10 @@
 '''
 Script Name: SynthEyes Export
-Script Version: 2.4
+Script Version: 2.6
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 10.27.19
-Update Date: 03.21.22
+Update Date: 06.22.22
 
 Custom Action Type: Flame Main Menu
 
@@ -14,15 +14,34 @@ Description:
 
     SynthEyes will open behind the Flame window
 
-Menu:
+    Tokenized export path can be set in the setup window to avoid browsing to an export path for each export. Browser opens by default when doing an export.
 
-    Right-click on clip in Media Panel -> SynthEyes... -> Export to SynthEyes
+Menus:
+
+    Setup:
+
+        Flame Main Menu -> PyFlame -> SynthEyes Export Setup
+
+    Export:
+
+        Right-click on clip in Media Panel -> SynthEyes... -> Export to SynthEyes
 
 To install:
 
     Copy script into /opt/Autodesk/shared/python/syntheyes_export
 
 Updates:
+
+    v2.6 06.22.22
+
+       Added setup window to allow for the setup of export paths with tokens. This avoids the need to browse for export paths.
+       Setup menu can be found here: Flame Main Menu -> pyFlame -> SynthEyes Export Setup
+
+    v2.5 05.30.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
+
+        Updated directory browser for Flame 2023.1 and later
 
     v2.4 03.21.22
 
@@ -61,41 +80,23 @@ Updates:
         Simplified clip exporting
 '''
 
+from PySide2 import QtWidgets
 from random import randint
 from subprocess import Popen, PIPE
 import xml.etree.ElementTree as ET
 import os, platform
-from PySide2 import QtWidgets
-from flame_widgets_syntheyes_export import FlameMessageWindow, FlamePasswordWindow
+from pyflame_lib_syntheyes_export import FlameWindow, FlameLabel, FlameLineEdit, FlameTokenPushButton, FlameButton, FlamePushButtonMenu,FlameMessageWindow, FlamePasswordWindow, pyflame_get_flame_version, pyflame_print, pyflame_file_browser, pyflame_resolve_path_tokens
 
-VERSION = 'v2.4'
-
+SCRIPT_NAME = 'SynthEyes Export'
 SCRIPT_PATH = '/opt/Autodesk/shared/python/syntheyes_export'
-
-# --------------------- #
+VERSION = 'v2.6'
 
 class FlameToSynthEyes(object):
 
     def __init__(self, selection):
-        print ('''
-       _____             _   _     ______
-      / ____|           | | | |   |  ____|
-     | (___  _   _ _ __ | |_| |__ | |__  _   _  ___  ___
-      \___ \| | | | '_ \| __| '_ \|  __|| | | |/ _ \/ __|
-      ____) | |_| | | | | |_| | | | |___| |_| |  __/\__ \\
-     |_____/ \__, |_| |_|\__|_| |_|______\__, |\___||___/
-              __/ |                       __/ |
-             |___/                       |___/
-                ______                       _
-               |  ____|                     | |
-               | |__  __  ___ __   ___  _ __| |_
-               |  __| \ \/ / '_ \ / _ \| '__| __|
-               | |____ >  <| |_) | (_) | |  | |_
-               |______/_/\_\ .__/ \___/|_|   \__|
-                           | |
-                           |_|
- ''')
-        print ('>' * 20, f'syntheyes export {VERSION}', '<' * 20, '\n')
+
+        print ('\n')
+        print ('>' * 10, f'{SCRIPT_NAME} {VERSION}', '<' * 10, '\n')
 
         self.clip = selection[0]
 
@@ -112,7 +113,10 @@ class FlameToSynthEyes(object):
 
         # Match export preset version with version of flame
 
-        self.check_flame_version()
+        self.flame_version = pyflame_get_flame_version()
+
+        if self.flame_version >= 2024.0:
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Newer version of script required for this version of Flame')
 
         self.export_preset = os.path.join(SCRIPT_PATH, 'syntheyes_jpeg_export.xml')
         self.update_export_preset()
@@ -124,18 +128,8 @@ class FlameToSynthEyes(object):
 
         # Init varaibles
 
-        self.export_path = ''
         self.first_image_path = ''
         self.clip_ratio = ''
-
-        # Make sure sypy/sypy3 is installed
-
-        sypy_installed = self.syntheyes_check()
-
-        # If sypy/sypy3 is installed run script
-
-        if sypy_installed:
-            self.syntheyes_export()
 
     def config(self):
 
@@ -148,8 +142,10 @@ class FlameToSynthEyes(object):
 
             for setting in root.iter('config'):
                 self.last_export_path = setting.find('last_export_path').text
+                self.export_path_menu = setting.find('export_path').text
+                self.custom_export_path = setting.find('custom_export_path').text
 
-            print ('--> config loaded\n')
+            pyflame_print(SCRIPT_NAME, 'Config loaded.')
 
         def create_config_file():
 
@@ -157,15 +153,17 @@ class FlameToSynthEyes(object):
                 try:
                     os.makedirs(self.config_path)
                 except:
-                    FlameMessageWindow('Error', 'error', f'Unable to create folder:<br>{self.config_path}<br>Check folder permissions')
+                    FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', f'Unable to create folder: {self.config_path}<br>Check folder permissions')
 
             if not os.path.isfile(self.config_xml):
-                print ('--> config file does not exist, creating new config file\n')
+                pyflame_print(SCRIPT_NAME, 'Config file does not exist. Creating new config file.')
 
                 config = """
 <settings>
     <config>
         <last_export_path>/opt/Autodesk</last_export_path>
+        <export_path>Browse To Path</export_path>
+        <custom_export_path>/opt/Autodesk</custom_export_path>
     </config>
 </settings>"""
 
@@ -179,21 +177,6 @@ class FlameToSynthEyes(object):
             create_config_file()
             if os.path.isfile(self.config_xml):
                 get_config_values()
-
-    def check_flame_version(self):
-        import flame
-
-        # Get version of flame and convert to float
-
-        self.flame_version = flame.get_version()
-
-        if 'pr' in self.flame_version:
-            self.flame_version = self.flame_version.rsplit('.pr', 1)[0]
-
-        if len(self.flame_version) > 6:
-            self.flame_version = self.flame_version[:6]
-        self.flame_version = float(self.flame_version)
-        print ('flame version:', self.flame_version, '\n')
 
     def sylevel_check(self):
 
@@ -211,7 +194,7 @@ class FlameToSynthEyes(object):
         '''
 
         if not os.path.isdir('/Applications/SynthEyes'):
-            return FlameMessageWindow('Error', 'error', 'SynthEyes not found. Install SynthEyes before using this script.')
+            return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'SynthEyes not found. Install SynthEyes before using this script.')
 
         version = int(str(self.flame_version)[:4])
 
@@ -236,7 +219,7 @@ class FlameToSynthEyes(object):
     def copy_sypy(self, syntheyes_path):
         import flame
 
-        system_password = str(FlamePasswordWindow('SynthEyes Export - Enter System Password', 'System password needed to install SynthEyes SyPY into Flame python folder.'))
+        system_password = str(FlamePasswordWindow(f'{SCRIPT_NAME}: Enter System Password', 'System password needed to install SynthEyes SyPY into Flame python folder.'))
 
         if system_password:
             version = int(str(self.flame_version)[:4])
@@ -246,12 +229,11 @@ class FlameToSynthEyes(object):
 
                 sypy_folder = os.path.join(syntheyes_path, 'SyPy3')
                 flame_sypy_folder = f'/opt/Autodesk/python/{flame.get_version()}/lib/python3.9/site-packages'
-                # print ('flame_sypy_folder:', flame_sypy_folder, '\n')
 
                 p = Popen(['sudo', '-S', 'cp', '-r', sypy_folder, flame_sypy_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
                 p.communicate(system_password + '\n')[1]
 
-                print ('--> SyPy3 copied to Flame python folder\n')
+                FlameMessageWindow('message', f'{SCRIPT_NAME}: Install complete', 'SynthEyes SyPy3 copied to Flame python folder.')
 
             elif version == 2022:
 
@@ -259,12 +241,11 @@ class FlameToSynthEyes(object):
 
                 sypy_folder = os.path.join(syntheyes_path, 'SyPy3')
                 flame_sypy_folder = f'/opt/Autodesk/python/{flame.get_version()}/lib/python3.7/site-packages'
-                # print ('flame_sypy_folder:', flame_sypy_folder, '\n')
 
                 p = Popen(['sudo', '-S', 'cp', '-r', sypy_folder, flame_sypy_folder], stdin=PIPE, stderr=PIPE, universal_newlines=True)
                 p.communicate(system_password + '\n')[1]
 
-                print ('--> SyPy3 copied to Flame python folder\n')
+                FlameMessageWindow('message', f'{SCRIPT_NAME}: Install complete', 'SynthEyes SyPy3 copied to Flame python folder.')
 
             self.syntheyes_export()
 
@@ -296,9 +277,6 @@ class FlameToSynthEyes(object):
             export_version = '11'
         elif flame_version == '2023':
             export_version = '11'
-        elif flame_version >= '2024':
-            FlameMessageWindow('Error', 'error', 'Newer version of script required for this version of Flame')
-            shit
 
         # If preset version if different than current export version then update xml
 
@@ -308,14 +286,12 @@ class FlameToSynthEyes(object):
 
             export_preset_xml_tree.write(self.export_preset)
 
-            print ('--> export preset version updated')
+            pyflame_print(SCRIPT_NAME, 'Export preset updated to match current Flame version.')
+
+    # ------------------------ #
 
     def syntheyes_export(self):
         import flame
-
-        def export_browse():
-
-            self.export_path = str(QtWidgets.QFileDialog.getExistingDirectory(QtWidgets.QWidget(), 'Select Directory', self.last_export_path, QtWidgets.QFileDialog.ShowDirsOnly))
 
         def save_settings():
 
@@ -325,11 +301,11 @@ class FlameToSynthEyes(object):
             root = xml_tree.getroot()
 
             last_export_path = root.find('.//last_export_path')
-            last_export_path.text = self.export_path
+            last_export_path.text = export_path
 
             xml_tree.write(self.config_xml)
 
-            print ('--> config file saved\n')
+            pyflame_print(SCRIPT_NAME, 'Config saved.')
 
         def get_clip_info():
 
@@ -351,11 +327,11 @@ class FlameToSynthEyes(object):
             clip_exporter = flame.PyExporter()
             clip_exporter.foreground = True
 
-            clip_exporter.export(sources = self.clip, preset_path = self.export_preset, output_directory = self.export_path)
+            clip_exporter.export(sources = self.clip, preset_path = self.export_preset, output_directory = export_path)
 
         def get_image_name():
 
-            image_seq_path = os.path.join(self.export_path, self.clip_name)
+            image_seq_path = os.path.join(export_path, self.clip_name)
 
             file_list = []
 
@@ -363,10 +339,8 @@ class FlameToSynthEyes(object):
                 if file.endswith('.jpg'):
                     file_list.append(file)
             file_list.sort()
-            # print 'file_list:', file_list
 
             first_image_file = file_list[0]
-            # print 'first_image_file:', first_image_file
 
             self.first_image_path = os.path.join(image_seq_path, first_image_file)
 
@@ -375,7 +349,6 @@ class FlameToSynthEyes(object):
             # Create random port number
 
             random_port = randint(1000, 9999)
-            # print ('random_port:', random_port)
 
             # Import SyPy and set hlev
             # If using Flame 2022 or later, use SyPy3 otherwise use SyPy
@@ -407,39 +380,181 @@ class FlameToSynthEyes(object):
             sht.Set('rate', self.clip_framerate)
             hlev.AcceptShotChanges(sht, 'Set up shot')
 
-        # Select export folder
+        # Make sure sypy/sypy3 is installed
 
-        FlameMessageWindow('Select Path', 'message', 'Select path to export plate for tracking in Syntheyes.')
+        sypy_installed = self.syntheyes_check()
 
-        export_browse()
+        # If sypy/sypy3 is installed, export
 
-        if not os.path.isdir(self.export_path):
-            print ('--> Export Cancelled - No folder selected\n')
-            print ('done.')
-        else:
-            # Save export path
+        if sypy_installed:
 
-            save_settings()
+            if self.export_path_menu == 'Browse To Path':
 
-            # Get clip info for export
+                # Select export folder
 
-            get_clip_info()
+                FlameMessageWindow('message', f'{SCRIPT_NAME}: Select Path', 'Select path to export plate for tracking in Syntheyes.')
 
-            # Export clip
+                export_path = pyflame_file_browser('Select Export Directory', [''], self.last_export_path, select_directory=True)
 
-            export_clip()
+            else:
 
-            # Get name of first image exported to load into Syntheyes
+                # Translate path from setup
 
-            get_image_name()
+                export_path = pyflame_resolve_path_tokens(self.custom_export_path, self.clip)
+                print('export_path:', export_path)
 
-            # Open Syntheyes
+            if export_path:
 
-            open_syntheyes()
+                # Check if export path exists, if not create it
 
-            FlameMessageWindow('Export Complete', 'message', 'SynthEyes open behind Flame window.')
+                if not os.path.exists(export_path):
+                    try:
+                        os.makedirs(export_path)
+                    except:
+                        return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Could not create export folder.')
 
-            print ('done.\n')
+                # Save export path
+
+                save_settings()
+
+                # Get clip info for export
+
+                get_clip_info()
+
+                # Export clip
+
+                export_clip()
+
+                # Get name of first image exported to load into Syntheyes
+
+                get_image_name()
+
+                # Open Syntheyes
+
+                open_syntheyes()
+
+                FlameMessageWindow('message', f'{SCRIPT_NAME}: Export Complete', 'SynthEyes open behind Flame window.')
+            else:
+                pyflame_print(SCRIPT_NAME, 'Export Cancelled - No folder selected.')
+
+    # ------------------------ #
+
+    def setup(self):
+        '''
+        Setup window to create tokenized SynthEyes jpeg export path.
+        '''
+
+        def toggle_custom_path():
+
+            if self.export_push_button.text() == 'Browse To Path':
+                self.custom_export_path_label.setEnabled(False)
+                self.custom_export_path_entry.setEnabled(False)
+                self.custom_export_path_token_button.setEnabled(False)
+                self.browse_button.setEnabled(False)
+            else:
+                self.custom_export_path_label.setEnabled(True)
+                self.custom_export_path_entry.setEnabled(True)
+                self.custom_export_path_token_button.setEnabled(True)
+                self.browse_button.setEnabled(True)
+
+        def browse():
+
+            browse_path = pyflame_file_browser('Select Directory', [''], self.custom_export_path_entry.text(), select_directory=True, window_to_hide=[self.setup_window])
+
+            if browse_path:
+                self.custom_export_path_entry.setText(browse_path)
+
+        def save():
+
+            if self.export_push_button.text() == 'Use Custom Path' and not self.custom_export_path_entry.text():
+                return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Custom Export Path: Enter path before saving.')
+
+            # Save settings to config file
+
+            xml_tree = ET.parse(self.config_xml)
+            root = xml_tree.getroot()
+
+            export_path = root.find('.//export_path')
+            export_path.text = self.export_push_button.text()
+
+            custom_export_path = root.find('.//custom_export_path')
+            custom_export_path.text = self.custom_export_path_entry.text()
+
+            xml_tree.write(self.config_xml)
+
+            pyflame_print(SCRIPT_NAME, 'Config saved.')
+
+            self.setup_window.close()
+
+        def cancel():
+
+            self.setup_window.close()
+
+        gridbox = QtWidgets.QGridLayout()
+        self.setup_window = FlameWindow(f'{SCRIPT_NAME}: Setup <small>{VERSION}', gridbox, 900, 300)
+
+        # Labels
+
+        self.export_path_label = FlameLabel('Export Path')
+        self.custom_export_path_label = FlameLabel('Custom Export Path')
+
+        # Entry
+
+        self.custom_export_path_entry = FlameLineEdit(self.custom_export_path)
+
+        # Token Push Button
+
+        export_token_dict = {'Project Name': '<ProjectName>', 'Project Nick Name': '<ProjectNickName>', 'Sequence Name': '<SeqName>', 'SEQUENCE NAME': '<SEQNAME>', 'Shot Name': '<ShotName>'}
+        self.custom_export_path_token_button = FlameTokenPushButton('Add Token', export_token_dict, self.custom_export_path_entry)
+
+        # Menu Push Button
+
+        export_options = ['Browse To Path', 'Use Custom Path']
+        self.export_push_button = FlamePushButtonMenu(self.export_path_menu, export_options, menu_action=toggle_custom_path)
+
+        # Buttons
+
+        self.browse_button = FlameButton('Browse', browse)
+        self.save_button = FlameButton('Save', save)
+        self.cancel_button = FlameButton('Cancel', cancel)
+
+        # Toggle UI
+
+        toggle_custom_path()
+
+        # Window Layout
+
+        gridbox.setMargin(20)
+
+        gridbox.addWidget(self.export_path_label, 0, 0)
+        gridbox.addWidget(self.export_push_button, 0, 1)
+
+        gridbox.addWidget(self.custom_export_path_label, 1, 0)
+        gridbox.addWidget(self.custom_export_path_entry, 1, 1, 1, 5)
+        gridbox.addWidget(self.custom_export_path_token_button, 1, 7)
+        gridbox.addWidget(self.browse_button, 1, 8)
+
+        gridbox.addWidget(self.save_button, 2, 7)
+        gridbox.addWidget(self.cancel_button, 2, 8)
+
+        self.setup_window.show()
+        return
+
+def export(selection):
+    '''
+    Export selected clip to Syntheyes.
+    '''
+
+    script = FlameToSynthEyes(selection)
+    script.syntheyes_export()
+
+def setup(selection):
+    '''
+    Open setup window.
+    '''
+
+    script = FlameToSynthEyes(selection)
+    script.setup()
 
 def scope_clip(selection):
     import flame
@@ -448,6 +563,21 @@ def scope_clip(selection):
         if isinstance(item, flame.PyClip):
             return True
     return False
+
+def get_main_menu_custom_ui_actions():
+
+    return [
+        {
+            'name': 'pyFlame',
+            'actions': [
+                {
+                    'name': 'SynthEyes Export Setup',
+                    'execute': setup,
+                    'minimumVersion': '2022'
+                }
+            ]
+        }
+    ]
 
 def get_media_panel_custom_ui_actions():
 
@@ -458,7 +588,7 @@ def get_media_panel_custom_ui_actions():
                 {
                     'name': 'Export to SynthEyes',
                     'isVisible': scope_clip,
-                    'execute': FlameToSynthEyes,
+                    'execute': export,
                     'minimumVersion': '2022'
                 }
             ]

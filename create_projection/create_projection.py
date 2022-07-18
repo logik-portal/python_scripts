@@ -1,10 +1,10 @@
 '''
 Script Name: Create Projection
-Script Version: 2.3
+Script Version: 2.4
 Flame Version: 2022
 Written by: Michael Vaglienty
 Creation Date: 07.09.19
-Update Date: 03.15.22
+Update Date: 05.26.22
 
 Custom Action Type: Flame Main Menu
 
@@ -25,6 +25,10 @@ To install:
     Copy script into /opt/Autodesk/shared/python/create_projection
 
 Updates:
+
+    v2.4 05.26.22
+
+        Messages print to Flame message window - Flame 2023.1 and later
 
     v2.3 03.15.22
 
@@ -61,10 +65,13 @@ Updates:
         Code Cleanup
 '''
 
-from flame_widgets_create_projection import FlameMessageWindow
+from pyflame_lib_create_projection import FlameMessageWindow, pyflame_print
 import os, shutil
 
-VERSION = 'v2.3'
+SCRIPT_NAME = 'Create Projection'
+VERSION = 'v2.4'
+
+print ('\n')
 
 def find_line(action_filename, item):
 
@@ -112,6 +119,7 @@ def get_result_camera():
             return camera_parent_name
 
         child_num = child_num - 1
+
         return find_parent(child_num)
 
     # Save action to check result camera - result camera should not be default camera
@@ -123,25 +131,20 @@ def get_result_camera():
     item_line = find_line(action_filename, 'ResultCamChannel')
 
     result_cam_line = item_line + 3
-    # print ('result_cam_line:', result_cam_line)
 
     # Get result camera value
 
     item_value = get_line_value(action_filename, result_cam_line)
 
     result_camera_num = int(item_value) + 1
-    # print ('result_camera_num:', result_camera_num)
 
     # Get list of all camera names in action node
 
     action_camera_list = ['null camera']
-    # print ('action_camera_list:', action_camera_list)
 
     for item in action_node.nodes:
         if 'Camera' in item.type:
-            # print ('Camera Names:', item.name)
             action_camera_list.append(item)
-    # print ('action_camera_list:', action_camera_list)
 
     if len(action_camera_list) == 2:
         result_camera_num = 1
@@ -150,20 +153,17 @@ def get_result_camera():
 
     result_cam = action_camera_list[result_camera_num]
     result_cam_name = str(result_cam.name)[1:-1]
-    # print ('result_cam_name:', result_cam_name)
 
     if result_cam_name != 'DefaultCam':
         result_camera_num = result_camera_num# + 1
 
         result_cam = action_camera_list[result_camera_num]
         result_cam_name = str(result_cam.name)[1:-1]
-        # print ('result_cam_name:', result_cam_name)
 
     # Get result camera node number for action file to search for node camera is parented to
 
     item_line = find_line(action_filename, result_cam_name)
     result_cam_number_line = item_line + 1
-    # print ('result_cam_number_line:', result_cam_number_line)
 
     # Get name of node camera is parented to if it has a parent
 
@@ -173,14 +173,12 @@ def get_result_camera():
     try:
         int(result_cam_number)
     except:
-        return FlameMessageWindow('Create Projection - Error', 'error', 'Action result camera should be set to camera other than default camera')
+        return FlameMessageWindow('error', f'{SCRIPT_NAME}: Error', 'Action result camera should be set to camera other than default camera.')
 
     result_cam_child_num = 'Child ' + result_cam_number
-    # print ('result_cam_child_num:', result_cam_child_num)
 
     item_line = find_line(action_filename, result_cam_child_num)
     child_num = item_line
-    # print ('child_num:', child_num)
 
     # Get name of node parented to camera node
 
@@ -208,8 +206,6 @@ def create_cur_frame_camera(projection_type):
     for item in action_node.nodes:
         if 'Camera' in item.type:
             action_camera_list.append(item.name)
-
-    # print ('action_camera_list:', action_camera_list)
 
     # Create camera based on projection type
     # Diffuse projection will not create duplicate camera
@@ -241,7 +237,6 @@ def create_cur_frame_camera(projection_type):
             for item in action_node.nodes:
                 if 'Camera' in item.type:
                     new_action_camera_list.append(item)
-            # print ('new_action_camera_list:', new_action_camera_list, '\n')
 
             # New camera is last camera in list. Get new camera and new camera index number
 
@@ -249,18 +244,12 @@ def create_cur_frame_camera(projection_type):
             new_camera.name = new_camera_name
             new_camera_index = len(new_action_camera_list) - 1
 
-            # print ('new_camera_name:', new_camera_name)
-            # print ('new_camera:', new_camera)
-            # print ('new_camera_index:', new_camera_index)
-            # print ('camera_exists:', camera_exists)
-
         else:
             camera_exists = True
 
             # If camera already exists at frame get index of existing camera
 
             new_camera_index = action_camera_list.index(new_camera_name)
-            # print ('existing cameraIndex:', new_camera_index)
 
             new_camera = None
 
@@ -283,22 +272,17 @@ def create_cur_frame_camera(projection_type):
         for item in action_node.nodes:
             if 'Camera' in item.type:
                 new_action_camera_list.append(item)
-        # print ('new_action_camera_list:', new_action_camera_list)
 
         # New camera is last camera in list. Get new camera and new camera index number
 
         new_camera = new_action_camera_list[-1]
         new_camera.name = new_camera_name
         new_camera_index = len(new_action_camera_list) - 1
-        # print ('new_camera:', new_camera)
-        # print ('new_camera_index:', new_camera_index)
 
         # camera_exists not needed for projector projections
         # use None value just to send value through return
 
         camera_exists = None
-
-    print ('\n--> current frame camera created \n')
 
     return new_camera, new_camera_name, camera_exists, new_camera_index
 
@@ -306,7 +290,6 @@ def get_action_node():
     import flame
 
     node_type = str(flame.batch.current_node.get_value().type)[1:-1]
-    #print ('node_type:', node_type)
 
     if node_type == 'Action Media':
         node_value = flame.batch.current_node.get_value()
@@ -317,7 +300,6 @@ def get_action_node():
     else:
         action_node_name = str(flame.batch.current_node.get_value().name)[1:-1]
         action_node = flame.batch.get_node(action_node_name)
-    # print ('action_node:', action_node_name)
 
     return action_node, action_node_name
 
@@ -332,12 +314,10 @@ def save_action_node():
 
     temp_folder = '/opt/Autodesk/shared/python/create_projection/temp_action'
     save_action_path = os.path.join(temp_folder, action_node_name)
-    # print ('save_action_path:', save_action_path)
 
     try:
         os.makedirs(temp_folder)
     except:
-        # print ('temp action folder already exists')
         pass
 
     action_node.save_node_setup(save_action_path)
@@ -345,9 +325,6 @@ def save_action_node():
     # Set Action path and filename variable
 
     action_filename = save_action_path + '.action'
-    # print ('action_filename:', action_filename, '\n')
-
-    # print ('\n--> action node saved \n')
 
     return save_action_path, action_filename, action_node, action_node_name, temp_folder
 
@@ -378,13 +355,14 @@ def name_node(node_type, node_num=0):
         return new_node_name
 
     node_num = node_num + 1
+
     return name_node(node_type, node_num)
 
 #--------------------------------------------#
 
 def create_projector_projection(selection):
 
-    print ('\n', '>' * 20, f'create projection {VERSION} - projector projection', '<' * 20, '\n')
+    print ('\n', '>' * 10, f'{SCRIPT_NAME} {VERSION} - projector projection', '<' * 10, '\n')
 
     # Define projection type for camera creation - diffuse will not duplicate cameras, projection will
 
@@ -410,7 +388,6 @@ def create_projector_projection(selection):
     for item in selection:
         geo_name_line = 'Name ' + str(item.name)[1:-1]
         geo_type = item.type
-        # print ('geo_name_line:', geo_name_line)
 
     # Get position of existing projector if one already exists
 
@@ -424,16 +401,11 @@ def create_projector_projection(selection):
                 node_projector_pos_y_line = num + 8
 
     if node_projector_pos_x_line != 0:
-        # print ('node_projector_pos_x_line:', node_projector_pos_x_line)
-        # print ('node_projector_pos_y_line:', node_projector_pos_y_line)
-
         item_value = get_line_value(action_filename, node_projector_pos_x_line)
         node_projector_pos_x = item_value
-        # print ('node_projector_pos_x:', node_projector_pos_x)
 
         item_value = get_line_value(action_filename, node_projector_pos_y_line)
         node_projector_pos_y = item_value
-        # print ('node_projector_pos_y:', node_projector_pos_y)
 
     # Create projector
 
@@ -451,12 +423,10 @@ def create_projector_projection(selection):
     # Assign new_camera field of view to projector
 
     projector.fov = new_camera.fov
-    # print ('projectorFOV:', projector.fov)
 
     # Zero out projector z position
 
     projector.position = (0, 0, 0)
-    # print ('projectorPosition:', projector.position, '\n')
 
     # Save action node
 
@@ -473,9 +443,6 @@ def create_projector_projection(selection):
         geo_pos_x_line_num = item_line
         geo_pos_y_line_num = geo_pos_x_line_num + 1
 
-        # print ('geo_pos_x_line_num:', geo_pos_x_line_num)
-        # print ('geo_pos_y_line_num:', geo_pos_y_line_num, '\n')
-
     elif geo_type == 'Geom':
         item_line = find_line(action_filename, geo_name_line)
 
@@ -484,9 +451,6 @@ def create_projector_projection(selection):
         geo_pos_x_line_num = item_line
         geo_pos_y_line_num = geo_pos_x_line_num + 1
 
-        # print ('geo_pos_x_line_num:', geo_pos_x_line_num)
-        # print ('geo_pos_y_line_num:', geo_pos_y_line_num, '\n')
-
     # Get x and y position of projector
 
     item_line = find_line(action_filename, projector_name)
@@ -494,9 +458,6 @@ def create_projector_projection(selection):
 
     projector_pos_x_line_num = item_line
     projector_pos_y_line_num = projector_pos_x_line_num + 1
-
-    # print ('projector_pos_x_line_num:', projector_pos_x_line_num)
-    # print ('projector_pos_y_line_num:', projector_pos_y_line_num, '\n')
 
     # Get x and y position of new_camera
 
@@ -507,44 +468,31 @@ def create_projector_projection(selection):
     new_camera_pos_x_line_num = item_line
     new_camera_pos_y_line_num = new_camera_pos_x_line_num + 1
 
-    # print ('new_camera_pos_x_line_num:', new_camera_pos_x_line_num)
-    # print ('new_camera_pos_y_line_num:', new_camera_pos_y_line_num, '\n')
-
     # Get position values for geo in schematic
 
     item_value = get_line_value(action_filename, geo_pos_x_line_num)
     geo_pos_x = item_value
-    # print ('geo_pos_x:', geo_pos_x)
 
     item_value = get_line_value(action_filename, geo_pos_y_line_num)
     geo_pos_y = item_value
-    # print ('geo_pos_y:', geo_pos_y)
 
     # Set new position values for projector and camera next to geo if no projector existing
 
     if node_projector_pos_x_line == 0:
         new_projector_pos_x = str(int(geo_pos_x) + 300)
         new_projector_pos_y = geo_pos_y
-        # print ('new_projector_pos_x:', new_projector_pos_x)
-        # print ('new_projector_pos_y:', new_projector_pos_y)
 
         new_camera_pos_x = new_projector_pos_x
         new_camera_pos_y = str(int(new_projector_pos_y) + 150)
-        # print ('new_camera_pos_x:', new_camera_pos_x)
-        # print ('new_camera_pos_y:', new_camera_pos_y, '\n')
 
     # If projector already exists, place new projector next to that one
 
     else:
         new_projector_pos_x = str(int(node_projector_pos_x) + 300)
         new_projector_pos_y = node_projector_pos_y
-        # print ('new_projector_pos_x:', new_projector_pos_x)
-        # print ('new_projector_pos_y:', new_projector_pos_y)
 
         new_camera_pos_x = new_projector_pos_x
         new_camera_pos_y = str(int(new_projector_pos_y) + 150)
-        # print ('new_camera_pos_x:', new_camera_pos_x)
-        # print ('new_camera_pos_y:', new_camera_pos_y, '\n')
 
     # Edit action file to change projector and new camera position
 
@@ -571,7 +519,7 @@ def create_projector_projection(selection):
 
     shutil.rmtree(temp_folder)
 
-    print ('\n--> created projector projection \n')
+    pyflame_print(SCRIPT_NAME, 'Projector projection created.')
 
     return action_node, projector_name
 
@@ -588,15 +536,13 @@ def create_light_linked_projector_projection(selection):
 
     parent_node = action_node.get_node(projector_name)
     child_node = action_node.get_node(select_geo_name)
-    # print ('parent_node:', parent_node.name)
-    # print ('child_node:', child_node.name)
 
     action_node.connect_nodes(parent_node, child_node, link_type='Light')
 
 def create_diffuse_projection(selection):
     import flame
 
-    print ('\n', '>' * 20, f'create projection {VERSION} - diffuse projection', '<' * 20, '\n')
+    print ('\n', '>' * 10, f'{SCRIPT_NAME} {VERSION} - diffuse projection', '<' * 10, '\n')
 
     # Define projection type for camera creation - diffuse will not duplicate cameras, projection will
 
@@ -605,7 +551,6 @@ def create_diffuse_projection(selection):
     # Get result camera
 
     camera_parent_name, action_filename, action_node = get_result_camera()
-    # print ('camera parent name:', camera_parent_name)
 
     # Get position of last camera
     # Find last camera added line
@@ -619,7 +564,6 @@ def create_diffuse_projection(selection):
                 if 'right' not in next_line:
                     if 'left' not in next_line:
                         node_camera_name_line = num
-                        # print ('node_camera_name_line:', node_camera_name_line)
 
     # Find X and Y position lines for last camera
 
@@ -627,8 +571,6 @@ def create_diffuse_projection(selection):
 
     node_camera_pos_x_line = item_line
     node_camera_pos_y_line = node_camera_pos_x_line + 1
-    # print ('node_camera_pos_x_line:', node_camera_pos_x_line)
-    # print ('node_camera_pos_y_line:', node_camera_pos_y_line)
 
     # Get last camera X value
 
@@ -645,7 +587,6 @@ def create_diffuse_projection(selection):
     # Create camera at current frame
 
     new_camera, new_camera_name, camera_exists, new_camera_index = create_cur_frame_camera(projection_type)
-    # print ('new_camera_index:', new_camera_index)
 
     # If new frame camera doesn't already exist add 200 to x possition
 
@@ -666,7 +607,6 @@ def create_diffuse_projection(selection):
 
     diffuse_map_name = name_node('diffuse_fr')
     diffuse_map.name = diffuse_map_name
-    # print ('diffuse_map_name:', diffuse_map_name)
 
     # Save action node again with new diffuse map added
 
@@ -678,13 +618,10 @@ def create_diffuse_projection(selection):
 
     diffuse_projection_camera_line_num = item_line + 21
     diffuse_projection_map_line_num = item_line + 23
-    # print ('diffuse_projection_camera_line_num:', diffuse_projection_camera_line_num)
-    # print ('diffuse_projection_map_line_num:', diffuse_projection_map_line_num)
 
     item_line = find_line(action_filename, new_camera_name)
 
     new_camera_line_num = item_line
-    # print ('new_camera_line_num:', new_camera_line_num)
 
     # Find X and Y position lines for new frame camera
 
@@ -692,8 +629,6 @@ def create_diffuse_projection(selection):
 
     camera_pos_x_line = item_line
     camera_pos_y_line = camera_pos_x_line + 1
-    # print ('camera_pos_x_line:', camera_pos_x_line)
-    # print ('camera_pos_y_line:', camera_pos_y_line)
 
     action_file.close()
 
@@ -725,7 +660,7 @@ def create_diffuse_projection(selection):
 
     shutil.rmtree(temp_folder)
 
-    print ('\n--> created diffuse projection \n')
+    pyflame_print(SCRIPT_NAME, 'Diffuse projection created.')
 
 # Scopes
 #-------------------------------------#
